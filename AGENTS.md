@@ -89,6 +89,14 @@ Do not collapse these layers together.
 - Keep `.gitignore` up to date for new tooling output.
 - Avoid committing local secrets, env files, or generated noise.
 
+## Review Gate
+
+- Run a local CodeRabbit review with the CodeRabbit CLI before pushing changes and before opening a PR.
+- Treat CodeRabbit findings as blocking unless there is a documented reason not to.
+- Fix the issues CodeRabbit reports, then re-run the CodeRabbit review.
+- Repeat that fix-and-review loop until CodeRabbit reports no issues.
+- Only push changes and open a PR after the local CodeRabbit review passes cleanly.
+
 ## When Implementing
 
 Start from the docs, then turn decisions into code.
