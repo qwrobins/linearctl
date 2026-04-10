@@ -367,6 +367,20 @@ Implementation language is now definitively TypeScript.
 
 This is no longer an open decision.
 
+### 13. Runtime, Tooling, And Distribution
+
+Use Bun as the default runtime and packaging tool for the project.
+
+Normative decisions:
+
+- Bun is the default package manager, task runner, and local development runtime.
+- Released builds should be packaged as standalone binaries for supported target platforms.
+- End users of release artifacts should not need Bun installed.
+- The source code should stay largely standard TypeScript and standard runtime APIs unless Bun-specific functionality provides a clear implementation or distribution advantage.
+- Packaged binary behavior must be validated in CI with at least smoke-level coverage.
+
+This keeps Bun's strong packaging story while reducing lock-in inside the business logic of the CLI.
+
 ## Remaining Open Items After These Decisions
 
 These items remain intentionally open because they are product-scope choices rather than blocking specification gaps:

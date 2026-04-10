@@ -31,9 +31,26 @@ Reasoning:
 - schema-driven generation aligns well with TypeScript tooling
 - raw GraphQL and generated layers are easier to integrate around existing SDK and schema assets
 
+### Runtime and build tooling
+
+Recommended default: Bun for development, task running, and release packaging.
+
+Reasoning:
+
+- Bun works well for greenfield TypeScript CLI development
+- Bun can package standalone binaries so end users do not need Bun or Node installed
+- single-binary distribution aligns well with an agent-facing CLI where setup friction matters
+- the project can still remain largely standard TypeScript without depending on Bun-only APIs
+
+Distribution recommendation:
+
+- ship standalone binaries as the primary release artifact for supported platforms
+- keep TypeScript source portable where practical
+- avoid Bun-specific runtime APIs unless they provide a clear product advantage
+
 Open alternative:
 
-- Go remains attractive for single-binary distribution, but is not the leading recommendation from this exercise
+- a Node-first build remains viable if Bun packaging or cross-platform behavior proves too fragile during implementation
 
 ### Core modules
 
@@ -94,6 +111,7 @@ Every command surface should be able to declare metadata such as:
 
 Implement:
 
+- Bun project scaffolding and scripts
 - config loading
 - credentials file loading
 - profile resolution
@@ -184,6 +202,7 @@ Do not treat this phase as the first time the skills are considered. It is only 
 5. Keeping curated output stable while generated output stays schema-driven
 6. File upload/download transport behavior
 7. Preventing AI skills from overusing raw GraphQL
+8. Cross-platform standalone binary behavior
 
 ## Implementation Rules
 
@@ -232,6 +251,7 @@ Do not treat this phase as the first time the skills are considered. It is only 
 - schema drift detection behavior
 - file upload and signed URL download flows
 - skill-driven command discovery flow using curated help and `linear api search`
+- standalone binary smoke tests on supported target platforms
 
 ### Golden tests
 
@@ -249,6 +269,8 @@ Do not treat this phase as the first time the skills are considered. It is only 
 - treat curated output contract changes as high-scrutiny breaking changes
 - monitor Linear deprecations and schema updates regularly
 - treat skill-routing contract changes as high-scrutiny changes even when command names do not change
+- publish standalone binaries as the default installation path
+- keep at least one CI smoke test that executes the packaged binary, not just source-mode commands
 
 ## Open Decisions Remaining
 

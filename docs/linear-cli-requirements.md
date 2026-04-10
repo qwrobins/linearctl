@@ -39,6 +39,15 @@ Parity does not require every GraphQL field or mutation to receive a hand-author
 
 ## Required for MVP
 
+### Runtime and distribution
+
+- Use TypeScript as the implementation language
+- Use Bun as the default development runtime and package manager
+- Support standalone binary builds as the primary release artifact
+- End users should not need Bun installed to use released binaries
+- Avoid unnecessary Bun-specific runtime APIs in core business logic unless they provide clear value
+- Validate packaged binary behavior in CI for supported platforms
+
 ### Auth and profiles
 
 - Support named profiles
