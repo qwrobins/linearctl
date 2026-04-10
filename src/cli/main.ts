@@ -23,23 +23,37 @@ function printCuratedMetadata(): void {
 }
 
 function main(argv: string[]): number {
-  const { values } = parseArgs({
-    args: argv,
-    options: {
-      help: { type: "boolean", short: "h" },
-      json: { type: "boolean" },
-      metadata: { type: "string" }
-    },
-    allowPositionals: true,
-    strict: false
-  });
+  let help = false;
+  let json = false;
+  let metadata: string | undefined;
 
-  if (argv.length === 0 || values.help === true) {
+  try {
+    const { values } = parseArgs({
+      args: argv,
+      options: {
+        help: { type: "boolean", short: "h" },
+        json: { type: "boolean" },
+        metadata: { type: "string" }
+      },
+      allowPositionals: true,
+      strict: false
+    });
+
+    help = values.help === true;
+    json = values.json === true;
+    metadata = typeof values.metadata === "string" ? values.metadata : undefined;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "invalid arguments";
+    process.stderr.write(`Error: ${message}\n`);
+    return ExitCode.ValidationError;
+  }
+
+  if (argv.length === 0 || help) {
     printTopLevelHelp();
     return ExitCode.Success;
   }
 
-  if (values.metadata === "curated" && values.json === true) {
+  if (metadata === "curated" && json) {
     printCuratedMetadata();
     return ExitCode.Success;
   }

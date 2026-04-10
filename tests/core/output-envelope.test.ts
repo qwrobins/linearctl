@@ -28,4 +28,10 @@ describe("JSON envelope helpers", () => {
     expect(envelope.data).toBeNull();
     expect(envelope.errors).toEqual([{ category: "validation", message: "Missing title" }]);
   });
+
+  it("rejects ambiguous failure envelopes with no errors", () => {
+    expect(() => failureEnvelope([], { sourceLayer: "curated" })).toThrow(
+      "failureEnvelope requires at least one error"
+    );
+  });
 });

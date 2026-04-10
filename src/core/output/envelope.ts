@@ -53,6 +53,10 @@ export function failureEnvelope(
   meta: OutputMeta,
   pageInfo: PageInfo | null = null
 ): JsonEnvelope<never> {
+  if (!Array.isArray(errors) || errors.length === 0) {
+    throw new Error("failureEnvelope requires at least one error");
+  }
+
   return {
     ok: false,
     data: null,

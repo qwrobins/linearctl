@@ -7,8 +7,9 @@
     "linear": "./dist/cli/main.js"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
+    "build": "tsc -p tsconfig.build.json && bun run copy:assets",
     "build:binary": "bun build src/cli/main.ts --compile --outfile dist/linear",
+    "copy:assets": "mkdir -p dist/generated/manifest && cp src/generated/manifest/curated-commands.json dist/generated/manifest/curated-commands.json",
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
