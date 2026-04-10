@@ -73,6 +73,24 @@ describe("parseCredentials", () => {
         }
       }
     });
+
+    const credentials = parseCredentials(parseIni("[work]\ntype = api_key\napi_key = key\n"));
+    expect(Object.getPrototypeOf(credentials.profiles)).toBeNull();
+  });
+
+  it("rejects profile names that collide after normalization", () => {
+    expect(() =>
+      parseCredentials({
+        work: {
+          type: "api_key",
+          api_key: "lin_api_work"
+        },
+        " work ": {
+          type: "api_key",
+          api_key: "lin_api_other"
+        }
+      })
+    ).toThrow('duplicate credentials profile name "work" after normalization');
   });
 
   it("loads credentials from disk when permissions are restrictive", async () => {

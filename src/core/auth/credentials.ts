@@ -32,13 +32,17 @@ export interface LoadCredentialsFileOptions {
 }
 
 export function parseCredentials(document: IniDocument): CredentialsStore {
-  const profiles: Record<string, ProfileCredentials> = {};
+  const profiles = Object.create(null) as Record<string, ProfileCredentials>;
 
   for (const [rawProfileName, section] of Object.entries(document)) {
     const profileName = rawProfileName.trim();
 
     if (profileName === "") {
       throw new Error("credentials profile name cannot be empty");
+    }
+
+    if (profiles[profileName] !== undefined) {
+      throw new Error(`duplicate credentials profile name "${profileName}" after normalization`);
     }
 
     if (section.type === "api_key") {
@@ -94,11 +98,7 @@ export async function loadCredentialsFile(
   if (options.checkPermissions ?? true) {
     const handle = await open(credentialsFile, "r");
     try {
-      const mode = (await handle.stat()).mode;
-      if ((mode & 0o077) !== 0) {
-        throw new Error("credentials file permissions must not allow group or other access");
-      }
-
+      await assertCredentialsFileHandlePermissions(handle);
       return parseCredentials(parseIni(await handle.readFile({ encoding: "utf8" })));
     } finally {
       await handle.close();
