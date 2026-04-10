@@ -94,7 +94,11 @@ export async function loadCredentialsFile(
   if (options.checkPermissions ?? true) {
     const handle = await open(credentialsFile, "r");
     try {
-      await assertCredentialsFileHandlePermissions(handle);
+      const mode = (await handle.stat()).mode;
+      if ((mode & 0o077) !== 0) {
+        throw new Error("credentials file permissions must not allow group or other access");
+      }
+
       return parseCredentials(parseIni(await handle.readFile({ encoding: "utf8" })));
     } finally {
       await handle.close();
