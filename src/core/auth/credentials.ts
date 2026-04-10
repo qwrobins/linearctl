@@ -1,4 +1,5 @@
-import { readFile, stat } from "node:fs/promises";
+import { open, readFile } from "node:fs/promises";
+import type { FileHandle } from "node:fs/promises";
 import type { IniDocument } from "../config/ini.js";
 import { parseIni } from "../config/ini.js";
 
@@ -33,8 +34,10 @@ export interface LoadCredentialsFileOptions {
 export function parseCredentials(document: IniDocument): CredentialsStore {
   const profiles: Record<string, ProfileCredentials> = {};
 
-  for (const [profileName, section] of Object.entries(document)) {
-    if (profileName.trim() === "") {
+  for (const [rawProfileName, section] of Object.entries(document)) {
+    const profileName = rawProfileName.trim();
+
+    if (profileName === "") {
       throw new Error("credentials profile name cannot be empty");
     }
 
@@ -89,14 +92,29 @@ export async function loadCredentialsFile(
   options: LoadCredentialsFileOptions = {}
 ): Promise<CredentialsStore> {
   if (options.checkPermissions ?? true) {
-    await assertCredentialsFilePermissions(credentialsFile);
+    const handle = await open(credentialsFile, "r");
+    try {
+      await assertCredentialsFileHandlePermissions(handle);
+      return parseCredentials(parseIni(await handle.readFile({ encoding: "utf8" })));
+    } finally {
+      await handle.close();
+    }
   }
 
   return parseCredentials(parseIni(await readFile(credentialsFile, "utf8")));
 }
 
 export async function assertCredentialsFilePermissions(credentialsFile: string): Promise<void> {
-  const mode = (await stat(credentialsFile)).mode;
+  const handle = await open(credentialsFile, "r");
+  try {
+    await assertCredentialsFileHandlePermissions(handle);
+  } finally {
+    await handle.close();
+  }
+}
+
+export async function assertCredentialsFileHandlePermissions(handle: FileHandle): Promise<void> {
+  const mode = (await handle.stat()).mode;
 
   if ((mode & 0o077) !== 0) {
     throw new Error("credentials file permissions must not allow group or other access");

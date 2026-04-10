@@ -55,6 +55,26 @@ describe("parseCredentials", () => {
     ).toThrow('api_key is required for credentials profile "work"');
   });
 
+  it("normalizes profile names before storing credentials", () => {
+    expect(
+      parseCredentials(
+        parseIni(`
+          [ work ]
+          type = api_key
+          api_key = lin_api_work
+        `)
+      )
+    ).toEqual({
+      profiles: {
+        work: {
+          profileName: "work",
+          type: "api_key",
+          apiKey: "lin_api_work"
+        }
+      }
+    });
+  });
+
   it("loads credentials from disk when permissions are restrictive", async () => {
     const directory = await mkdtemp(join(tmpdir(), "linear-cli-credentials-"));
     const credentialsFile = join(directory, "credentials");

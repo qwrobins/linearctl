@@ -42,6 +42,32 @@ describe("parseIni", () => {
   it("fails on key-value pairs outside a section", () => {
     expect(() => parseIni("profile = work\n")).toThrow("key-value pair must be inside a section");
   });
+
+  it("rejects object prototype pollution keys", () => {
+    expect(() =>
+      parseIni(`
+        [__proto__]
+        polluted = true
+      `)
+    ).toThrow("invalid section name");
+
+    expect(() =>
+      parseIni(`
+        [default]
+        constructor = true
+      `)
+    ).toThrow("invalid key");
+  });
+
+  it("returns null-prototype dictionaries", () => {
+    const document = parseIni(`
+      [default]
+      profile = work
+    `);
+
+    expect(Object.getPrototypeOf(document)).toBeNull();
+    expect(Object.getPrototypeOf(document.default)).toBeNull();
+  });
 });
 
 describe("stringifyIni", () => {

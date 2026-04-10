@@ -1,6 +1,8 @@
 export type IniSection = Record<string, string>;
 export type IniDocument = Record<string, IniSection>;
 
+const RESERVED_OBJECT_KEYS = new Set(["__proto__", "prototype", "constructor"]);
+
 export class IniParseError extends Error {
   constructor(
     message: string,
@@ -12,7 +14,7 @@ export class IniParseError extends Error {
 }
 
 export function parseIni(input: string): IniDocument {
-  const document: IniDocument = {};
+  const document = Object.create(null) as IniDocument;
   let currentSectionName: string | undefined;
 
   for (const [index, rawLine] of input.split(/\r?\n/).entries()) {
@@ -30,8 +32,12 @@ export function parseIni(input: string): IniDocument {
         throw new IniParseError("section name is required", lineNumber);
       }
 
+      if (RESERVED_OBJECT_KEYS.has(sectionName)) {
+        throw new IniParseError("invalid section name", lineNumber);
+      }
+
       currentSectionName = sectionName;
-      document[currentSectionName] ??= {};
+      document[currentSectionName] ??= Object.create(null) as IniSection;
       continue;
     }
 
@@ -54,6 +60,10 @@ export function parseIni(input: string): IniDocument {
 
     if (!key) {
       throw new IniParseError("key is required", lineNumber);
+    }
+
+    if (RESERVED_OBJECT_KEYS.has(key)) {
+      throw new IniParseError("invalid key", lineNumber);
     }
 
     section[key] = value;
