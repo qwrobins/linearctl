@@ -1,5 +1,7 @@
 # Linear CLI Exercise Brief
 
+> Status: Historical background. This brief describes the design exercise that produced the current document set; use the requirements, spec, Round 2 decisions, implementation handoff, and skill-suite documents as the implementation sources of truth.
+
 ## Problem statement
 
 The current Linear MCP approach works, including with multiple accounts, but the preferred operating pattern is shifting toward local command line tools paired with explicit skills. Linear does not currently provide a first-party CLI with full API parity, so this exercise exists to design one.

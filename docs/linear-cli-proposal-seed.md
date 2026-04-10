@@ -1,5 +1,7 @@
 # Linear CLI Proposal Seed
 
+> Status: Historical background. This seed proposal is non-normative and was superseded by the requirements, spec, Round 2 decisions, implementation handoff, and skill-suite documents.
+
 ## Working proposal
 
 Build a `linear` CLI around a shared transport/auth core with three usage layers:
