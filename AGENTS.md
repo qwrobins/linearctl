@@ -11,7 +11,7 @@ The primary consumer is AI agents, not only human operators. The CLI and the ski
 
 ## Current State
 
-The repository currently contains design and requirements docs under `docs/`.
+The repository contains design and requirements docs under `docs/`, plus the initial TypeScript implementation scaffold under `src/`.
 
 Important documents:
 
@@ -20,8 +20,11 @@ Important documents:
 - `docs/linear-cli-requirements.md`
 - `docs/linear-cli-round-2-decisions.md`
 - `docs/linear-skill-suite.md`
+- `docs/implementation-progress.md`
 
 Before making architectural or behavioral changes, read those files and keep them aligned.
+
+`docs/implementation-progress.md` is the durable handoff between development sessions. Update it whenever a PR lands, a phase boundary changes, or the recommended next implementation slice changes.
 
 ## Core Product Direction
 
