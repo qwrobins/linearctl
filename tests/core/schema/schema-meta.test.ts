@@ -38,9 +38,9 @@ describe("parseSchemaMetadata", () => {
   });
 
   it("throws on non-object input", () => {
-    expect(() => parseSchemaMetadata("not an object")).toThrow("must be a JSON object");
-    expect(() => parseSchemaMetadata(null)).toThrow("must be a JSON object");
-    expect(() => parseSchemaMetadata([1, 2])).toThrow("must be a JSON object");
+    expect(() => parseSchemaMetadata("not an object")).toThrow("schema metadata must be a JSON object");
+    expect(() => parseSchemaMetadata(null)).toThrow("schema metadata must be a JSON object");
+    expect(() => parseSchemaMetadata([1, 2])).toThrow("schema metadata must be a JSON object");
   });
 });
 

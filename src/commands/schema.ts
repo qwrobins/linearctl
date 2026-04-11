@@ -1,4 +1,5 @@
-import { join } from "node:path";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import { mapCommandFailure } from "../core/errors/command-failure.js";
 import { ExitCode } from "../core/errors/exit-codes.js";
 import { failureEnvelope, successEnvelope } from "../core/output/envelope.js";
@@ -112,7 +113,7 @@ async function handleSchemaPull(positionals: string[], options: SchemaCommandOpt
     const schemaVersion = extractSchemaVersion(schema);
     const pulledAt = new Date().toISOString();
 
-    const outputDir = options.outputDir ?? "src/generated/manifest";
+    const outputDir = options.outputDir ?? defaultSchemaOutputDir();
 
     const meta: SchemaMetadata = {
       schemaVersion,
@@ -168,6 +169,13 @@ async function handleSchemaPull(positionals: string[], options: SchemaCommandOpt
 
     return failure.exitCode;
   }
+}
+
+function defaultSchemaOutputDir(): string {
+  // Resolve relative to the project root (two levels up from src/commands/).
+  // This ensures schema pull writes to the correct location regardless of CWD.
+  const thisDir = dirname(fileURLToPath(import.meta.url));
+  return join(thisDir, "..", "generated", "manifest");
 }
 
 function extractSchemaVersion(schema: Record<string, unknown>): string | null {

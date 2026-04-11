@@ -96,7 +96,7 @@ Commands:
   linear gql query '{ viewer { id } }' --json
   linear gql mutation --file m.graphql --vars-file v.json --json
   linear schema version [--json]
-  linear schema pull [--json] [--output-dir <path>]
+  linear schema pull [--json] [--output-dir <path>]  (default: project src/generated/manifest)
   linear --metadata curated --json
   linear --help
 `);

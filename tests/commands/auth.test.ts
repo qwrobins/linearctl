@@ -209,6 +209,8 @@ describe("handleAuthCommand", () => {
       expect(parsed.ok).toBe(true);
       expect(parsed.data.defaultProfile).toBe("work");
       expect(parsed.data.profiles).toHaveLength(1);
+      expect(parsed.errors).toEqual([]);
+      expect(parsed.pageInfo).toBeNull();
       expect(parsed.meta.sourceLayer).toBe("curated");
     } finally {
       spy.mockRestore();
