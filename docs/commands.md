@@ -24,7 +24,7 @@ linear issue create --title <title> --team <name|key|id> \
 linear issue update <identifier> [--title <text>] [--description <text>] \
   [--priority <0-4>] [--assignee <email|"me"|id>] [--state <name|id>] --json
 
-# Close (archive) an issue
+# Close (archive) an issue [destructive]
 linear issue close <identifier> --json
 
 # Assign an issue
@@ -97,7 +97,7 @@ linear label create --name <name> [--description <text>] [--color <hex>] [--team
 linear comment list --issue <id> --json
 linear comment create --issue <id> --body <text> --json
 linear comment update <id> --body <text> --json
-linear comment delete <id> --json
+linear comment delete <id> --json              # [destructive]
 ```
 
 ## Attachment
@@ -105,7 +105,7 @@ linear comment delete <id> --json
 ```bash
 linear attachment list --issue <id> --json
 linear attachment create --issue <id> --url <url> --title <title> --json
-linear attachment delete <id> --json
+linear attachment delete <id> --json            # [destructive]
 ```
 
 ## File
@@ -143,7 +143,7 @@ linear auth whoami --json
 # Switch default profile
 linear auth switch <profile>
 
-# Remove a profile
+# Remove a profile [destructive with --remove-config]
 linear auth logout --profile <name> [--remove-config]
 ```
 

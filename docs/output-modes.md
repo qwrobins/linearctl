@@ -64,7 +64,7 @@ Streaming output. One JSON object per line. Auto-paginates through all results.
 linear issue list --team INF --jsonl
 ```
 
-```
+```json
 {"id":"abc","identifier":"INF-1","title":"First issue",...}
 {"id":"def","identifier":"INF-2","title":"Second issue",...}
 ```
