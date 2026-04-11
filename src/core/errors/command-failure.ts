@@ -2,6 +2,7 @@ import { GraphQLTransportError } from "../transport/graphql.js";
 import { ExitCode } from "./exit-codes.js";
 import type { CommandError } from "../output/envelope.js";
 import { ProfileResolutionError } from "../auth/profile-resolution.js";
+import { ResolutionError } from "../resolution/resolve.js";
 
 export interface CommandFailure {
   exitCode: number;
@@ -9,6 +10,18 @@ export interface CommandFailure {
 }
 
 export function mapCommandFailure(error: unknown): CommandFailure {
+  if (error instanceof ResolutionError) {
+    return {
+      exitCode: error.kind === "not-found" ? ExitCode.NotFound : ExitCode.ValidationError,
+      error: {
+        category: error.kind === "not-found" ? "not-found" : "validation",
+        message: error.message,
+        code: error.kind,
+        ...(error.candidates !== undefined ? { details: { candidates: error.candidates } } : {})
+      }
+    };
+  }
+
   if (error instanceof ProfileResolutionError) {
     return {
       exitCode: ExitCode.AuthenticationError,

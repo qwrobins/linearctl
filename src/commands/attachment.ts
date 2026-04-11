@@ -8,16 +8,20 @@ import type { FetchLike, GraphQLErrorPayload } from "../core/transport/graphql.j
 import { resolveStoredProfile } from "../core/auth/runtime.js";
 import { paginateGraphQL, validatePaginationOptions } from "../core/pagination/pagination.js";
 import type { PaginationOptions } from "../core/pagination/pagination.js";
+import { streamPaginateGraphQL } from "../core/pagination/streaming.js";
+import { emitDryRunResult } from "../core/output/dry-run.js";
 
 export interface AttachmentCommandOptions {
   json: boolean;
   jsonEnvelope: boolean;
+  jsonl?: boolean;
   profile?: string;
   configFile: string;
   credentialsFile: string;
   apiUrl?: string;
   env: Record<string, string | undefined>;
   fetchImpl?: FetchLike;
+  dryRun?: boolean;
   issue?: string;
   url?: string;
   title?: string;
@@ -149,10 +153,9 @@ async function handleAttachmentList(options: AttachmentCommandOptions): Promise<
       env: options.env
     });
 
-    const result = await paginateGraphQL<RawAttachment>({
+    const paginateInput = {
       query: ATTACHMENT_LIST_QUERY,
       variables: { issueId: options.issue },
-      options: paginationOptions,
       credentials: profile.credentials,
       ...(options.apiUrl === undefined
         ? profile.metadata.baseUrl === undefined
@@ -164,24 +167,39 @@ async function handleAttachmentList(options: AttachmentCommandOptions): Promise<
         const d = data as { attachments: { nodes: RawAttachment[]; pageInfo: PageInfo } };
         return d.attachments;
       }
-    });
+    };
 
-    const attachments = result.items.map(normalizeAttachment);
-
-    if (options.jsonEnvelope) {
-      const envelope = successEnvelope(attachments, {
-        sourceLayer: "curated",
-        profile: profile.name
-      }, result.pageInfo);
-      process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
-    } else if (options.json) {
-      process.stdout.write(`${JSON.stringify(attachments, null, 2)}\n`);
+    if (options.jsonl === true) {
+      await streamPaginateGraphQL<RawAttachment>({
+        ...paginateInput,
+        options: { ...paginationOptions, all: paginationOptions.all ?? true },
+        onItem: (raw) => {
+          process.stdout.write(JSON.stringify(normalizeAttachment(raw)) + "\n");
+        }
+      });
     } else {
-      for (const attachment of attachments) {
-        printHumanAttachment(attachment);
-      }
-      if (attachments.length === 0) {
-        process.stdout.write("No attachments found.\n");
+      const result = await paginateGraphQL<RawAttachment>({
+        ...paginateInput,
+        options: paginationOptions
+      });
+
+      const attachments = result.items.map(normalizeAttachment);
+
+      if (options.jsonEnvelope) {
+        const envelope = successEnvelope(attachments, {
+          sourceLayer: "curated",
+          profile: profile.name
+        }, result.pageInfo);
+        process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
+      } else if (options.json) {
+        process.stdout.write(`${JSON.stringify(attachments, null, 2)}\n`);
+      } else {
+        for (const attachment of attachments) {
+          printHumanAttachment(attachment);
+        }
+        if (attachments.length === 0) {
+          process.stdout.write("No attachments found.\n");
+        }
       }
     }
 
@@ -223,6 +241,10 @@ async function handleAttachmentCreate(options: AttachmentCommandOptions): Promis
 
   if (options.title === undefined || options.title.trim() === "") {
     return emitValidationError("--title is required for attachment create.", options);
+  }
+
+  if (options.dryRun === true) {
+    return emitDryRunResult("create", "attachment", { issueId: options.issue, url: options.url, title: options.title }, options);
   }
 
   try {
@@ -300,6 +322,10 @@ async function handleAttachmentCreate(options: AttachmentCommandOptions): Promis
 }
 
 async function handleAttachmentDelete(attachmentId: string, options: AttachmentCommandOptions): Promise<number> {
+  if (options.dryRun === true) {
+    return emitDryRunResult("delete", "attachment", { id: attachmentId }, options);
+  }
+
   try {
     const profile = await resolveStoredProfile({
       paths: {

@@ -9,12 +9,16 @@ import { executeGraphQL } from "../core/transport/graphql.js";
 import type { FetchLike } from "../core/transport/graphql.js";
 import { INTROSPECTION_QUERY } from "../core/schema/introspection-query.js";
 import {
+  computeSchemaFingerprint,
   loadBundledSchemaMetadata,
+  loadSchemaFile,
   schemaVersionOutput,
   writeSchemaMetadata,
   writeSchemaIntrospection
 } from "../core/schema/schema-meta.js";
 import type { SchemaMetadata } from "../core/schema/schema-meta.js";
+import { diffSchemas, formatDiffSummary } from "../core/schema/schema-diff.js";
+import type { SchemaDiff } from "../core/schema/schema-diff.js";
 
 export interface SchemaCommandOptions {
   json: boolean;
@@ -214,7 +218,25 @@ async function handleSchemaCheck(positionals: string[], options: SchemaCommandOp
     const liveVersion = extractSchemaVersion(schema);
     const drifted = bundledVersion === null || bundledVersion !== liveVersion;
 
-    const output = { bundledVersion, liveVersion, drifted };
+    // Compute structural diff when drift is detected
+    let diff: SchemaDiff | null = null;
+    if (drifted) {
+      const bundledSchemaPath = join(defaultSchemaOutputDir(), "schema.json");
+      try {
+        const bundledSchema = await loadSchemaFile(bundledSchemaPath);
+        diff = diffSchemas(bundledSchema, response.body.data);
+      } catch {
+        // No bundled schema file — diff against empty schema
+        diff = diffSchemas({}, response.body.data);
+      }
+    }
+
+    const output = {
+      bundledVersion,
+      liveVersion,
+      drifted,
+      ...(diff !== null ? { diff } : {}),
+    };
 
     if (options.jsonEnvelope) {
       const envelope = successEnvelope(output, { sourceLayer: "curated" });
@@ -229,6 +251,9 @@ async function handleSchemaCheck(positionals: string[], options: SchemaCommandOp
 
     if (drifted) {
       process.stdout.write(`Schema drift detected. Bundled: ${bundledVersion ?? "(none)"}, Live: ${liveVersion ?? "(unknown)"}\n`);
+      if (diff !== null) {
+        process.stdout.write(`${formatDiffSummary(diff)}\n`);
+      }
     } else {
       process.stdout.write("Schema is up to date.\n");
     }
@@ -259,38 +284,5 @@ function defaultSchemaOutputDir(): string {
 }
 
 function extractSchemaVersion(schema: Record<string, unknown>): string | null {
-  // Linear does not expose a schema version in standard introspection.
-  // Use a hash of type names as a stable version fingerprint.
-  const types = schema.types;
-  if (!Array.isArray(types)) {
-    return null;
-  }
-
-  const typeNames = types
-    .filter((t): t is { name: string } => t !== null && typeof t === "object" && typeof (t as Record<string, unknown>).name === "string")
-    .map((t) => t.name)
-    .filter((name) => !name.startsWith("__"))
-    .sort();
-
-  if (typeNames.length === 0) {
-    return null;
-  }
-
-  // Simple hash: join names and compute a short digest.
-  // This is a stable fingerprint — same types in same order produce same version.
-  return hashTypeNames(typeNames);
-}
-
-function hashTypeNames(names: string[]): string {
-  const input = names.join("\n");
-  let hash = 0;
-
-  for (let i = 0; i < input.length; i++) {
-    const char = input.charCodeAt(i);
-    hash = ((hash << 5) - hash + char) | 0;
-  }
-
-  // Convert to hex and zero-pad to 8 chars.
-  const hex = (hash >>> 0).toString(16).padStart(8, "0");
-  return `introspect-${hex}`;
+  return computeSchemaFingerprint(schema);
 }

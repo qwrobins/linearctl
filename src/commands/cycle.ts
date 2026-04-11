@@ -7,16 +7,22 @@ import { executeGraphQL } from "../core/transport/graphql.js";
 import type { FetchLike, GraphQLErrorPayload } from "../core/transport/graphql.js";
 import { resolveStoredProfile } from "../core/auth/runtime.js";
 import { paginateGraphQL, validatePaginationOptions, type PaginationOptions } from "../core/pagination/pagination.js";
+import { streamPaginateGraphQL } from "../core/pagination/streaming.js";
+import { emitDryRunResult } from "../core/output/dry-run.js";
+import { resolveTeamId, looksLikeId } from "../core/resolution/resolve.js";
+import type { ResolverOptions } from "../core/resolution/resolve.js";
 
 export interface CycleCommandOptions {
   json: boolean;
   jsonEnvelope: boolean;
+  jsonl?: boolean;
   profile?: string;
   configFile: string;
   credentialsFile: string;
   apiUrl?: string;
   env: Record<string, string | undefined>;
   fetchImpl?: FetchLike;
+  dryRun?: boolean;
   // cycle flags
   name?: string;
   description?: string;
@@ -244,8 +250,6 @@ async function handleCycleList(options: CycleCommandOptions): Promise<number> {
     return emitValidationError(validationError, options);
   }
 
-  const filter = options.team !== undefined ? { team: { id: { eq: options.team } } } : undefined;
-
   try {
     const profile = await resolveStoredProfile({
       paths: {
@@ -256,10 +260,24 @@ async function handleCycleList(options: CycleCommandOptions): Promise<number> {
       env: options.env
     });
 
-    const { items, pageInfo } = await paginateGraphQL<RawCycle>({
+    let filter: Record<string, unknown> | undefined;
+    if (options.team !== undefined) {
+      const resolverOpts: ResolverOptions = {
+        credentials: profile.credentials,
+        ...(options.apiUrl === undefined
+          ? profile.metadata.baseUrl === undefined
+            ? {}
+            : { apiUrl: profile.metadata.baseUrl }
+          : { apiUrl: options.apiUrl }),
+        ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl })
+      };
+      const teamIdResolved = looksLikeId(options.team) ? options.team : await resolveTeamId(options.team, resolverOpts);
+      filter = { team: { id: { eq: teamIdResolved } } };
+    }
+
+    const commonPaginateInput = {
       query: CYCLE_LIST_QUERY,
       ...(filter === undefined ? {} : { variables: { filter } }),
-      options: paginationOptions,
       credentials: profile.credentials,
       ...(options.apiUrl === undefined
         ? profile.metadata.baseUrl === undefined
@@ -271,19 +289,34 @@ async function handleCycleList(options: CycleCommandOptions): Promise<number> {
         const d = data as { cycles: { nodes: RawCycle[]; pageInfo: PageInfo } };
         return d.cycles;
       }
-    });
+    };
 
-    const cycles = items.map(normalizeCycle);
-
-    if (options.jsonEnvelope) {
-      const envelope = successEnvelope(cycles, { sourceLayer: "curated", profile: profile.name }, pageInfo);
-      process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
-    } else if (options.json) {
-      process.stdout.write(`${JSON.stringify(cycles, null, 2)}\n`);
+    if (options.jsonl === true) {
+      await streamPaginateGraphQL<RawCycle>({
+        ...commonPaginateInput,
+        options: { ...paginationOptions, all: paginationOptions.all ?? true },
+        onItem: (raw) => {
+          process.stdout.write(`${JSON.stringify(normalizeCycle(raw))}\n`);
+        }
+      });
     } else {
-      for (const cycle of cycles) {
-        printHumanCycle(cycle);
-        process.stdout.write("\n");
+      const { items, pageInfo } = await paginateGraphQL<RawCycle>({
+        ...commonPaginateInput,
+        options: paginationOptions
+      });
+
+      const cycles = items.map(normalizeCycle);
+
+      if (options.jsonEnvelope) {
+        const envelope = successEnvelope(cycles, { sourceLayer: "curated", profile: profile.name }, pageInfo);
+        process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
+      } else if (options.json) {
+        process.stdout.write(`${JSON.stringify(cycles, null, 2)}\n`);
+      } else {
+        for (const cycle of cycles) {
+          printHumanCycle(cycle);
+          process.stdout.write("\n");
+        }
       }
     }
 
@@ -310,9 +343,7 @@ async function handleCycleCreate(options: CycleCommandOptions): Promise<number> 
     return emitValidationError("--team is required for cycle create.", options);
   }
 
-  const input: Record<string, unknown> = {
-    teamId: options.team
-  };
+  const input: Record<string, unknown> = {};
 
   if (options.name !== undefined) {
     input.name = options.name;
@@ -327,6 +358,12 @@ async function handleCycleCreate(options: CycleCommandOptions): Promise<number> 
     input.endsAt = options.endsAt;
   }
 
+  input.teamId = options.team;
+
+  if (options.dryRun === true) {
+    return emitDryRunResult("create", "cycle", input, options);
+  }
+
   try {
     const profile = await resolveStoredProfile({
       paths: {
@@ -336,6 +373,18 @@ async function handleCycleCreate(options: CycleCommandOptions): Promise<number> 
       ...(options.profile === undefined ? {} : { explicitProfile: options.profile }),
       env: options.env
     });
+
+    const resolverOpts: ResolverOptions = {
+      credentials: profile.credentials,
+      ...(options.apiUrl === undefined
+        ? profile.metadata.baseUrl === undefined
+          ? {}
+          : { apiUrl: profile.metadata.baseUrl }
+        : { apiUrl: options.apiUrl }),
+      ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl })
+    };
+
+    input.teamId = looksLikeId(options.team!) ? options.team : await resolveTeamId(options.team!, resolverOpts);
 
     const response = await executeGraphQL<{
       cycleCreate: { success: boolean; cycle: RawCycle | null };
@@ -422,6 +471,10 @@ async function handleCycleUpdate(
 
   if (Object.keys(input).length === 0) {
     return emitValidationError("cycle update requires at least one of --name, --description, --starts-at, --ends-at.", options);
+  }
+
+  if (options.dryRun === true) {
+    return emitDryRunResult("update", "cycle", { id, ...input }, options);
   }
 
   try {

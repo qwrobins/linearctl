@@ -13,12 +13,14 @@ import { handleProjectCommand } from "../commands/project.js";
 import { handleSchemaCommand } from "../commands/schema.js";
 import { handleTeamCommand } from "../commands/team.js";
 import { handleUserCommand } from "../commands/user.js";
+import { handleWorkspaceCommand } from "../commands/workspace.js";
 import { curatedCommandMetadata, defaultLinearConfigPaths, ExitCode } from "../index.js";
 
 const CLI_OPTION_DEFINITIONS = {
   help: { type: "boolean", short: "h" },
   json: { type: "boolean" },
   "json-envelope": { type: "boolean" },
+  jsonl: { type: "boolean" },
   metadata: { type: "string" },
   config: { type: "string" },
   "config-file": { type: "string" },
@@ -66,7 +68,12 @@ const CLI_OPTION_DEFINITIONS = {
   issue: { type: "string" },
   url: { type: "string" },
   output: { type: "string" },
-  "expires-in": { type: "string" }
+  "expires-in": { type: "string" },
+  ids: { type: "string" },
+  "oauth-client-id": { type: "string" },
+  "callback-port": { type: "string" },
+  "no-browser": { type: "boolean" },
+  "dry-run": { type: "boolean" }
 } as const;
 
 const AUTH_OPTION_DEFINITIONS = {
@@ -85,6 +92,9 @@ const AUTH_OPTION_DEFINITIONS = {
   "set-default": CLI_OPTION_DEFINITIONS["set-default"],
   "remove-config": CLI_OPTION_DEFINITIONS["remove-config"],
   "api-url": CLI_OPTION_DEFINITIONS["api-url"],
+  "oauth-client-id": CLI_OPTION_DEFINITIONS["oauth-client-id"],
+  "callback-port": CLI_OPTION_DEFINITIONS["callback-port"],
+  "no-browser": CLI_OPTION_DEFINITIONS["no-browser"],
 } as const;
 
 const GQL_OPTION_DEFINITIONS = {
@@ -125,12 +135,14 @@ const ISSUE_OPTION_DEFINITIONS = {
   help: CLI_OPTION_DEFINITIONS.help,
   json: CLI_OPTION_DEFINITIONS.json,
   "json-envelope": CLI_OPTION_DEFINITIONS["json-envelope"],
+  jsonl: CLI_OPTION_DEFINITIONS.jsonl,
   config: CLI_OPTION_DEFINITIONS.config,
   "config-file": CLI_OPTION_DEFINITIONS["config-file"],
   credentials: CLI_OPTION_DEFINITIONS.credentials,
   "credentials-file": CLI_OPTION_DEFINITIONS["credentials-file"],
   profile: CLI_OPTION_DEFINITIONS.profile,
   "api-url": CLI_OPTION_DEFINITIONS["api-url"],
+  "dry-run": CLI_OPTION_DEFINITIONS["dry-run"],
   title: CLI_OPTION_DEFINITIONS.title,
   team: CLI_OPTION_DEFINITIONS.team,
   description: CLI_OPTION_DEFINITIONS.description,
@@ -139,6 +151,7 @@ const ISSUE_OPTION_DEFINITIONS = {
   label: CLI_OPTION_DEFINITIONS.label,
   state: CLI_OPTION_DEFINITIONS.state,
   "input-json": CLI_OPTION_DEFINITIONS["input-json"],
+  ids: CLI_OPTION_DEFINITIONS.ids,
   body: CLI_OPTION_DEFINITIONS.body,
   "filter-json": CLI_OPTION_DEFINITIONS["filter-json"],
   "order-by": CLI_OPTION_DEFINITIONS["order-by"],
@@ -155,12 +168,14 @@ const PROJECT_OPTION_DEFINITIONS = {
   help: CLI_OPTION_DEFINITIONS.help,
   json: CLI_OPTION_DEFINITIONS.json,
   "json-envelope": CLI_OPTION_DEFINITIONS["json-envelope"],
+  jsonl: CLI_OPTION_DEFINITIONS.jsonl,
   config: CLI_OPTION_DEFINITIONS.config,
   "config-file": CLI_OPTION_DEFINITIONS["config-file"],
   credentials: CLI_OPTION_DEFINITIONS.credentials,
   "credentials-file": CLI_OPTION_DEFINITIONS["credentials-file"],
   profile: CLI_OPTION_DEFINITIONS.profile,
   "api-url": CLI_OPTION_DEFINITIONS["api-url"],
+  "dry-run": CLI_OPTION_DEFINITIONS["dry-run"],
   name: CLI_OPTION_DEFINITIONS.name,
   description: CLI_OPTION_DEFINITIONS.description,
   team: CLI_OPTION_DEFINITIONS.team,
@@ -177,12 +192,14 @@ const CYCLE_OPTION_DEFINITIONS = {
   help: CLI_OPTION_DEFINITIONS.help,
   json: CLI_OPTION_DEFINITIONS.json,
   "json-envelope": CLI_OPTION_DEFINITIONS["json-envelope"],
+  jsonl: CLI_OPTION_DEFINITIONS.jsonl,
   config: CLI_OPTION_DEFINITIONS.config,
   "config-file": CLI_OPTION_DEFINITIONS["config-file"],
   credentials: CLI_OPTION_DEFINITIONS.credentials,
   "credentials-file": CLI_OPTION_DEFINITIONS["credentials-file"],
   profile: CLI_OPTION_DEFINITIONS.profile,
   "api-url": CLI_OPTION_DEFINITIONS["api-url"],
+  "dry-run": CLI_OPTION_DEFINITIONS["dry-run"],
   name: CLI_OPTION_DEFINITIONS.name,
   description: CLI_OPTION_DEFINITIONS.description,
   team: CLI_OPTION_DEFINITIONS.team,
@@ -200,6 +217,7 @@ const TEAM_OPTION_DEFINITIONS = {
   help: CLI_OPTION_DEFINITIONS.help,
   json: CLI_OPTION_DEFINITIONS.json,
   "json-envelope": CLI_OPTION_DEFINITIONS["json-envelope"],
+  jsonl: CLI_OPTION_DEFINITIONS.jsonl,
   config: CLI_OPTION_DEFINITIONS.config,
   "config-file": CLI_OPTION_DEFINITIONS["config-file"],
   credentials: CLI_OPTION_DEFINITIONS.credentials,
@@ -218,6 +236,7 @@ const USER_OPTION_DEFINITIONS = {
   help: CLI_OPTION_DEFINITIONS.help,
   json: CLI_OPTION_DEFINITIONS.json,
   "json-envelope": CLI_OPTION_DEFINITIONS["json-envelope"],
+  jsonl: CLI_OPTION_DEFINITIONS.jsonl,
   config: CLI_OPTION_DEFINITIONS.config,
   "config-file": CLI_OPTION_DEFINITIONS["config-file"],
   credentials: CLI_OPTION_DEFINITIONS.credentials,
@@ -236,12 +255,14 @@ const LABEL_OPTION_DEFINITIONS = {
   help: CLI_OPTION_DEFINITIONS.help,
   json: CLI_OPTION_DEFINITIONS.json,
   "json-envelope": CLI_OPTION_DEFINITIONS["json-envelope"],
+  jsonl: CLI_OPTION_DEFINITIONS.jsonl,
   config: CLI_OPTION_DEFINITIONS.config,
   "config-file": CLI_OPTION_DEFINITIONS["config-file"],
   credentials: CLI_OPTION_DEFINITIONS.credentials,
   "credentials-file": CLI_OPTION_DEFINITIONS["credentials-file"],
   profile: CLI_OPTION_DEFINITIONS.profile,
   "api-url": CLI_OPTION_DEFINITIONS["api-url"],
+  "dry-run": CLI_OPTION_DEFINITIONS["dry-run"],
   name: CLI_OPTION_DEFINITIONS.name,
   description: CLI_OPTION_DEFINITIONS.description,
   color: CLI_OPTION_DEFINITIONS.color,
@@ -258,12 +279,14 @@ const COMMENT_OPTION_DEFINITIONS = {
   help: CLI_OPTION_DEFINITIONS.help,
   json: CLI_OPTION_DEFINITIONS.json,
   "json-envelope": CLI_OPTION_DEFINITIONS["json-envelope"],
+  jsonl: CLI_OPTION_DEFINITIONS.jsonl,
   config: CLI_OPTION_DEFINITIONS.config,
   "config-file": CLI_OPTION_DEFINITIONS["config-file"],
   credentials: CLI_OPTION_DEFINITIONS.credentials,
   "credentials-file": CLI_OPTION_DEFINITIONS["credentials-file"],
   profile: CLI_OPTION_DEFINITIONS.profile,
   "api-url": CLI_OPTION_DEFINITIONS["api-url"],
+  "dry-run": CLI_OPTION_DEFINITIONS["dry-run"],
   issue: CLI_OPTION_DEFINITIONS.issue,
   body: CLI_OPTION_DEFINITIONS.body,
   all: CLI_OPTION_DEFINITIONS.all,
@@ -278,12 +301,14 @@ const ATTACHMENT_OPTION_DEFINITIONS = {
   help: CLI_OPTION_DEFINITIONS.help,
   json: CLI_OPTION_DEFINITIONS.json,
   "json-envelope": CLI_OPTION_DEFINITIONS["json-envelope"],
+  jsonl: CLI_OPTION_DEFINITIONS.jsonl,
   config: CLI_OPTION_DEFINITIONS.config,
   "config-file": CLI_OPTION_DEFINITIONS["config-file"],
   credentials: CLI_OPTION_DEFINITIONS.credentials,
   "credentials-file": CLI_OPTION_DEFINITIONS["credentials-file"],
   profile: CLI_OPTION_DEFINITIONS.profile,
   "api-url": CLI_OPTION_DEFINITIONS["api-url"],
+  "dry-run": CLI_OPTION_DEFINITIONS["dry-run"],
   issue: CLI_OPTION_DEFINITIONS.issue,
   url: CLI_OPTION_DEFINITIONS.url,
   title: CLI_OPTION_DEFINITIONS.title,
@@ -305,11 +330,22 @@ const FILE_OPTION_DEFINITIONS = {
   "credentials-file": CLI_OPTION_DEFINITIONS["credentials-file"],
   profile: CLI_OPTION_DEFINITIONS.profile,
   "api-url": CLI_OPTION_DEFINITIONS["api-url"],
+  "dry-run": CLI_OPTION_DEFINITIONS["dry-run"],
   issue: CLI_OPTION_DEFINITIONS.issue,
   output: CLI_OPTION_DEFINITIONS.output,
   "expires-in": CLI_OPTION_DEFINITIONS["expires-in"],
   "no-retry": CLI_OPTION_DEFINITIONS["no-retry"],
   "max-retries": CLI_OPTION_DEFINITIONS["max-retries"],
+} as const;
+
+const WORKSPACE_OPTION_DEFINITIONS = {
+  help: CLI_OPTION_DEFINITIONS.help,
+  json: CLI_OPTION_DEFINITIONS.json,
+  "json-envelope": CLI_OPTION_DEFINITIONS["json-envelope"],
+  config: CLI_OPTION_DEFINITIONS.config,
+  "config-file": CLI_OPTION_DEFINITIONS["config-file"],
+  credentials: CLI_OPTION_DEFINITIONS.credentials,
+  "credentials-file": CLI_OPTION_DEFINITIONS["credentials-file"],
 } as const;
 
 const API_OPTION_DEFINITIONS = {
@@ -350,6 +386,9 @@ Commands:
   linear issue close <identifier> [--json]
   linear issue assign <identifier> <assignee-id> [--json]
   linear issue comment <identifier> --body <text> [--json]
+  linear issue bulk-update --ids <id1,id2,...> [--state <id>] [--assignee <id>] [--priority <0-4>] [--label <id>] [--json]
+  linear issue bulk-close --ids <id1,id2,...> [--json]
+  linear issue bulk-assign --ids <id1,id2,...> --assignee <id> [--json]
   linear project get <id> [--json]
   linear project list [--json]
   linear project create --name <name> [--description ...] [--team <id>] [--json]
@@ -384,6 +423,8 @@ Commands:
   linear auth logout --profile <name>
   linear auth status [--json]
   linear auth switch <profile>
+  linear auth whoami [--json]
+  linear workspace list [--json]
   linear gql introspect --json
   linear gql query '{ viewer { id } }' --json
   linear gql mutation --file m.graphql --vars-file v.json --json
@@ -403,6 +444,7 @@ interface ParsedCliArguments {
   help: boolean;
   json: boolean;
   jsonEnvelope: boolean;
+  jsonl: boolean;
   metadata?: string;
   configFile: string;
   credentialsFile: string;
@@ -410,6 +452,9 @@ interface ParsedCliArguments {
   apiKeyEnv?: string;
   apiKeyStdin: boolean;
   oauth: boolean;
+  oauthClientId?: string;
+  callbackPort?: string;
+  noBrowser: boolean;
   setDefault: boolean;
   removeConfig: boolean;
   apiUrl?: string;
@@ -427,6 +472,7 @@ interface ParsedCliArguments {
   label?: string;
   state?: string;
   inputJson?: string;
+  ids?: string;
   inputFile?: string;
   inputStdin: boolean;
   id?: string;
@@ -447,6 +493,7 @@ interface ParsedCliArguments {
   max?: number;
   pageSize?: number;
   after?: string;
+  dryRun: boolean;
   noRetry: boolean;
   maxRetries?: number;
   positionals: string[];
@@ -524,6 +571,11 @@ function parseCliArguments(argv: string[]): ParsedCliArguments {
 
   if (command === "file") {
     const commandParse = parseCliOptionSet(subcommandArgv, FILE_OPTION_DEFINITIONS);
+    return mergeParsedCliArguments(topLevel.values, commandParse.values, [command, ...commandParse.positionals]);
+  }
+
+  if (command === "workspace") {
+    const commandParse = parseCliOptionSet(subcommandArgv, WORKSPACE_OPTION_DEFINITIONS);
     return mergeParsedCliArguments(topLevel.values, commandParse.values, [command, ...commandParse.positionals]);
   }
 
@@ -647,10 +699,18 @@ function toParsedCliArguments(values: Record<string, unknown>, positionals: stri
     credentialsFile = values["credentials-file"];
   }
 
+  const jsonl = values.jsonl === true;
+  const jsonEnvelope = values["json-envelope"] === true;
+
+  if (jsonl && jsonEnvelope) {
+    throw new Error("--jsonl and --json-envelope are mutually exclusive");
+  }
+
   return {
     help,
     json,
-    jsonEnvelope: values["json-envelope"] === true,
+    jsonEnvelope,
+    jsonl,
     ...(metadata === undefined ? {} : { metadata }),
     configFile,
     credentialsFile,
@@ -658,6 +718,9 @@ function toParsedCliArguments(values: Record<string, unknown>, positionals: stri
     ...(typeof values["api-key-env"] === "string" ? { apiKeyEnv: values["api-key-env"] } : {}),
     apiKeyStdin: values["api-key-stdin"] === true,
     oauth: values.oauth === true,
+    ...(typeof values["oauth-client-id"] === "string" ? { oauthClientId: values["oauth-client-id"] } : {}),
+    ...(typeof values["callback-port"] === "string" ? { callbackPort: values["callback-port"] } : {}),
+    noBrowser: values["no-browser"] === true,
     setDefault: values["set-default"] === true,
     removeConfig: values["remove-config"] === true,
     ...(typeof values["api-url"] === "string" ? { apiUrl: values["api-url"] } : {}),
@@ -672,6 +735,7 @@ function toParsedCliArguments(values: Record<string, unknown>, positionals: stri
     ...(typeof values.description === "string" ? { description: values.description } : {}),
     ...(typeof values.priority === "string" ? { priority: values.priority } : {}),
     ...(typeof values.assignee === "string" ? { assignee: values.assignee } : {}),
+    ...(typeof values.ids === "string" ? { ids: values.ids } : {}),
     ...(typeof values.label === "string" ? { label: values.label } : {}),
     ...(typeof values.state === "string" ? { state: values.state } : {}),
     ...(typeof values["input-json"] === "string" ? { inputJson: values["input-json"] } : {}),
@@ -695,6 +759,7 @@ function toParsedCliArguments(values: Record<string, unknown>, positionals: stri
     ...(typeof values.max === "string" ? { max: parsePositiveInt(values.max, "max") } : {}),
     ...(typeof values["page-size"] === "string" ? { pageSize: parsePositiveInt(values["page-size"], "page-size") } : {}),
     ...(typeof values.after === "string" ? { after: values.after } : {}),
+    dryRun: values["dry-run"] === true,
     noRetry: values["no-retry"] === true,
     ...(typeof values["max-retries"] === "string" ? { maxRetries: parsePositiveInt(values["max-retries"], "max-retries") } : {}),
     positionals
@@ -758,6 +823,9 @@ async function main(argv: string[]): Promise<number> {
         ...(args.apiKeyEnv === undefined ? {} : { apiKeyEnv: args.apiKeyEnv }),
         apiKeyStdin: args.apiKeyStdin,
         oauth: args.oauth,
+        ...(args.oauthClientId === undefined ? {} : { oauthClientId: args.oauthClientId }),
+        ...(args.callbackPort === undefined ? {} : { callbackPort: args.callbackPort }),
+        noBrowser: args.noBrowser,
         setDefault: args.setDefault,
         removeConfig: args.removeConfig,
         ...(args.apiUrl === undefined ? {} : { apiUrl: args.apiUrl }),
@@ -799,7 +867,9 @@ async function main(argv: string[]): Promise<number> {
     try {
       return await handleIssueCommand(args.positionals.slice(1), {
         json: args.json,
+        dryRun: args.dryRun,
         jsonEnvelope: args.jsonEnvelope,
+        jsonl: args.jsonl,
         ...(args.profile === undefined ? {} : { profile: args.profile }),
         configFile: args.configFile,
         credentialsFile: args.credentialsFile,
@@ -812,6 +882,7 @@ async function main(argv: string[]): Promise<number> {
         ...(args.label === undefined ? {} : { label: args.label }),
         ...(args.state === undefined ? {} : { state: args.state }),
         ...(args.inputJson === undefined ? {} : { inputJson: args.inputJson }),
+        ...(args.ids === undefined ? {} : { ids: args.ids }),
         ...(args.body === undefined ? {} : { body: args.body }),
         ...(args.filterJson === undefined ? {} : { filterJson: args.filterJson }),
         ...(args.orderBy === undefined ? {} : { orderBy: args.orderBy }),
@@ -833,7 +904,9 @@ async function main(argv: string[]): Promise<number> {
     try {
       return await handleProjectCommand(args.positionals.slice(1), {
         json: args.json,
+        dryRun: args.dryRun,
         jsonEnvelope: args.jsonEnvelope,
+        jsonl: args.jsonl,
         ...(args.profile === undefined ? {} : { profile: args.profile }),
         configFile: args.configFile,
         credentialsFile: args.credentialsFile,
@@ -859,7 +932,9 @@ async function main(argv: string[]): Promise<number> {
     try {
       return await handleCycleCommand(args.positionals.slice(1), {
         json: args.json,
+        dryRun: args.dryRun,
         jsonEnvelope: args.jsonEnvelope,
+        jsonl: args.jsonl,
         ...(args.profile === undefined ? {} : { profile: args.profile }),
         configFile: args.configFile,
         credentialsFile: args.credentialsFile,
@@ -887,6 +962,7 @@ async function main(argv: string[]): Promise<number> {
       return await handleTeamCommand(args.positionals.slice(1), {
         json: args.json,
         jsonEnvelope: args.jsonEnvelope,
+        jsonl: args.jsonl,
         ...(args.profile === undefined ? {} : { profile: args.profile }),
         configFile: args.configFile,
         credentialsFile: args.credentialsFile,
@@ -909,6 +985,7 @@ async function main(argv: string[]): Promise<number> {
       return await handleUserCommand(args.positionals.slice(1), {
         json: args.json,
         jsonEnvelope: args.jsonEnvelope,
+        jsonl: args.jsonl,
         ...(args.profile === undefined ? {} : { profile: args.profile }),
         configFile: args.configFile,
         credentialsFile: args.credentialsFile,
@@ -930,7 +1007,9 @@ async function main(argv: string[]): Promise<number> {
     try {
       return await handleLabelCommand(args.positionals.slice(1), {
         json: args.json,
+        dryRun: args.dryRun,
         jsonEnvelope: args.jsonEnvelope,
+        jsonl: args.jsonl,
         ...(args.profile === undefined ? {} : { profile: args.profile }),
         configFile: args.configFile,
         credentialsFile: args.credentialsFile,
@@ -956,7 +1035,9 @@ async function main(argv: string[]): Promise<number> {
     try {
       return await handleCommentCommand(args.positionals.slice(1), {
         json: args.json,
+        dryRun: args.dryRun,
         jsonEnvelope: args.jsonEnvelope,
+        jsonl: args.jsonl,
         ...(args.profile === undefined ? {} : { profile: args.profile }),
         configFile: args.configFile,
         credentialsFile: args.credentialsFile,
@@ -980,7 +1061,9 @@ async function main(argv: string[]): Promise<number> {
     try {
       return await handleAttachmentCommand(args.positionals.slice(1), {
         json: args.json,
+        dryRun: args.dryRun,
         jsonEnvelope: args.jsonEnvelope,
+        jsonl: args.jsonl,
         ...(args.profile === undefined ? {} : { profile: args.profile }),
         configFile: args.configFile,
         credentialsFile: args.credentialsFile,
@@ -1005,6 +1088,7 @@ async function main(argv: string[]): Promise<number> {
     try {
       return await handleFileCommand(args.positionals.slice(1), {
         json: args.json,
+        dryRun: args.dryRun,
         jsonEnvelope: args.jsonEnvelope,
         ...(args.profile === undefined ? {} : { profile: args.profile }),
         configFile: args.configFile,
@@ -1032,6 +1116,22 @@ async function main(argv: string[]): Promise<number> {
         credentialsFile: args.credentialsFile,
         ...(args.apiUrl === undefined ? {} : { apiUrl: args.apiUrl }),
         ...(args.outputDir === undefined ? {} : { outputDir: args.outputDir }),
+        env: process.env
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "command failed";
+      process.stderr.write(`Error: ${message}\n`);
+      return ExitCode.GeneralError;
+    }
+  }
+
+  if (args.positionals[0] === "workspace") {
+    try {
+      return await handleWorkspaceCommand(args.positionals.slice(1), {
+        json: args.json,
+        jsonEnvelope: args.jsonEnvelope,
+        configFile: args.configFile,
+        credentialsFile: args.credentialsFile,
         env: process.env
       });
     } catch (error) {

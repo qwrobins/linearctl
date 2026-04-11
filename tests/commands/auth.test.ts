@@ -26,6 +26,28 @@ function successfulViewerFetch() {
   ) as FetchLike;
 }
 
+function successfulViewerFetchWithOrg() {
+  return vi.fn(async () =>
+    new Response(
+      JSON.stringify({
+        data: {
+          viewer: {
+            id: "user-id",
+            name: "Quentin",
+            email: "quentin@example.com",
+            organization: {
+              id: "org-123",
+              name: "Acme Corp",
+              urlKey: "acme"
+            }
+          }
+        }
+      }),
+      { status: 200 }
+    )
+  ) as FetchLike;
+}
+
 function baseOptions(directory: string, overrides = {}) {
   return {
     json: true,
@@ -34,6 +56,7 @@ function baseOptions(directory: string, overrides = {}) {
     credentialsFile: join(directory, "credentials"),
     apiKeyStdin: false,
     oauth: false,
+    noBrowser: false,
     setDefault: false,
     removeConfig: false,
     env: {},
@@ -222,6 +245,83 @@ describe("handleAuthCommand", () => {
       expect(parsed.errors).toEqual([]);
       expect(parsed.pageInfo).toBeNull();
       expect(parsed.meta).toEqual({ sourceLayer: "curated" });
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it("stores workspace metadata on login when organization is returned", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-auth-"));
+    const fetchImpl = successfulViewerFetchWithOrg();
+
+    await expect(
+      handleAuthCommand(
+        ["login"],
+        baseOptions(directory, {
+          profile: "work",
+          apiKeyEnv: "LINEAR_API_KEY",
+          setDefault: true,
+          env: { LINEAR_API_KEY: "lin_api_work" },
+          fetchImpl
+        })
+      )
+    ).resolves.toBe(0);
+
+    await expect(loadLinearConfigFile(join(directory, "config"))).resolves.toEqual({
+      defaultProfile: "work",
+      profiles: {
+        work: {
+          userEmail: "quentin@example.com",
+          workspace: "Acme Corp",
+          workspaceId: "org-123"
+        }
+      }
+    });
+  });
+
+  it("returns user and organization info for auth whoami", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-auth-"));
+    const configFile = join(directory, "config");
+    const credentialsFile = join(directory, "credentials");
+    await writeFile(
+      configFile,
+      ["[default]", "profile = work", "", "[profile work]", "workspace = Acme Corp", ""].join("\n")
+    );
+    await writeFile(
+      credentialsFile,
+      ["[work]", "type = api_key", "api_key = lin_api_work", ""].join("\n"),
+      { mode: 0o600 }
+    );
+
+    const fetchImpl = successfulViewerFetchWithOrg();
+    const stdoutChunks: string[] = [];
+    const spy = vi.spyOn(process.stdout, "write").mockImplementation(((chunk: string | Uint8Array) => {
+      stdoutChunks.push(String(chunk));
+      return true;
+    }) as typeof process.stdout.write);
+
+    try {
+      await expect(
+        handleAuthCommand(
+          ["whoami"],
+          baseOptions(directory, { fetchImpl })
+        )
+      ).resolves.toBe(0);
+
+      const parsed = JSON.parse(stdoutChunks.join(""));
+      expect(parsed).toEqual({
+        user: {
+          id: "user-id",
+          name: "Quentin",
+          email: "quentin@example.com"
+        },
+        organization: {
+          id: "org-123",
+          name: "Acme Corp",
+          urlKey: "acme"
+        },
+        profile: "work"
+      });
     } finally {
       spy.mockRestore();
     }

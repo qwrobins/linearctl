@@ -7,6 +7,7 @@ import { emitValidationError } from "../core/output/validation-error.js";
 import { executeGraphQL, authorizationHeader } from "../core/transport/graphql.js";
 import type { FetchLike, GraphQLErrorPayload } from "../core/transport/graphql.js";
 import { resolveStoredProfile } from "../core/auth/runtime.js";
+import { emitDryRunResult } from "../core/output/dry-run.js";
 
 export interface FileCommandOptions {
   json: boolean;
@@ -17,6 +18,7 @@ export interface FileCommandOptions {
   apiUrl?: string;
   env: Record<string, string | undefined>;
   fetchImpl?: FetchLike;
+  dryRun?: boolean;
   issue?: string;
   output?: string;
   expiresIn?: string;
@@ -134,6 +136,14 @@ async function handleFileUpload(
   const resolvedPath = resolve(filePath);
   const fileName = basename(resolvedPath);
   const contentType = contentTypeFromExtension(fileName);
+
+  if (options.dryRun === true) {
+    const input: Record<string, unknown> = { fileName, contentType, path: resolvedPath };
+    if (options.issue !== undefined) {
+      input.issue = options.issue;
+    }
+    return emitDryRunResult("upload", "file", input, options);
+  }
 
   let fileBytes: Buffer;
   try {

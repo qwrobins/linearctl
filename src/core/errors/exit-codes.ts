@@ -16,7 +16,8 @@ export type ErrorCategory =
   | "rate-limit"
   | "not-found"
   | "validation"
-  | "schema-drift";
+  | "schema-drift"
+  | "resolution";
 
 const CATEGORY_EXIT_CODES: Record<ErrorCategory, ExitCode> = {
   general: ExitCode.GeneralError,
@@ -24,7 +25,8 @@ const CATEGORY_EXIT_CODES: Record<ErrorCategory, ExitCode> = {
   "rate-limit": ExitCode.RateLimitExhausted,
   "not-found": ExitCode.NotFound,
   validation: ExitCode.ValidationError,
-  "schema-drift": ExitCode.SchemaDrift
+  "schema-drift": ExitCode.SchemaDrift,
+  resolution: ExitCode.GeneralError
 };
 
 export function exitCodeForCategory(category: ErrorCategory): ExitCode {

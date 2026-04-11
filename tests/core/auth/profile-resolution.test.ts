@@ -80,6 +80,36 @@ describe("resolveProfile", () => {
     ).toThrow(ProfileResolutionError);
   });
 
+  it("includes available profile names in the ambiguity error", () => {
+    expect(() =>
+      resolveProfile({
+        config: {
+          profiles: {
+            "default-profile": { workspace: "default workspace" },
+            "env-profile": { workspace: "env workspace" }
+          }
+        },
+        credentials
+      })
+    ).toThrow(
+      /Available profiles: default-profile \(default workspace\), env-profile \(env workspace\), explicit-profile\./
+    );
+  });
+
+  it("includes profile names without workspace hints when metadata is absent", () => {
+    expect(() =>
+      resolveProfile({
+        config: { profiles: {} },
+        credentials: {
+          profiles: {
+            alpha: { profileName: "alpha", type: "api_key", apiKey: "lin_api_a" },
+            beta: { profileName: "beta", type: "api_key", apiKey: "lin_api_b" }
+          }
+        }
+      })
+    ).toThrow("Available profiles: alpha, beta. Use --profile <name> or run linear auth switch <name>.");
+  });
+
   it("fails when the resolved profile has no credentials file entry", () => {
     expect(() =>
       resolveProfile({
