@@ -295,6 +295,9 @@ export async function handleTeamCommand(
   }
 
   if (subcommand === "list") {
+    if (options.setDefault) {
+      return emitValidationError("--set-default is only supported on team get.", options);
+    }
     if (rest.length > 0) {
       return emitValidationError("team list does not accept positional arguments.", options);
     }

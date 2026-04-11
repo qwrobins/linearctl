@@ -261,7 +261,7 @@ async function handleCycleList(options: CycleCommandOptions): Promise<number> {
     });
 
     let filter: Record<string, unknown> | undefined;
-    const effectiveTeam = options.team ?? profile.metadata.defaultTeam;
+    const effectiveTeam = options.team === "" ? undefined : (options.team ?? profile.metadata.defaultTeam);
     if (effectiveTeam !== undefined) {
       const resolverOpts: ResolverOptions = {
         credentials: profile.credentials,

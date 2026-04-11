@@ -147,8 +147,8 @@ export function parseLinearConfig(document: IniDocument): LinearConfig {
       metadata.oauthRedirectUri = section.oauth_redirect_uri;
     }
 
-    if (section.default_team !== undefined) {
-      metadata.defaultTeam = section.default_team;
+    if (section.default_team !== undefined && section.default_team.trim() !== "") {
+      metadata.defaultTeam = section.default_team.trim();
     }
 
     profiles[profileName] = metadata;
