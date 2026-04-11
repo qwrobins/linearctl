@@ -2,6 +2,7 @@
 import { parseArgs } from "node:util";
 import { handleAuthCommand } from "../commands/auth.js";
 import { handleGqlCommand } from "../commands/gql.js";
+import { handleIssueCommand } from "../commands/issue.js";
 import { handleSchemaCommand } from "../commands/schema.js";
 import { curatedCommandMetadata, defaultLinearConfigPaths, ExitCode } from "../index.js";
 
@@ -26,7 +27,19 @@ const CLI_OPTION_DEFINITIONS = {
   file: { type: "string" },
   "vars-file": { type: "string" },
   var: { type: "string", multiple: true },
-  "output-dir": { type: "string" }
+  "output-dir": { type: "string" },
+  title: { type: "string" },
+  team: { type: "string" },
+  description: { type: "string" },
+  priority: { type: "string" },
+  assignee: { type: "string" },
+  label: { type: "string" },
+  state: { type: "string" },
+  "input-json": { type: "string" },
+  all: { type: "boolean" },
+  max: { type: "string" },
+  "page-size": { type: "string" },
+  after: { type: "string" }
 } as const;
 
 const AUTH_OPTION_DEFINITIONS = {
@@ -77,6 +90,26 @@ const SCHEMA_OPTION_DEFINITIONS = {
   "output-dir": CLI_OPTION_DEFINITIONS["output-dir"]
 } as const;
 
+const ISSUE_OPTION_DEFINITIONS = {
+  help: CLI_OPTION_DEFINITIONS.help,
+  json: CLI_OPTION_DEFINITIONS.json,
+  "json-envelope": CLI_OPTION_DEFINITIONS["json-envelope"],
+  config: CLI_OPTION_DEFINITIONS.config,
+  "config-file": CLI_OPTION_DEFINITIONS["config-file"],
+  credentials: CLI_OPTION_DEFINITIONS.credentials,
+  "credentials-file": CLI_OPTION_DEFINITIONS["credentials-file"],
+  profile: CLI_OPTION_DEFINITIONS.profile,
+  "api-url": CLI_OPTION_DEFINITIONS["api-url"],
+  title: CLI_OPTION_DEFINITIONS.title,
+  team: CLI_OPTION_DEFINITIONS.team,
+  description: CLI_OPTION_DEFINITIONS.description,
+  priority: CLI_OPTION_DEFINITIONS.priority,
+  assignee: CLI_OPTION_DEFINITIONS.assignee,
+  label: CLI_OPTION_DEFINITIONS.label,
+  state: CLI_OPTION_DEFINITIONS.state,
+  "input-json": CLI_OPTION_DEFINITIONS["input-json"]
+} as const;
+
 function printTopLevelHelp(): void {
   process.stdout.write(`linear
 
@@ -88,6 +121,8 @@ Layers:
   raw GraphQL   linear gql ...
 
 Commands:
+  linear issue get <identifier> [--json]
+  linear issue create --title <title> --team <id> [--json]
   linear auth login --profile <name> --api-key-env <ENV>
   linear auth logout --profile <name>
   linear auth status [--json]
@@ -126,6 +161,18 @@ interface ParsedCliArguments {
   varsFile?: string;
   vars: string[];
   outputDir?: string;
+  title?: string;
+  team?: string;
+  description?: string;
+  priority?: string;
+  assignee?: string;
+  label?: string;
+  state?: string;
+  inputJson?: string;
+  all: boolean;
+  max?: number;
+  pageSize?: number;
+  after?: string;
   positionals: string[];
 }
 
@@ -154,12 +201,17 @@ function parseCliArguments(argv: string[]): ParsedCliArguments {
     return mergeParsedCliArguments(topLevel.values, commandParse.values, [command, ...commandParse.positionals]);
   }
 
+  if (command === "issue") {
+    const commandParse = parseCliOptionSet(subcommandArgv, ISSUE_OPTION_DEFINITIONS);
+    return mergeParsedCliArguments(topLevel.values, commandParse.values, [command, ...commandParse.positionals]);
+  }
+
   return toParsedCliArguments(topLevel.values, commandAndArgs);
 }
 
 function parseCliOptionSet(
   argv: string[],
-  options: typeof CLI_OPTION_DEFINITIONS | typeof AUTH_OPTION_DEFINITIONS | typeof GQL_OPTION_DEFINITIONS | typeof SCHEMA_OPTION_DEFINITIONS
+  options: Record<string, { type: "boolean"; short?: string; multiple?: true } | { type: "string"; short?: string; multiple?: true }>
 ): { values: Record<string, unknown>; positionals: string[] } {
   const { values, positionals } = parseArgs({
     args: argv,
@@ -287,6 +339,18 @@ function toParsedCliArguments(values: Record<string, unknown>, positionals: stri
     ...(typeof values["vars-file"] === "string" ? { varsFile: values["vars-file"] } : {}),
     vars: Array.isArray(values.var) ? values.var.filter((value): value is string => typeof value === "string") : [],
     ...(typeof values["output-dir"] === "string" ? { outputDir: values["output-dir"] } : {}),
+    ...(typeof values.title === "string" ? { title: values.title } : {}),
+    ...(typeof values.team === "string" ? { team: values.team } : {}),
+    ...(typeof values.description === "string" ? { description: values.description } : {}),
+    ...(typeof values.priority === "string" ? { priority: values.priority } : {}),
+    ...(typeof values.assignee === "string" ? { assignee: values.assignee } : {}),
+    ...(typeof values.label === "string" ? { label: values.label } : {}),
+    ...(typeof values.state === "string" ? { state: values.state } : {}),
+    ...(typeof values["input-json"] === "string" ? { inputJson: values["input-json"] } : {}),
+    all: values.all === true,
+    ...(typeof values.max === "string" ? { max: Number(values.max) } : {}),
+    ...(typeof values["page-size"] === "string" ? { pageSize: Number(values["page-size"]) } : {}),
+    ...(typeof values.after === "string" ? { after: values.after } : {}),
     positionals
   };
 }
@@ -352,6 +416,32 @@ async function main(argv: string[]): Promise<number> {
         ...(args.apiUrl === undefined ? {} : { apiUrl: args.apiUrl }),
         env: process.env,
         stdinStream: process.stdin
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "command failed";
+      process.stderr.write(`Error: ${message}\n`);
+      return ExitCode.GeneralError;
+    }
+  }
+
+  if (args.positionals[0] === "issue") {
+    try {
+      return await handleIssueCommand(args.positionals.slice(1), {
+        json: args.json,
+        jsonEnvelope: args.jsonEnvelope,
+        ...(args.profile === undefined ? {} : { profile: args.profile }),
+        configFile: args.configFile,
+        credentialsFile: args.credentialsFile,
+        ...(args.apiUrl === undefined ? {} : { apiUrl: args.apiUrl }),
+        ...(args.title === undefined ? {} : { title: args.title }),
+        ...(args.team === undefined ? {} : { team: args.team }),
+        ...(args.description === undefined ? {} : { description: args.description }),
+        ...(args.priority === undefined ? {} : { priority: args.priority }),
+        ...(args.assignee === undefined ? {} : { assignee: args.assignee }),
+        ...(args.label === undefined ? {} : { label: args.label }),
+        ...(args.state === undefined ? {} : { state: args.state }),
+        ...(args.inputJson === undefined ? {} : { inputJson: args.inputJson }),
+        env: process.env
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : "command failed";
