@@ -1,10 +1,15 @@
-import { mkdtemp, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   loadLinearConfigFile,
-  parseLinearConfig
+  parseLinearConfig,
+  removeProfileMetadata,
+  setDefaultProfile,
+  setProfileMetadata,
+  stringifyLinearConfig,
+  writeLinearConfigFile
 } from "../../../src/core/config/config-file.js";
 import { parseIni } from "../../../src/core/config/ini.js";
 import { defaultLinearConfigPaths } from "../../../src/core/config/paths.js";
@@ -82,5 +87,80 @@ describe("parseLinearConfig", () => {
         }
       }
     });
+  });
+
+  it("serializes config and updates the default profile", () => {
+    const config = setDefaultProfile(
+      {
+        profiles: {
+          work: {
+            workspace: "main",
+            workspaceId: "22222222-2222-2222-2222-222222222222",
+            userEmail: "quentin@example.com"
+          }
+        }
+      },
+      "work"
+    );
+
+    expect(stringifyLinearConfig(config)).toBe(
+      [
+        "[default]",
+        "profile = work",
+        "",
+        "[profile work]",
+        "workspace = main",
+        "workspace_id = 22222222-2222-2222-2222-222222222222",
+        "user_email = quentin@example.com",
+        ""
+      ].join("\n")
+    );
+  });
+
+  it("writes config atomically with restrictive permissions", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-config-"));
+    const configFile = join(directory, "nested", "config");
+
+    await writeLinearConfigFile(configFile, {
+      defaultProfile: "work",
+      profiles: {
+        work: {
+          workspace: "main"
+        }
+      }
+    });
+
+    expect(await readFile(configFile, "utf8")).toBe(
+      ["[default]", "profile = work", "", "[profile work]", "workspace = main", ""].join("\n")
+    );
+    expect((await stat(configFile)).mode & 0o777).toBe(0o600);
+  });
+
+  it("removes profile metadata using a trimmed profile name", () => {
+    expect(
+      removeProfileMetadata(
+        {
+          defaultProfile: "work",
+          profiles: {
+            work: { workspace: "main" },
+            personal: { workspace: "personal" }
+          }
+        },
+        " work "
+      )
+    ).toEqual({
+      profiles: {
+        personal: { workspace: "personal" }
+      }
+    });
+  });
+
+  it("rejects invalid profile names when mutating config", () => {
+    expect(() => setDefaultProfile({ profiles: {} }, "bad[name]")).toThrow(
+      "default profile contains unsupported characters"
+    );
+    expect(() => setProfileMetadata({ profiles: {} }, "bad[name]", {})).toThrow(
+      "profile section name contains unsupported characters"
+    );
   });
 });

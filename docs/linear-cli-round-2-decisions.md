@@ -269,6 +269,7 @@ Generated commands:
 
 Raw GraphQL commands:
 
+- Require exactly one explicit output mode: `--json`, `--json-envelope`, or `--raw`.
 - `--raw` returns the exact GraphQL body, including partial `data` and `errors`.
 - `--json` returns only the `data` payload on success.
 - If `errors` are present, `--json` exits non-zero and does not emit partial data.

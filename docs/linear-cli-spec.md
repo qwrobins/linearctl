@@ -63,8 +63,8 @@ Purpose:
 
 Examples:
 
-- `linear gql query '{ viewer { id name } }'`
-- `linear gql mutation --file issue-create.graphql --vars-file vars.json`
+- `linear gql query '{ viewer { id name } }' --json`
+- `linear gql mutation --file issue-create.graphql --vars-file vars.json --json-envelope`
 
 ## Generated Command Interface
 
@@ -296,6 +296,7 @@ Output expectations:
 - list curated commands return an array
 - generated commands return normalized data output for the selected operation
 - raw GraphQL commands in normal `--json` mode return the parsed GraphQL `data` payload only
+- raw GraphQL commands require an explicit output mode: `--json`, `--json-envelope`, or `--raw`
 
 ### `--json-envelope`
 

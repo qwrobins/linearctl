@@ -1,7 +1,8 @@
 import { open, readFile } from "node:fs/promises";
 import type { FileHandle } from "node:fs/promises";
 import type { IniDocument } from "../config/ini.js";
-import { parseIni } from "../config/ini.js";
+import { parseIni, stringifyIni } from "../config/ini.js";
+import { writeFileAtomically } from "../config/atomic-file.js";
 
 export type CredentialType = "api_key" | "oauth";
 
@@ -29,6 +30,64 @@ export interface CredentialsStore {
 
 export interface LoadCredentialsFileOptions {
   checkPermissions?: boolean;
+}
+
+export function stringifyCredentials(credentials: CredentialsStore): string {
+  const document = Object.create(null) as IniDocument;
+
+  for (const credential of Object.values(credentials.profiles)) {
+    if (credential.type === "api_key") {
+      document[credential.profileName] = {
+        type: "api_key",
+        api_key: credential.apiKey
+      };
+      continue;
+    }
+
+    document[credential.profileName] = {
+      type: "oauth",
+      access_token: credential.accessToken,
+      refresh_token: credential.refreshToken,
+      expires_at: credential.expiresAt,
+      ...(credential.scopes === undefined ? {} : { scopes: credential.scopes }),
+      ...(credential.oauthClientId === undefined ? {} : { oauth_client_id: credential.oauthClientId })
+    };
+  }
+
+  return stringifyIni(document);
+}
+
+export function setCredentialsProfile(
+  credentials: CredentialsStore,
+  profileCredentials: ProfileCredentials
+): CredentialsStore {
+  const profileName = normalizeAndValidateProfileName(profileCredentials.profileName);
+
+  return {
+    profiles: {
+      ...credentials.profiles,
+      [profileName]: {
+        ...profileCredentials,
+        profileName
+      }
+    }
+  };
+}
+
+export function removeCredentialsProfile(
+  credentials: CredentialsStore,
+  profileName: string
+): CredentialsStore {
+  const trimmedProfileName = normalizeAndValidateProfileName(profileName);
+  const profiles = Object.create(null) as Record<string, ProfileCredentials>;
+
+  for (const [existingProfileName, profileCredentials] of Object.entries(credentials.profiles)) {
+    if (normalizeAndValidateProfileName(existingProfileName) !== trimmedProfileName) {
+      profiles[existingProfileName] = profileCredentials;
+    }
+  }
+
+  return { profiles };
 }
 
 export function parseCredentials(document: IniDocument): CredentialsStore {
@@ -108,6 +167,13 @@ export async function loadCredentialsFile(
   return parseCredentials(parseIni(await readFile(credentialsFile, "utf8")));
 }
 
+export async function writeCredentialsFile(
+  credentialsFile: string,
+  credentials: CredentialsStore
+): Promise<void> {
+  await writeFileAtomically(credentialsFile, stringifyCredentials(credentials), { mode: 0o600 });
+}
+
 export async function assertCredentialsFilePermissions(credentialsFile: string): Promise<void> {
   const handle = await open(credentialsFile, "r");
   try {
@@ -123,4 +189,23 @@ export async function assertCredentialsFileHandlePermissions(handle: FileHandle)
   if ((mode & 0o077) !== 0) {
     throw new Error("credentials file permissions must not allow group or other access");
   }
+}
+
+function normalizeAndValidateProfileName(profileName: string): string {
+  const normalized = profileName.trim();
+
+  if (normalized === "") {
+    throw new Error("credentials profile name cannot be empty");
+  }
+
+  if (
+    normalized.includes("\n") ||
+    normalized.includes("\r") ||
+    normalized.includes("[") ||
+    normalized.includes("]")
+  ) {
+    throw new Error("credentials profile name contains unsupported characters");
+  }
+
+  return normalized;
 }
