@@ -27,6 +27,7 @@ export interface CycleCommandOptions {
   name?: string;
   description?: string;
   team?: string;
+  everything?: boolean;
   startsAt?: string;
   endsAt?: string;
   // pagination flags
@@ -261,7 +262,7 @@ async function handleCycleList(options: CycleCommandOptions): Promise<number> {
     });
 
     let filter: Record<string, unknown> | undefined;
-    const effectiveTeam = options.team === "" ? undefined : (options.team ?? profile.metadata.defaultTeam);
+    const effectiveTeam = options.everything ? undefined : (options.team ?? profile.metadata.defaultTeam);
     if (effectiveTeam !== undefined) {
       const resolverOpts: ResolverOptions = {
         credentials: profile.credentials,

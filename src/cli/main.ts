@@ -65,6 +65,7 @@ const CLI_OPTION_DEFINITIONS = {
   color: { type: "string" },
   "no-retry": { type: "boolean" },
   "max-retries": { type: "string" },
+  everything: { type: "boolean" },
   issue: { type: "string" },
   url: { type: "string" },
   output: { type: "string" },
@@ -143,6 +144,7 @@ const ISSUE_OPTION_DEFINITIONS = {
   profile: CLI_OPTION_DEFINITIONS.profile,
   "api-url": CLI_OPTION_DEFINITIONS["api-url"],
   "dry-run": CLI_OPTION_DEFINITIONS["dry-run"],
+  everything: CLI_OPTION_DEFINITIONS.everything,
   title: CLI_OPTION_DEFINITIONS.title,
   team: CLI_OPTION_DEFINITIONS.team,
   description: CLI_OPTION_DEFINITIONS.description,
@@ -176,6 +178,7 @@ const PROJECT_OPTION_DEFINITIONS = {
   profile: CLI_OPTION_DEFINITIONS.profile,
   "api-url": CLI_OPTION_DEFINITIONS["api-url"],
   "dry-run": CLI_OPTION_DEFINITIONS["dry-run"],
+  everything: CLI_OPTION_DEFINITIONS.everything,
   name: CLI_OPTION_DEFINITIONS.name,
   description: CLI_OPTION_DEFINITIONS.description,
   team: CLI_OPTION_DEFINITIONS.team,
@@ -200,6 +203,7 @@ const CYCLE_OPTION_DEFINITIONS = {
   profile: CLI_OPTION_DEFINITIONS.profile,
   "api-url": CLI_OPTION_DEFINITIONS["api-url"],
   "dry-run": CLI_OPTION_DEFINITIONS["dry-run"],
+  everything: CLI_OPTION_DEFINITIONS.everything,
   name: CLI_OPTION_DEFINITIONS.name,
   description: CLI_OPTION_DEFINITIONS.description,
   team: CLI_OPTION_DEFINITIONS.team,
@@ -264,6 +268,7 @@ const LABEL_OPTION_DEFINITIONS = {
   profile: CLI_OPTION_DEFINITIONS.profile,
   "api-url": CLI_OPTION_DEFINITIONS["api-url"],
   "dry-run": CLI_OPTION_DEFINITIONS["dry-run"],
+  everything: CLI_OPTION_DEFINITIONS.everything,
   name: CLI_OPTION_DEFINITIONS.name,
   description: CLI_OPTION_DEFINITIONS.description,
   color: CLI_OPTION_DEFINITIONS.color,
@@ -382,7 +387,7 @@ Layers:
 Commands:
   linear issue get <identifier> [--json]
   linear issue create --title <title> --team <id> [--json]
-  linear issue list [--state <name>] [--assignee <id>] [--team <id>] [--json]
+  linear issue list [--state <name>] [--assignee <id>] [--team <id>] [--everything] [--json]
   linear issue update <identifier> [--title ...] [--state ...] [--json]
   linear issue close <identifier> [--json]
   linear issue assign <identifier> <assignee-id> [--json]
@@ -391,11 +396,11 @@ Commands:
   linear issue bulk-close --ids <id1,id2,...> [--json]
   linear issue bulk-assign --ids <id1,id2,...> --assignee <id> [--json]
   linear project get <id> [--json]
-  linear project list [--json]
+  linear project list [--team <id>] [--everything] [--json]
   linear project create --name <name> [--description ...] [--team <id>] [--json]
   linear project update <id> [--name ...] [--state ...] [--json]
   linear cycle get <id> [--json]
-  linear cycle list [--team <id>] [--json]
+  linear cycle list [--team <id>] [--everything] [--json]
   linear cycle create --team <id> [--name ...] [--starts-at ...] [--ends-at ...] [--json]
   linear cycle update <id> [--name ...] [--starts-at ...] [--ends-at ...] [--json]
   linear team get <id-or-key> [--set-default] [--json]
@@ -404,7 +409,7 @@ Commands:
   linear user me [--json]
   linear user list [--json]
   linear label get <id> [--json]
-  linear label list [--team <id>] [--json]
+  linear label list [--team <id>] [--everything] [--json]
   linear label create --name <name> [--description ...] [--color ...] [--team <id>] [--json]
   linear comment list --issue <id> [--json]
   linear comment create --issue <id> --body <text> [--json]
@@ -495,6 +500,7 @@ interface ParsedCliArguments {
   pageSize?: number;
   after?: string;
   dryRun: boolean;
+  everything: boolean;
   noRetry: boolean;
   maxRetries?: number;
   positionals: string[];
@@ -761,6 +767,7 @@ function toParsedCliArguments(values: Record<string, unknown>, positionals: stri
     ...(typeof values["page-size"] === "string" ? { pageSize: parsePositiveInt(values["page-size"], "page-size") } : {}),
     ...(typeof values.after === "string" ? { after: values.after } : {}),
     dryRun: values["dry-run"] === true,
+    everything: values.everything === true,
     noRetry: values["no-retry"] === true,
     ...(typeof values["max-retries"] === "string" ? { maxRetries: parsePositiveInt(values["max-retries"], "max-retries") } : {}),
     positionals
@@ -781,6 +788,11 @@ async function main(argv: string[]): Promise<number> {
   if (argv.length === 0 || args.help) {
     printTopLevelHelp();
     return ExitCode.Success;
+  }
+
+  if (args.team !== undefined && args.everything) {
+    process.stderr.write("Error: --team cannot be used with --everything\n");
+    return ExitCode.ValidationError;
   }
 
   if (args.metadata === "curated" && args.json) {
@@ -869,6 +881,7 @@ async function main(argv: string[]): Promise<number> {
       return await handleIssueCommand(args.positionals.slice(1), {
         json: args.json,
         dryRun: args.dryRun,
+        everything: args.everything,
         jsonEnvelope: args.jsonEnvelope,
         jsonl: args.jsonl,
         ...(args.profile === undefined ? {} : { profile: args.profile }),
@@ -906,6 +919,7 @@ async function main(argv: string[]): Promise<number> {
       return await handleProjectCommand(args.positionals.slice(1), {
         json: args.json,
         dryRun: args.dryRun,
+        everything: args.everything,
         jsonEnvelope: args.jsonEnvelope,
         jsonl: args.jsonl,
         ...(args.profile === undefined ? {} : { profile: args.profile }),
@@ -934,6 +948,7 @@ async function main(argv: string[]): Promise<number> {
       return await handleCycleCommand(args.positionals.slice(1), {
         json: args.json,
         dryRun: args.dryRun,
+        everything: args.everything,
         jsonEnvelope: args.jsonEnvelope,
         jsonl: args.jsonl,
         ...(args.profile === undefined ? {} : { profile: args.profile }),
@@ -1010,6 +1025,7 @@ async function main(argv: string[]): Promise<number> {
       return await handleLabelCommand(args.positionals.slice(1), {
         json: args.json,
         dryRun: args.dryRun,
+        everything: args.everything,
         jsonEnvelope: args.jsonEnvelope,
         jsonl: args.jsonl,
         ...(args.profile === undefined ? {} : { profile: args.profile }),
