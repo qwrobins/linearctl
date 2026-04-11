@@ -213,7 +213,7 @@ async function handleCommentCreate(options: CommentCommandOptions): Promise<numb
     return emitValidationError("--issue is required for comment create.", options);
   }
 
-  if (options.body === undefined || options.body === "") {
+  if (options.body === undefined || options.body.trim() === "") {
     return emitValidationError("--body is required for comment create.", options);
   }
 
@@ -291,7 +291,7 @@ async function handleCommentCreate(options: CommentCommandOptions): Promise<numb
 }
 
 async function handleCommentUpdate(commentId: string, options: CommentCommandOptions): Promise<number> {
-  if (options.body === undefined || options.body === "") {
+  if (options.body === undefined || options.body.trim() === "") {
     return emitValidationError("--body is required for comment update.", options);
   }
 

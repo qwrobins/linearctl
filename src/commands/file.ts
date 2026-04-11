@@ -139,8 +139,7 @@ async function handleFileUpload(
   try {
     fileBytes = Buffer.from(await readFile(resolvedPath));
   } catch {
-    process.stderr.write(`Error: cannot read file: ${resolvedPath}\n`);
-    return ExitCode.ValidationError;
+    return emitValidationError(`cannot read file: ${resolvedPath}`, options);
   }
 
   const size = fileBytes.length;

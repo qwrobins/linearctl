@@ -204,15 +204,15 @@ async function handleAttachmentList(options: AttachmentCommandOptions): Promise<
 }
 
 async function handleAttachmentCreate(options: AttachmentCommandOptions): Promise<number> {
-  if (options.issue === undefined) {
+  if (options.issue === undefined || options.issue === "") {
     return emitValidationError("--issue is required for attachment create.", options);
   }
 
-  if (options.url === undefined) {
+  if (options.url === undefined || options.url === "") {
     return emitValidationError("--url is required for attachment create.", options);
   }
 
-  if (options.title === undefined) {
+  if (options.title === undefined || options.title === "") {
     return emitValidationError("--title is required for attachment create.", options);
   }
 
@@ -242,6 +242,7 @@ async function handleAttachmentCreate(options: AttachmentCommandOptions): Promis
 
     if (
       hasErrors(response.body.errors) ||
+      response.body.data?.attachmentCreate?.success !== true ||
       response.body.data?.attachmentCreate?.attachment === null ||
       response.body.data?.attachmentCreate?.attachment === undefined
     ) {

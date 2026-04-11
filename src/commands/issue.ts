@@ -499,7 +499,7 @@ async function handleIssueList(options: IssueCommandOptions): Promise<number> {
       process.stdout.write(`${JSON.stringify(issues, null, 2)}\n`);
     } else {
       if (issues.length === 0) {
-        process.stderr.write("No issues found.\n");
+        process.stdout.write("No issues found.\n");
       } else {
         for (const issue of issues) {
           const state = issue.state !== null ? issue.state.name : "";
@@ -817,7 +817,7 @@ async function handleIssueComment(
   identifier: string,
   options: IssueCommandOptions
 ): Promise<number> {
-  if (options.body === undefined || options.body === "") {
+  if (options.body === undefined || options.body.trim() === "") {
     return emitValidationError("--body is required for issue comment.", options);
   }
 
