@@ -1,0 +1,107 @@
+# Output modes
+
+## Default (human-readable)
+
+Without any output flag, commands print human-readable text to stdout. This format is not stable and must not be parsed programmatically.
+
+## --json
+
+Data-only JSON. This is the primary machine-readable format.
+
+```bash
+linear issue get INF-42 --json
+```
+
+```json
+{
+  "id": "abc123",
+  "identifier": "INF-42",
+  "title": "Fix pagination bug",
+  "state": { "name": "In Progress" },
+  "priority": 2,
+  "assignee": { "name": "Alice" }
+}
+```
+
+The shape of `--json` output is a stable contract. Fields are not removed or renamed without a major version change.
+
+For list commands, `--json` outputs a JSON array.
+
+## --json-envelope
+
+Wraps the response in an envelope with metadata:
+
+```bash
+linear issue list --team INF --json-envelope
+```
+
+```json
+{
+  "ok": true,
+  "data": [ ... ],
+  "pageInfo": {
+    "hasNextPage": true,
+    "endCursor": "abc123"
+  },
+  "errors": [],
+  "meta": {
+    "profile": "work",
+    "timestamp": "2025-01-15T10:30:00Z"
+  }
+}
+```
+
+Use `--json-envelope` when you need:
+- Pagination cursors (`pageInfo`)
+- Error details alongside partial data
+- Request metadata
+
+## --jsonl
+
+Streaming output. One JSON object per line. Auto-paginates through all results.
+
+```bash
+linear issue list --team INF --jsonl
+```
+
+```json
+{"id":"abc","identifier":"INF-1","title":"First issue",...}
+{"id":"def","identifier":"INF-2","title":"Second issue",...}
+```
+
+Use `--jsonl` for large result sets where you want to process items as they arrive. Combine with `--max` to cap results.
+
+## --raw
+
+Available only for `linear gql` commands. Returns the exact GraphQL response body without normalization.
+
+```bash
+linear gql query '{ viewer { id name } }' --raw
+```
+
+```json
+{
+  "data": {
+    "viewer": {
+      "id": "abc123",
+      "name": "Alice"
+    }
+  }
+}
+```
+
+## Exit codes
+
+| Code | Meaning | Typical action |
+|---|---|---|
+| 0 | Success | -- |
+| 1 | General error | Read stderr for details |
+| 2 | Authentication error | Run `linear auth status`, re-authenticate |
+| 3 | Rate limit exhausted | Wait, reduce result count, add filters |
+| 4 | Not found | Verify identifier or ID |
+| 5 | Validation error | Check flags and input |
+| 6 | Schema drift | Update CLI, fall back to `linear gql` |
+
+## Stderr
+
+Errors and warnings are written to stderr. Stdout contains only the requested output. This separation is reliable for piping and redirection.
