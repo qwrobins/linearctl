@@ -15,12 +15,14 @@ const MAX_PAGE_SIZE = 250;
 const SAFETY_CAP = 10_000;
 
 export function validatePaginationOptions(options: PaginationOptions): string | undefined {
-  if (options.max !== undefined && options.max <= 0) {
-    return "--max must be a positive integer";
+  if (options.max !== undefined) {
+    if (!Number.isInteger(options.max) || options.max <= 0) {
+      return "--max must be a positive integer";
+    }
   }
 
   if (options.pageSize !== undefined) {
-    if (options.pageSize <= 0) {
+    if (!Number.isInteger(options.pageSize) || options.pageSize <= 0) {
       return "--page-size must be a positive integer";
     }
     if (options.pageSize > MAX_PAGE_SIZE) {
@@ -87,8 +89,12 @@ export async function paginateGraphQL<TNode>(
       ...(fetchImpl === undefined ? {} : { fetchImpl })
     });
 
+    if (Array.isArray(response.body.errors) && response.body.errors.length > 0) {
+      throw new Error(response.body.errors[0]?.message ?? "Linear GraphQL request failed");
+    }
+
     if (response.body.data === undefined) {
-      break;
+      throw new Error("Linear GraphQL response was missing data");
     }
 
     const connection = extractConnection(response.body.data);

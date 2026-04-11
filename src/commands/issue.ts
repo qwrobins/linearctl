@@ -162,11 +162,24 @@ async function handleIssueGet(
       ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl })
     });
 
-    if (hasErrors(response.body.errors) || response.body.data?.issue === null || response.body.data?.issue === undefined) {
+    if (hasErrors(response.body.errors)) {
+      const errors = mapGraphQLErrors(response.body.errors);
       if (options.jsonEnvelope) {
-        const errors = mapGraphQLErrors(response.body.errors);
+        const envelope = failureEnvelope(errors, {
+          sourceLayer: "curated",
+          profile: profile.name
+        });
+        process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
+      } else {
+        process.stderr.write(`Error: ${errors[0]?.message ?? "Issue query failed"}\n`);
+      }
+      return ExitCode.GeneralError;
+    }
+
+    if (response.body.data?.issue === null || response.body.data?.issue === undefined) {
+      if (options.jsonEnvelope) {
         const envelope = failureEnvelope(
-          errors.length > 0 ? errors : [{ category: "not-found", message: "Issue not found" }],
+          [{ category: "not-found", message: "Issue not found" }],
           { sourceLayer: "curated", profile: profile.name }
         );
         process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
@@ -246,7 +259,11 @@ async function handleIssueCreate(options: IssueCommandOptions): Promise<number> 
   }
   if (options.priority !== undefined) {
     const parsed = Number(options.priority);
-    input.priority = Number.isNaN(parsed) ? options.priority : parsed;
+    if (!Number.isInteger(parsed)) {
+      process.stderr.write("Error: --priority must be an integer.\n");
+      return ExitCode.ValidationError;
+    }
+    input.priority = parsed;
   }
   if (options.assignee !== undefined) {
     input.assigneeId = options.assignee;
