@@ -16,6 +16,12 @@ The normative product docs remain:
 
 The project has started implementation and `main` includes the first two foundational slices.
 
+In flight on PR #3 (`codex/auth-and-raw-graphql-foundations`, head `94786cd`):
+
+- review follow-up for the auth and raw GraphQL slice has been pushed
+- local CodeRabbit review on the committed diff is clean
+- GitHub may still show older CodeRabbit comments tied to the original PR head commit
+
 Completed:
 
 - PR #1, Phase 1 scaffold and contracts:
@@ -53,6 +59,12 @@ Completed:
   - variable input via repeated `--var key=value` and `--vars-file`
   - resolved-profile runtime auth for raw GraphQL commands
   - explicit `--json`, `--json-envelope`, or `--raw` output modes for raw GraphQL commands
+  - stricter CLI unknown-flag rejection for the new auth and raw GraphQL flags
+  - non-object `--vars-file` JSON roots rejected before variable merging
+  - normalized profile-name trimming for credential mutations
+  - config profile-name validation against INI-breaking characters
+  - GraphQL transport preserves HTTP status on invalid JSON responses
+  - GraphQL transport reports GraphQL `errors` before treating missing `data` as invalid
 
 ## Recommended Next Slice
 
