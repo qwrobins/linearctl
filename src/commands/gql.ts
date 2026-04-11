@@ -5,6 +5,8 @@ import { mapCommandFailure } from "../core/errors/command-failure.js";
 import { executeGraphQL } from "../core/transport/graphql.js";
 import type { FetchLike, GraphQLErrorPayload } from "../core/transport/graphql.js";
 import { resolveStoredProfile } from "../core/auth/runtime.js";
+import { isTtyInput, readAllStdin } from "../core/io/stdin.js";
+import { INTROSPECTION_QUERY } from "../core/schema/introspection-query.js";
 
 export interface GqlCommandOptions {
   json: boolean;
@@ -269,118 +271,3 @@ function buildRawGraphQLEnvelope(input: {
 function printCommandError(error: CommandError): void {
   process.stderr.write(`Error: ${error.message}\n`);
 }
-
-async function readAllStdin(stdin: NodeJS.ReadableStream): Promise<string> {
-  stdin.setEncoding("utf8");
-  let contents = "";
-
-  for await (const chunk of stdin) {
-    contents += chunk;
-  }
-
-  return contents;
-}
-
-function isTtyInput(stdin: NodeJS.ReadableStream): boolean {
-  return "isTTY" in stdin && stdin.isTTY === true;
-}
-
-const INTROSPECTION_QUERY = `query IntrospectionQuery {
-  __schema {
-    queryType {
-      name
-    }
-    mutationType {
-      name
-    }
-    subscriptionType {
-      name
-    }
-    types {
-      ...FullType
-    }
-    directives {
-      name
-      description
-      locations
-      args {
-        ...InputValue
-      }
-    }
-  }
-}
-
-fragment FullType on __Type {
-  kind
-  name
-  description
-  fields(includeDeprecated: true) {
-    name
-    description
-    args {
-      ...InputValue
-    }
-    type {
-      ...TypeRef
-    }
-    isDeprecated
-    deprecationReason
-  }
-  inputFields {
-    ...InputValue
-  }
-  interfaces {
-    ...TypeRef
-  }
-  enumValues(includeDeprecated: true) {
-    name
-    description
-    isDeprecated
-    deprecationReason
-  }
-  possibleTypes {
-    ...TypeRef
-  }
-}
-
-fragment InputValue on __InputValue {
-  name
-  description
-  type {
-    ...TypeRef
-  }
-  defaultValue
-}
-
-fragment TypeRef on __Type {
-  kind
-  name
-  ofType {
-    kind
-    name
-    ofType {
-      kind
-      name
-      ofType {
-        kind
-        name
-        ofType {
-          kind
-          name
-          ofType {
-            kind
-            name
-            ofType {
-              kind
-              name
-              ofType {
-                kind
-                name
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-}`;

@@ -9,5 +9,7 @@ export * from "./core/config/ini.js";
 export * from "./core/config/paths.js";
 export * from "./core/metadata/command-metadata.js";
 export * from "./core/output/envelope.js";
+export * from "./core/io/stdin.js";
+export * from "./core/schema/schema-meta.js";
 export * from "./core/transport/graphql.js";
 export * from "./commands/metadata/curated-taxonomy.js";

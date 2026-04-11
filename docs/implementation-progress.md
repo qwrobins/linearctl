@@ -62,22 +62,33 @@ Completed:
   - GraphQL transport preserves HTTP status on invalid JSON responses
   - GraphQL transport reports GraphQL `errors` before treating missing `data` as invalid
 
+- Continued Phase 3 schema and infrastructure work:
+  - `linear schema version` with `--json` and `--json-envelope` output
+  - `linear schema pull` with live introspection, schema file output, and schema metadata generation
+  - bundled `schema-meta.json` manifest with version fingerprinting from introspection type names
+  - `--output-dir` flag for schema pull to control where schema files are written
+  - `--json-envelope` support for all auth commands (`status`, `login`, `logout`, `switch`)
+  - shared `src/core/io/stdin.ts` module extracted from duplicated `readAllStdin` and `isTtyInput` in `gql.ts` and `auth.ts`
+  - shared `src/core/schema/introspection-query.ts` extracted from duplicated introspection query in `gql.ts`
+  - build pipeline updated to copy `schema-meta.json` to dist alongside `curated-commands.json`
+
 ## Recommended Next Slice
 
-Continue Phase 3 raw GraphQL support and close the remaining auth/runtime gaps.
+Begin Phase 3 schema check and Phase 4 curated MVP commands.
 
 Suggested scope:
 
-- initial `linear schema version`
-- initial `linear schema pull` scaffolding and bundled schema-version surface
-- JSON envelope support for auth commands where useful
+- `linear schema check` to compare bundled vs live schema version
 - decide whether `--api-url` remains a hidden test/development override or should be documented as `base_url` behavior
-- factor shared command error/output helpers if raw GraphQL and curated commands start duplicating logic
+- begin curated `issue` commands: `issue list`, `issue get`, `issue create`
+- GraphQL transport retry with bounded exponential backoff for rate-limited requests
+- pagination infrastructure (`--all`, `--max`, `--page-size`, `--after`)
 
 Defer unless deliberately scoped:
 
 - OAuth browser callback flow
 - generated API layer
+- file upload/download commands
 
 ## Verification Baseline
 

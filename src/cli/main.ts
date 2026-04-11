@@ -2,6 +2,7 @@
 import { parseArgs } from "node:util";
 import { handleAuthCommand } from "../commands/auth.js";
 import { handleGqlCommand } from "../commands/gql.js";
+import { handleSchemaCommand } from "../commands/schema.js";
 import { curatedCommandMetadata, defaultLinearConfigPaths, ExitCode } from "../index.js";
 
 const CLI_OPTION_DEFINITIONS = {
@@ -24,7 +25,8 @@ const CLI_OPTION_DEFINITIONS = {
   stdin: { type: "boolean" },
   file: { type: "string" },
   "vars-file": { type: "string" },
-  var: { type: "string", multiple: true }
+  var: { type: "string", multiple: true },
+  "output-dir": { type: "string" }
 } as const;
 
 const AUTH_OPTION_DEFINITIONS = {
@@ -32,6 +34,7 @@ const AUTH_OPTION_DEFINITIONS = {
   json: CLI_OPTION_DEFINITIONS.json,
   "json-envelope": CLI_OPTION_DEFINITIONS["json-envelope"],
   config: CLI_OPTION_DEFINITIONS.config,
+
   "config-file": CLI_OPTION_DEFINITIONS["config-file"],
   credentials: CLI_OPTION_DEFINITIONS.credentials,
   "credentials-file": CLI_OPTION_DEFINITIONS["credentials-file"],
@@ -61,24 +64,40 @@ const GQL_OPTION_DEFINITIONS = {
   var: CLI_OPTION_DEFINITIONS.var
 } as const;
 
+const SCHEMA_OPTION_DEFINITIONS = {
+  help: CLI_OPTION_DEFINITIONS.help,
+  json: CLI_OPTION_DEFINITIONS.json,
+  "json-envelope": CLI_OPTION_DEFINITIONS["json-envelope"],
+  config: CLI_OPTION_DEFINITIONS.config,
+  "config-file": CLI_OPTION_DEFINITIONS["config-file"],
+  credentials: CLI_OPTION_DEFINITIONS.credentials,
+  "credentials-file": CLI_OPTION_DEFINITIONS["credentials-file"],
+  profile: CLI_OPTION_DEFINITIONS.profile,
+  "api-url": CLI_OPTION_DEFINITIONS["api-url"],
+  "output-dir": CLI_OPTION_DEFINITIONS["output-dir"]
+} as const;
+
 function printTopLevelHelp(): void {
   process.stdout.write(`linear
 
-Agent-first Linear CLI scaffold.
+Agent-first Linear CLI.
 
 Layers:
   curated       linear <resource> ...
   generated     linear api ...
   raw GraphQL   linear gql ...
 
-Current scaffold:
-  linear --metadata curated --json
+Commands:
   linear auth login --profile <name> --api-key-env <ENV>
   linear auth logout --profile <name>
   linear auth status [--json]
   linear auth switch <profile>
   linear gql introspect --json
   linear gql query '{ viewer { id } }' --json
+  linear gql mutation --file m.graphql --vars-file v.json --json
+  linear schema version [--json]
+  linear schema pull [--json] [--output-dir <path>]  (default: project src/generated/manifest)
+  linear --metadata curated --json
   linear --help
 `);
 }
@@ -106,6 +125,7 @@ interface ParsedCliArguments {
   file?: string;
   varsFile?: string;
   vars: string[];
+  outputDir?: string;
   positionals: string[];
 }
 
@@ -129,12 +149,17 @@ function parseCliArguments(argv: string[]): ParsedCliArguments {
     return mergeParsedCliArguments(topLevel.values, commandParse.values, [command, ...commandParse.positionals]);
   }
 
+  if (command === "schema") {
+    const commandParse = parseCliOptionSet(subcommandArgv, SCHEMA_OPTION_DEFINITIONS);
+    return mergeParsedCliArguments(topLevel.values, commandParse.values, [command, ...commandParse.positionals]);
+  }
+
   return toParsedCliArguments(topLevel.values, commandAndArgs);
 }
 
 function parseCliOptionSet(
   argv: string[],
-  options: typeof CLI_OPTION_DEFINITIONS | typeof AUTH_OPTION_DEFINITIONS | typeof GQL_OPTION_DEFINITIONS
+  options: typeof CLI_OPTION_DEFINITIONS | typeof AUTH_OPTION_DEFINITIONS | typeof GQL_OPTION_DEFINITIONS | typeof SCHEMA_OPTION_DEFINITIONS
 ): { values: Record<string, unknown>; positionals: string[] } {
   const { values, positionals } = parseArgs({
     args: argv,
@@ -261,6 +286,7 @@ function toParsedCliArguments(values: Record<string, unknown>, positionals: stri
     ...(typeof values.file === "string" ? { file: values.file } : {}),
     ...(typeof values["vars-file"] === "string" ? { varsFile: values["vars-file"] } : {}),
     vars: Array.isArray(values.var) ? values.var.filter((value): value is string => typeof value === "string") : [],
+    ...(typeof values["output-dir"] === "string" ? { outputDir: values["output-dir"] } : {}),
     positionals
   };
 }
@@ -290,6 +316,7 @@ async function main(argv: string[]): Promise<number> {
     try {
       return await handleAuthCommand(args.positionals.slice(1), {
         json: args.json,
+        jsonEnvelope: args.jsonEnvelope,
         configFile: args.configFile,
         credentialsFile: args.credentialsFile,
         ...(args.profile === undefined ? {} : { profile: args.profile }),
@@ -325,6 +352,25 @@ async function main(argv: string[]): Promise<number> {
         ...(args.apiUrl === undefined ? {} : { apiUrl: args.apiUrl }),
         env: process.env,
         stdinStream: process.stdin
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "command failed";
+      process.stderr.write(`Error: ${message}\n`);
+      return ExitCode.GeneralError;
+    }
+  }
+
+  if (args.positionals[0] === "schema") {
+    try {
+      return await handleSchemaCommand(args.positionals.slice(1), {
+        json: args.json,
+        jsonEnvelope: args.jsonEnvelope,
+        ...(args.profile === undefined ? {} : { profile: args.profile }),
+        configFile: args.configFile,
+        credentialsFile: args.credentialsFile,
+        ...(args.apiUrl === undefined ? {} : { apiUrl: args.apiUrl }),
+        ...(args.outputDir === undefined ? {} : { outputDir: args.outputDir }),
+        env: process.env
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : "command failed";
