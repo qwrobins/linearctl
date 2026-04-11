@@ -1,3 +1,4 @@
+import { emitValidationError } from "../core/output/validation-error.js";
 import { failureEnvelope, successEnvelope } from "../core/output/envelope.js";
 import type { PageInfo } from "../core/output/envelope.js";
 import { mapCommandFailure } from "../core/errors/command-failure.js";
@@ -307,8 +308,7 @@ async function handleCycleList(options: CycleCommandOptions): Promise<number> {
 
 async function handleCycleCreate(options: CycleCommandOptions): Promise<number> {
   if (options.team === undefined) {
-    process.stderr.write("Error: --team is required for cycle create.\n");
-    return ExitCode.ValidationError;
+    return emitValidationError("--team is required for cycle create.", options);
   }
 
   const input: Record<string, unknown> = {
@@ -422,8 +422,7 @@ async function handleCycleUpdate(
   }
 
   if (Object.keys(input).length === 0) {
-    process.stderr.write("Error: cycle update requires at least one of --name, --description, --starts-at, --ends-at.\n");
-    return ExitCode.ValidationError;
+    return emitValidationError("cycle update requires at least one of --name, --description, --starts-at, --ends-at.", options);
   }
 
   try {
@@ -509,28 +508,24 @@ export async function handleCycleCommand(
   if (subcommand === "get") {
     const id = rest[0];
     if (id === undefined || id === "") {
-      process.stderr.write("Error: usage: linear cycle get <id>\n");
-      return ExitCode.ValidationError;
+      return emitValidationError("usage: linear cycle get <id>", options);
     }
     if (rest.length > 1) {
-      process.stderr.write("Error: cycle get accepts exactly one identifier.\n");
-      return ExitCode.ValidationError;
+      return emitValidationError("cycle get accepts exactly one identifier.", options);
     }
     return handleCycleGet(id, options);
   }
 
   if (subcommand === "list") {
     if (rest.length > 0) {
-      process.stderr.write("Error: cycle list does not accept positional arguments.\n");
-      return ExitCode.ValidationError;
+      return emitValidationError("cycle list does not accept positional arguments.", options);
     }
     return handleCycleList(options);
   }
 
   if (subcommand === "create") {
     if (rest.length > 0) {
-      process.stderr.write("Error: cycle create does not accept positional arguments.\n");
-      return ExitCode.ValidationError;
+      return emitValidationError("cycle create does not accept positional arguments.", options);
     }
     return handleCycleCreate(options);
   }
@@ -538,18 +533,15 @@ export async function handleCycleCommand(
   if (subcommand === "update") {
     const id = rest[0];
     if (id === undefined || id === "") {
-      process.stderr.write("Error: usage: linear cycle update <id>\n");
-      return ExitCode.ValidationError;
+      return emitValidationError("usage: linear cycle update <id>", options);
     }
     if (rest.length > 1) {
-      process.stderr.write("Error: cycle update accepts exactly one identifier.\n");
-      return ExitCode.ValidationError;
+      return emitValidationError("cycle update accepts exactly one identifier.", options);
     }
     return handleCycleUpdate(id, options);
   }
 
-  process.stderr.write("Error: unsupported cycle command. Try linear cycle get, list, create, or update.\n");
-  return ExitCode.ValidationError;
+  return emitValidationError("unsupported cycle command. Try linear cycle get, list, create, or update.", options);
 }
 
 function hasErrors(errors: GraphQLErrorPayload[] | undefined): boolean {

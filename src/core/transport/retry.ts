@@ -22,14 +22,10 @@ export async function executeGraphQLWithRetry<TData>(
     ? 0
     : (input.retry?.maxRetries ?? DEFAULT_MAX_RETRIES);
 
-  let lastError: unknown;
-
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
       return await executeGraphQL<TData>(input);
     } catch (error) {
-      lastError = error;
-
       if (!isRetryableError(error)) {
         throw error;
       }
@@ -49,7 +45,7 @@ export async function executeGraphQLWithRetry<TData>(
     }
   }
 
-  throw lastError;
+  throw new Error("retry loop exhausted unexpectedly");
 }
 
 function isRetryableError(error: unknown): boolean {

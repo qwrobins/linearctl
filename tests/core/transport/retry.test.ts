@@ -36,45 +36,51 @@ describe("executeGraphQLWithRetry", () => {
 
   it("retries on 429 and succeeds", async () => {
     const stderrSpy = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
-    let callCount = 0;
-    const fetchImpl = vi.fn(async () => {
-      callCount++;
-      if (callCount <= 2) {
-        return rateLimitResponse();
-      }
-      return successResponse({ viewer: { id: "1" } });
-    }) as FetchLike;
+    try {
+      let callCount = 0;
+      const fetchImpl = vi.fn(async () => {
+        callCount++;
+        if (callCount <= 2) {
+          return rateLimitResponse();
+        }
+        return successResponse({ viewer: { id: "1" } });
+      }) as FetchLike;
 
-    const result = await executeGraphQLWithRetry<{ viewer: { id: string } }>({
-      query: "query { viewer { id } }",
-      credentials: mockCredentials(),
-      fetchImpl,
-      retry: { maxRetries: 3 },
-      sleepImpl: noopSleep
-    });
+      const result = await executeGraphQLWithRetry<{ viewer: { id: string } }>({
+        query: "query { viewer { id } }",
+        credentials: mockCredentials(),
+        fetchImpl,
+        retry: { maxRetries: 3 },
+        sleepImpl: noopSleep
+      });
 
-    expect(result.body.data?.viewer.id).toBe("1");
-    expect(fetchImpl).toHaveBeenCalledTimes(3);
-    stderrSpy.mockRestore();
+      expect(result.body.data?.viewer.id).toBe("1");
+      expect(fetchImpl).toHaveBeenCalledTimes(3);
+    } finally {
+      stderrSpy.mockRestore();
+    }
   });
 
   it("throws after exhausting retries", async () => {
     const stderrSpy = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
-    const fetchImpl = vi.fn(async () => rateLimitResponse()) as FetchLike;
+    try {
+      const fetchImpl = vi.fn(async () => rateLimitResponse()) as FetchLike;
 
-    await expect(
-      executeGraphQLWithRetry({
-        query: "query { viewer { id } }",
-        credentials: mockCredentials(),
-        fetchImpl,
-        retry: { maxRetries: 2 },
-        sleepImpl: noopSleep
-      })
-    ).rejects.toThrow(GraphQLTransportError);
+      await expect(
+        executeGraphQLWithRetry({
+          query: "query { viewer { id } }",
+          credentials: mockCredentials(),
+          fetchImpl,
+          retry: { maxRetries: 2 },
+          sleepImpl: noopSleep
+        })
+      ).rejects.toThrow(GraphQLTransportError);
 
-    // 1 initial + 2 retries = 3
-    expect(fetchImpl).toHaveBeenCalledTimes(3);
-    stderrSpy.mockRestore();
+      // 1 initial + 2 retries = 3
+      expect(fetchImpl).toHaveBeenCalledTimes(3);
+    } finally {
+      stderrSpy.mockRestore();
+    }
   });
 
   it("does not retry when noRetry is set", async () => {

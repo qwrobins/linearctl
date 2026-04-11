@@ -1,3 +1,4 @@
+import { emitValidationError } from "../core/output/validation-error.js";
 import { failureEnvelope, successEnvelope } from "../core/output/envelope.js";
 import type { PageInfo } from "../core/output/envelope.js";
 import { mapCommandFailure } from "../core/errors/command-failure.js";
@@ -128,8 +129,7 @@ function printHumanComment(comment: NormalizedCommentFull): void {
 
 async function handleCommentList(options: CommentCommandOptions): Promise<number> {
   if (options.issue === undefined) {
-    process.stderr.write("Error: --issue is required for comment list.\n");
-    return ExitCode.ValidationError;
+    return emitValidationError("--issue is required for comment list.", options);
   }
 
   const paginationOptions: PaginationOptions = {
@@ -211,13 +211,11 @@ async function handleCommentList(options: CommentCommandOptions): Promise<number
 
 async function handleCommentCreate(options: CommentCommandOptions): Promise<number> {
   if (options.issue === undefined) {
-    process.stderr.write("Error: --issue is required for comment create.\n");
-    return ExitCode.ValidationError;
+    return emitValidationError("--issue is required for comment create.", options);
   }
 
   if (options.body === undefined) {
-    process.stderr.write("Error: --body is required for comment create.\n");
-    return ExitCode.ValidationError;
+    return emitValidationError("--body is required for comment create.", options);
   }
 
   try {
@@ -295,8 +293,7 @@ async function handleCommentCreate(options: CommentCommandOptions): Promise<numb
 
 async function handleCommentUpdate(commentId: string, options: CommentCommandOptions): Promise<number> {
   if (options.body === undefined) {
-    process.stderr.write("Error: --body is required for comment update.\n");
-    return ExitCode.ValidationError;
+    return emitValidationError("--body is required for comment update.", options);
   }
 
   try {
@@ -452,16 +449,14 @@ export async function handleCommentCommand(
 
   if (subcommand === "list") {
     if (rest.length > 0) {
-      process.stderr.write("Error: comment list does not accept positional arguments.\n");
-      return ExitCode.ValidationError;
+      return emitValidationError("comment list does not accept positional arguments.", options);
     }
     return handleCommentList(options);
   }
 
   if (subcommand === "create") {
     if (rest.length > 0) {
-      process.stderr.write("Error: comment create does not accept positional arguments.\n");
-      return ExitCode.ValidationError;
+      return emitValidationError("comment create does not accept positional arguments.", options);
     }
     return handleCommentCreate(options);
   }
@@ -469,12 +464,10 @@ export async function handleCommentCommand(
   if (subcommand === "update") {
     const commentId = rest[0];
     if (commentId === undefined || commentId === "") {
-      process.stderr.write("Error: usage: linear comment update <commentId> --body <text>\n");
-      return ExitCode.ValidationError;
+      return emitValidationError("usage: linear comment update <commentId> --body <text>", options);
     }
     if (rest.length > 1) {
-      process.stderr.write("Error: comment update accepts exactly one comment ID.\n");
-      return ExitCode.ValidationError;
+      return emitValidationError("comment update accepts exactly one comment ID.", options);
     }
     return handleCommentUpdate(commentId, options);
   }
@@ -482,18 +475,15 @@ export async function handleCommentCommand(
   if (subcommand === "delete") {
     const commentId = rest[0];
     if (commentId === undefined || commentId === "") {
-      process.stderr.write("Error: usage: linear comment delete <commentId>\n");
-      return ExitCode.ValidationError;
+      return emitValidationError("usage: linear comment delete <commentId>", options);
     }
     if (rest.length > 1) {
-      process.stderr.write("Error: comment delete accepts exactly one comment ID.\n");
-      return ExitCode.ValidationError;
+      return emitValidationError("comment delete accepts exactly one comment ID.", options);
     }
     return handleCommentDelete(commentId, options);
   }
 
-  process.stderr.write("Error: unsupported comment command. Try linear comment list, create, update, or delete.\n");
-  return ExitCode.ValidationError;
+  return emitValidationError("unsupported comment command. Try linear comment list, create, update, or delete.", options);
 }
 
 function hasErrors(errors: GraphQLErrorPayload[] | undefined): boolean {

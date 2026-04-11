@@ -1,3 +1,4 @@
+import { emitValidationError } from "../core/output/validation-error.js";
 import { failureEnvelope, successEnvelope } from "../core/output/envelope.js";
 import type { PageInfo } from "../core/output/envelope.js";
 import { mapCommandFailure } from "../core/errors/command-failure.js";
@@ -302,8 +303,7 @@ async function handleProjectList(options: ProjectCommandOptions): Promise<number
 
 async function handleProjectCreate(options: ProjectCommandOptions): Promise<number> {
   if (options.name === undefined) {
-    process.stderr.write("Error: --name is required for project create.\n");
-    return ExitCode.ValidationError;
+    return emitValidationError("--name is required for project create.", options);
   }
 
   const input: Record<string, unknown> = {
@@ -407,8 +407,7 @@ async function handleProjectUpdate(
   }
 
   if (Object.keys(input).length === 0) {
-    process.stderr.write("Error: project update requires at least one of --name, --description, --state.\n");
-    return ExitCode.ValidationError;
+    return emitValidationError("project update requires at least one of --name, --description, --state.", options);
   }
 
   try {
@@ -493,28 +492,24 @@ export async function handleProjectCommand(
   if (subcommand === "get") {
     const id = rest[0];
     if (id === undefined || id === "") {
-      process.stderr.write("Error: usage: linear project get <id>\n");
-      return ExitCode.ValidationError;
+      return emitValidationError("usage: linear project get <id>", options);
     }
     if (rest.length > 1) {
-      process.stderr.write("Error: project get accepts exactly one identifier.\n");
-      return ExitCode.ValidationError;
+      return emitValidationError("project get accepts exactly one identifier.", options);
     }
     return handleProjectGet(id, options);
   }
 
   if (subcommand === "list") {
     if (rest.length > 0) {
-      process.stderr.write("Error: project list does not accept positional arguments.\n");
-      return ExitCode.ValidationError;
+      return emitValidationError("project list does not accept positional arguments.", options);
     }
     return handleProjectList(options);
   }
 
   if (subcommand === "create") {
     if (rest.length > 0) {
-      process.stderr.write("Error: project create does not accept positional arguments.\n");
-      return ExitCode.ValidationError;
+      return emitValidationError("project create does not accept positional arguments.", options);
     }
     return handleProjectCreate(options);
   }
@@ -522,18 +517,15 @@ export async function handleProjectCommand(
   if (subcommand === "update") {
     const id = rest[0];
     if (id === undefined || id === "") {
-      process.stderr.write("Error: usage: linear project update <id>\n");
-      return ExitCode.ValidationError;
+      return emitValidationError("usage: linear project update <id>", options);
     }
     if (rest.length > 1) {
-      process.stderr.write("Error: project update accepts exactly one identifier.\n");
-      return ExitCode.ValidationError;
+      return emitValidationError("project update accepts exactly one identifier.", options);
     }
     return handleProjectUpdate(id, options);
   }
 
-  process.stderr.write("Error: unsupported project command. Try linear project get, list, create, or update.\n");
-  return ExitCode.ValidationError;
+  return emitValidationError("unsupported project command. Try linear project get, list, create, or update.", options);
 }
 
 function hasErrors(errors: GraphQLErrorPayload[] | undefined): boolean {

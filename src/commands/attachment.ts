@@ -1,3 +1,4 @@
+import { emitValidationError } from "../core/output/validation-error.js";
 import { failureEnvelope, successEnvelope } from "../core/output/envelope.js";
 import type { PageInfo } from "../core/output/envelope.js";
 import { mapCommandFailure } from "../core/errors/command-failure.js";
@@ -123,8 +124,7 @@ function printHumanAttachment(attachment: NormalizedAttachment): void {
 
 async function handleAttachmentList(options: AttachmentCommandOptions): Promise<number> {
   if (options.issue === undefined) {
-    process.stderr.write("Error: --issue is required for attachment list.\n");
-    return ExitCode.ValidationError;
+    return emitValidationError("--issue is required for attachment list.", options);
   }
 
   const paginationOptions: PaginationOptions = {
@@ -206,18 +206,15 @@ async function handleAttachmentList(options: AttachmentCommandOptions): Promise<
 
 async function handleAttachmentCreate(options: AttachmentCommandOptions): Promise<number> {
   if (options.issue === undefined) {
-    process.stderr.write("Error: --issue is required for attachment create.\n");
-    return ExitCode.ValidationError;
+    return emitValidationError("--issue is required for attachment create.", options);
   }
 
   if (options.url === undefined) {
-    process.stderr.write("Error: --url is required for attachment create.\n");
-    return ExitCode.ValidationError;
+    return emitValidationError("--url is required for attachment create.", options);
   }
 
   if (options.title === undefined) {
-    process.stderr.write("Error: --title is required for attachment create.\n");
-    return ExitCode.ValidationError;
+    return emitValidationError("--title is required for attachment create.", options);
   }
 
   try {
@@ -373,16 +370,14 @@ export async function handleAttachmentCommand(
 
   if (subcommand === "list") {
     if (rest.length > 0) {
-      process.stderr.write("Error: attachment list does not accept positional arguments.\n");
-      return ExitCode.ValidationError;
+      return emitValidationError("attachment list does not accept positional arguments.", options);
     }
     return handleAttachmentList(options);
   }
 
   if (subcommand === "create") {
     if (rest.length > 0) {
-      process.stderr.write("Error: attachment create does not accept positional arguments.\n");
-      return ExitCode.ValidationError;
+      return emitValidationError("attachment create does not accept positional arguments.", options);
     }
     return handleAttachmentCreate(options);
   }
@@ -390,18 +385,15 @@ export async function handleAttachmentCommand(
   if (subcommand === "delete") {
     const attachmentId = rest[0];
     if (attachmentId === undefined || attachmentId === "") {
-      process.stderr.write("Error: usage: linear attachment delete <attachmentId>\n");
-      return ExitCode.ValidationError;
+      return emitValidationError("usage: linear attachment delete <attachmentId>", options);
     }
     if (rest.length > 1) {
-      process.stderr.write("Error: attachment delete accepts exactly one attachment ID.\n");
-      return ExitCode.ValidationError;
+      return emitValidationError("attachment delete accepts exactly one attachment ID.", options);
     }
     return handleAttachmentDelete(attachmentId, options);
   }
 
-  process.stderr.write("Error: unsupported attachment command. Try linear attachment list, create, or delete.\n");
-  return ExitCode.ValidationError;
+  return emitValidationError("unsupported attachment command. Try linear attachment list, create, or delete.", options);
 }
 
 function hasErrors(errors: GraphQLErrorPayload[] | undefined): boolean {

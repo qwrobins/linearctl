@@ -1,3 +1,4 @@
+import { emitValidationError } from "../core/output/validation-error.js";
 import { failureEnvelope, successEnvelope } from "../core/output/envelope.js";
 import type { PageInfo } from "../core/output/envelope.js";
 import { mapCommandFailure } from "../core/errors/command-failure.js";
@@ -267,26 +268,22 @@ export async function handleTeamCommand(
   if (subcommand === "get") {
     const identifier = rest[0];
     if (identifier === undefined || identifier === "") {
-      process.stderr.write("Error: usage: linear team get <id-or-key>\n");
-      return ExitCode.ValidationError;
+      return emitValidationError("usage: linear team get <id-or-key>", options);
     }
     if (rest.length > 1) {
-      process.stderr.write("Error: team get accepts exactly one identifier.\n");
-      return ExitCode.ValidationError;
+      return emitValidationError("team get accepts exactly one identifier.", options);
     }
     return handleTeamGet(identifier, options);
   }
 
   if (subcommand === "list") {
     if (rest.length > 0) {
-      process.stderr.write("Error: team list does not accept positional arguments.\n");
-      return ExitCode.ValidationError;
+      return emitValidationError("team list does not accept positional arguments.", options);
     }
     return handleTeamList(options);
   }
 
-  process.stderr.write("Error: unsupported team command. Try linear team get or linear team list.\n");
-  return ExitCode.ValidationError;
+  return emitValidationError("unsupported team command. Try linear team get or linear team list.", options);
 }
 
 function hasErrors(errors: GraphQLErrorPayload[] | undefined): boolean {

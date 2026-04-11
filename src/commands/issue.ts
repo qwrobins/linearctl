@@ -1,3 +1,4 @@
+import { emitValidationError } from "../core/output/validation-error.js";
 import { failureEnvelope, successEnvelope } from "../core/output/envelope.js";
 import type { PageInfo } from "../core/output/envelope.js";
 import { mapCommandFailure } from "../core/errors/command-failure.js";
@@ -77,8 +78,8 @@ mutation IssueCreate($input: IssueCreateInput!) {
 ${CURATED_ISSUE_FRAGMENT}`;
 
 const ISSUE_LIST_QUERY = `
-query IssueList($first: Int!, $after: String, $filter: IssueFilter) {
-  issues(first: $first, after: $after, filter: $filter) {
+query IssueList($first: Int!, $after: String, $filter: IssueFilter, $orderBy: PaginationOrderBy) {
+  issues(first: $first, after: $after, filter: $filter, orderBy: $orderBy) {
     nodes {
       ...CuratedIssue
     }
@@ -284,13 +285,11 @@ async function handleIssueCreate(options: IssueCommandOptions): Promise<number> 
     try {
       const parsed = JSON.parse(options.inputJson) as unknown;
       if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
-        process.stderr.write("Error: --input-json must be a JSON object.\n");
-        return ExitCode.ValidationError;
+        return emitValidationError("--input-json must be a JSON object.", options);
       }
       inputFromJson = parsed as Record<string, unknown>;
     } catch {
-      process.stderr.write("Error: --input-json contains invalid JSON.\n");
-      return ExitCode.ValidationError;
+      return emitValidationError("--input-json contains invalid JSON.", options);
     }
   }
 
@@ -298,13 +297,11 @@ async function handleIssueCreate(options: IssueCommandOptions): Promise<number> 
   const teamId = options.team ?? (typeof inputFromJson.teamId === "string" ? inputFromJson.teamId : undefined);
 
   if (title === undefined) {
-    process.stderr.write("Error: --title is required for issue create.\n");
-    return ExitCode.ValidationError;
+    return emitValidationError("--title is required for issue create.", options);
   }
 
   if (teamId === undefined) {
-    process.stderr.write("Error: --team is required for issue create.\n");
-    return ExitCode.ValidationError;
+    return emitValidationError("--team is required for issue create.", options);
   }
 
   const input: Record<string, unknown> = {
@@ -319,8 +316,7 @@ async function handleIssueCreate(options: IssueCommandOptions): Promise<number> 
   if (options.priority !== undefined) {
     const parsed = Number(options.priority);
     if (!Number.isInteger(parsed)) {
-      process.stderr.write("Error: --priority must be an integer.\n");
-      return ExitCode.ValidationError;
+      return emitValidationError("--priority must be an integer.", options);
     }
     input.priority = parsed;
   }
@@ -427,13 +423,11 @@ async function handleIssueList(options: IssueCommandOptions): Promise<number> {
     try {
       const parsed = JSON.parse(options.filterJson) as unknown;
       if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
-        process.stderr.write("Error: --filter-json must be a JSON object.\n");
-        return ExitCode.ValidationError;
+        return emitValidationError("--filter-json must be a JSON object.", options);
       }
       filter = parsed as Record<string, unknown>;
     } catch {
-      process.stderr.write("Error: --filter-json contains invalid JSON.\n");
-      return ExitCode.ValidationError;
+      return emitValidationError("--filter-json contains invalid JSON.", options);
     }
   }
 
@@ -454,8 +448,7 @@ async function handleIssueList(options: IssueCommandOptions): Promise<number> {
     if (options.priority !== undefined) {
       const parsed = Number(options.priority);
       if (!Number.isInteger(parsed)) {
-        process.stderr.write("Error: --priority must be an integer.\n");
-        return ExitCode.ValidationError;
+        return emitValidationError("--priority must be an integer.", options);
       }
       buildFilter.priority = { eq: parsed };
     }
@@ -476,7 +469,10 @@ async function handleIssueList(options: IssueCommandOptions): Promise<number> {
 
     const result = await paginateGraphQL<RawIssue>({
       query: ISSUE_LIST_QUERY,
-      variables: filter === undefined ? {} : { filter },
+      variables: {
+        ...(filter === undefined ? {} : { filter }),
+        ...(options.orderBy === undefined ? {} : { orderBy: options.orderBy })
+      },
       options: paginationOptions,
       credentials: profile.credentials,
       ...(options.apiUrl === undefined
@@ -538,13 +534,11 @@ async function handleIssueUpdate(
     try {
       const parsed = JSON.parse(options.inputJson) as unknown;
       if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
-        process.stderr.write("Error: --input-json must be a JSON object.\n");
-        return ExitCode.ValidationError;
+        return emitValidationError("--input-json must be a JSON object.", options);
       }
       inputFromJson = parsed as Record<string, unknown>;
     } catch {
-      process.stderr.write("Error: --input-json contains invalid JSON.\n");
-      return ExitCode.ValidationError;
+      return emitValidationError("--input-json contains invalid JSON.", options);
     }
   }
 
@@ -559,8 +553,7 @@ async function handleIssueUpdate(
   if (options.priority !== undefined) {
     const parsed = Number(options.priority);
     if (!Number.isInteger(parsed)) {
-      process.stderr.write("Error: --priority must be an integer.\n");
-      return ExitCode.ValidationError;
+      return emitValidationError("--priority must be an integer.", options);
     }
     input.priority = parsed;
   }
@@ -575,8 +568,7 @@ async function handleIssueUpdate(
   }
 
   if (Object.keys(input).length === 0) {
-    process.stderr.write("Error: issue update requires at least one field to update.\n");
-    return ExitCode.ValidationError;
+    return emitValidationError("issue update requires at least one field to update.", options);
   }
 
   try {
@@ -697,7 +689,7 @@ async function handleIssueClose(
       return ExitCode.GeneralError;
     }
 
-    const result = { id: identifier, identifier, archived: true };
+    const result = { identifier, archived: true };
 
     if (options.jsonEnvelope) {
       const envelope = successEnvelope(result, { sourceLayer: "curated", profile: profile.name });
@@ -823,8 +815,7 @@ async function handleIssueComment(
   options: IssueCommandOptions
 ): Promise<number> {
   if (options.body === undefined || options.body === "") {
-    process.stderr.write("Error: --body is required for issue comment.\n");
-    return ExitCode.ValidationError;
+    return emitValidationError("--body is required for issue comment.", options);
   }
 
   try {
@@ -850,15 +841,21 @@ async function handleIssueComment(
       ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl })
     });
 
-    if (
-      hasErrors(getResponse.body.errors) ||
-      getResponse.body.data?.issue === null ||
-      getResponse.body.data?.issue === undefined
-    ) {
+    if (hasErrors(getResponse.body.errors)) {
+      const errors = mapGraphQLErrors(getResponse.body.errors);
       if (options.jsonEnvelope) {
-        const errors = mapGraphQLErrors(getResponse.body.errors);
+        const envelope = failureEnvelope(errors, { sourceLayer: "curated", profile: profile.name });
+        process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
+      } else {
+        process.stderr.write(`Error: ${errors[0]?.message ?? "Issue lookup failed"}\n`);
+      }
+      return ExitCode.GeneralError;
+    }
+
+    if (getResponse.body.data?.issue === null || getResponse.body.data?.issue === undefined) {
+      if (options.jsonEnvelope) {
         const envelope = failureEnvelope(
-          errors.length > 0 ? errors : [{ category: "not-found", message: "Issue not found" }],
+          [{ category: "not-found", message: "Issue not found" }],
           { sourceLayer: "curated", profile: profile.name }
         );
         process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
@@ -941,28 +938,24 @@ export async function handleIssueCommand(
   if (subcommand === "get") {
     const identifier = rest[0];
     if (identifier === undefined || identifier === "") {
-      process.stderr.write("Error: usage: linear issue get <identifier>\n");
-      return ExitCode.ValidationError;
+      return emitValidationError("usage: linear issue get <identifier>", options);
     }
     if (rest.length > 1) {
-      process.stderr.write("Error: issue get accepts exactly one identifier.\n");
-      return ExitCode.ValidationError;
+      return emitValidationError("issue get accepts exactly one identifier.", options);
     }
     return handleIssueGet(identifier, options);
   }
 
   if (subcommand === "create") {
     if (rest.length > 0) {
-      process.stderr.write("Error: issue create does not accept positional arguments.\n");
-      return ExitCode.ValidationError;
+      return emitValidationError("issue create does not accept positional arguments.", options);
     }
     return handleIssueCreate(options);
   }
 
   if (subcommand === "list") {
     if (rest.length > 0) {
-      process.stderr.write("Error: issue list does not accept positional arguments.\n");
-      return ExitCode.ValidationError;
+      return emitValidationError("issue list does not accept positional arguments.", options);
     }
     return handleIssueList(options);
   }
@@ -970,12 +963,10 @@ export async function handleIssueCommand(
   if (subcommand === "update") {
     const identifier = rest[0];
     if (identifier === undefined || identifier === "") {
-      process.stderr.write("Error: usage: linear issue update <identifier> [--title ...]\n");
-      return ExitCode.ValidationError;
+      return emitValidationError("usage: linear issue update <identifier> [--title ...]", options);
     }
     if (rest.length > 1) {
-      process.stderr.write("Error: issue update accepts exactly one identifier.\n");
-      return ExitCode.ValidationError;
+      return emitValidationError("issue update accepts exactly one identifier.", options);
     }
     return handleIssueUpdate(identifier, options);
   }
@@ -983,12 +974,10 @@ export async function handleIssueCommand(
   if (subcommand === "close") {
     const identifier = rest[0];
     if (identifier === undefined || identifier === "") {
-      process.stderr.write("Error: usage: linear issue close <identifier>\n");
-      return ExitCode.ValidationError;
+      return emitValidationError("usage: linear issue close <identifier>", options);
     }
     if (rest.length > 1) {
-      process.stderr.write("Error: issue close accepts exactly one identifier.\n");
-      return ExitCode.ValidationError;
+      return emitValidationError("issue close accepts exactly one identifier.", options);
     }
     return handleIssueClose(identifier, options);
   }
@@ -997,12 +986,10 @@ export async function handleIssueCommand(
     const identifier = rest[0];
     const assigneeId = rest[1];
     if (identifier === undefined || identifier === "" || assigneeId === undefined || assigneeId === "") {
-      process.stderr.write("Error: usage: linear issue assign <identifier> <assignee-id>\n");
-      return ExitCode.ValidationError;
+      return emitValidationError("usage: linear issue assign <identifier> <assignee-id>", options);
     }
     if (rest.length > 2) {
-      process.stderr.write("Error: issue assign accepts exactly two positional arguments.\n");
-      return ExitCode.ValidationError;
+      return emitValidationError("issue assign accepts exactly two positional arguments.", options);
     }
     return handleIssueAssign(identifier, assigneeId, options);
   }
@@ -1010,18 +997,15 @@ export async function handleIssueCommand(
   if (subcommand === "comment") {
     const identifier = rest[0];
     if (identifier === undefined || identifier === "") {
-      process.stderr.write("Error: usage: linear issue comment <identifier> --body <text>\n");
-      return ExitCode.ValidationError;
+      return emitValidationError("usage: linear issue comment <identifier> --body <text>", options);
     }
     if (rest.length > 1) {
-      process.stderr.write("Error: issue comment accepts exactly one identifier.\n");
-      return ExitCode.ValidationError;
+      return emitValidationError("issue comment accepts exactly one identifier.", options);
     }
     return handleIssueComment(identifier, options);
   }
 
-  process.stderr.write("Error: unsupported issue command. Try: get, create, list, update, close, assign, comment.\n");
-  return ExitCode.ValidationError;
+  return emitValidationError("unsupported issue command. Try: get, create, list, update, close, assign, comment.", options);
 }
 
 function hasErrors(errors: GraphQLErrorPayload[] | undefined): boolean {

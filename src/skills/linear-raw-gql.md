@@ -12,20 +12,20 @@ Fallback skill for direct GraphQL access to the Linear API. Use only when no cur
 ## Commands
 
 ### Query
-```
+```bash
 linear gql query '{ viewer { id name email } }' --json
 linear gql query --file query.graphql --vars-file vars.json --json
 cat query.graphql | linear gql query --stdin --json
 ```
 
 ### Mutation
-```
+```bash
 linear gql mutation 'mutation { issueCreate(input: {...}) { success } }' --json
 linear gql mutation --file mutation.graphql --vars-file vars.json --json-envelope
 ```
 
 ### Introspect
-```
+```bash
 linear gql introspect --json
 ```
 

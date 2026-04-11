@@ -47,7 +47,11 @@ export async function loadManifest(manifestPath?: string): Promise<ApiCommandMan
   } catch {
     return null;
   }
-  return JSON.parse(raw) as ApiCommandManifest;
+  try {
+    return JSON.parse(raw) as ApiCommandManifest;
+  } catch {
+    return null;
+  }
 }
 
 // ---------------------------------------------------------------------------

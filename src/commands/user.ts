@@ -1,3 +1,4 @@
+import { emitValidationError } from "../core/output/validation-error.js";
 import { failureEnvelope, successEnvelope } from "../core/output/envelope.js";
 import type { PageInfo } from "../core/output/envelope.js";
 import { mapCommandFailure } from "../core/errors/command-failure.js";
@@ -356,34 +357,29 @@ export async function handleUserCommand(
   if (subcommand === "get") {
     const identifier = rest[0];
     if (identifier === undefined || identifier === "") {
-      process.stderr.write("Error: usage: linear user get <id>\n");
-      return ExitCode.ValidationError;
+      return emitValidationError("usage: linear user get <id>", options);
     }
     if (rest.length > 1) {
-      process.stderr.write("Error: user get accepts exactly one identifier.\n");
-      return ExitCode.ValidationError;
+      return emitValidationError("user get accepts exactly one identifier.", options);
     }
     return handleUserGet(identifier, options);
   }
 
   if (subcommand === "me") {
     if (rest.length > 0) {
-      process.stderr.write("Error: user me does not accept positional arguments.\n");
-      return ExitCode.ValidationError;
+      return emitValidationError("user me does not accept positional arguments.", options);
     }
     return handleUserMe(options);
   }
 
   if (subcommand === "list") {
     if (rest.length > 0) {
-      process.stderr.write("Error: user list does not accept positional arguments.\n");
-      return ExitCode.ValidationError;
+      return emitValidationError("user list does not accept positional arguments.", options);
     }
     return handleUserList(options);
   }
 
-  process.stderr.write("Error: unsupported user command. Try linear user get, linear user me, or linear user list.\n");
-  return ExitCode.ValidationError;
+  return emitValidationError("unsupported user command. Try linear user get, linear user me, or linear user list.", options);
 }
 
 function hasErrors(errors: GraphQLErrorPayload[] | undefined): boolean {

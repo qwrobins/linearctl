@@ -1,3 +1,4 @@
+import { emitValidationError } from "../core/output/validation-error.js";
 import { failureEnvelope, successEnvelope } from "../core/output/envelope.js";
 import type { PageInfo } from "../core/output/envelope.js";
 import { mapCommandFailure } from "../core/errors/command-failure.js";
@@ -286,8 +287,7 @@ async function handleLabelList(options: LabelCommandOptions): Promise<number> {
 
 async function handleLabelCreate(options: LabelCommandOptions): Promise<number> {
   if (options.name === undefined) {
-    process.stderr.write("Error: --name is required for label create.\n");
-    return ExitCode.ValidationError;
+    return emitValidationError("--name is required for label create.", options);
   }
 
   const input: Record<string, unknown> = {
@@ -385,34 +385,29 @@ export async function handleLabelCommand(
   if (subcommand === "get") {
     const identifier = rest[0];
     if (identifier === undefined || identifier === "") {
-      process.stderr.write("Error: usage: linear label get <id>\n");
-      return ExitCode.ValidationError;
+      return emitValidationError("usage: linear label get <id>", options);
     }
     if (rest.length > 1) {
-      process.stderr.write("Error: label get accepts exactly one identifier.\n");
-      return ExitCode.ValidationError;
+      return emitValidationError("label get accepts exactly one identifier.", options);
     }
     return handleLabelGet(identifier, options);
   }
 
   if (subcommand === "list") {
     if (rest.length > 0) {
-      process.stderr.write("Error: label list does not accept positional arguments.\n");
-      return ExitCode.ValidationError;
+      return emitValidationError("label list does not accept positional arguments.", options);
     }
     return handleLabelList(options);
   }
 
   if (subcommand === "create") {
     if (rest.length > 0) {
-      process.stderr.write("Error: label create does not accept positional arguments.\n");
-      return ExitCode.ValidationError;
+      return emitValidationError("label create does not accept positional arguments.", options);
     }
     return handleLabelCreate(options);
   }
 
-  process.stderr.write("Error: unsupported label command. Try linear label get, linear label list, or linear label create.\n");
-  return ExitCode.ValidationError;
+  return emitValidationError("unsupported label command. Try linear label get, linear label list, or linear label create.", options);
 }
 
 function hasErrors(errors: GraphQLErrorPayload[] | undefined): boolean {

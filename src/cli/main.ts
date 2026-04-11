@@ -84,7 +84,7 @@ const AUTH_OPTION_DEFINITIONS = {
   oauth: CLI_OPTION_DEFINITIONS.oauth,
   "set-default": CLI_OPTION_DEFINITIONS["set-default"],
   "remove-config": CLI_OPTION_DEFINITIONS["remove-config"],
-  "api-url": CLI_OPTION_DEFINITIONS["api-url"]
+  "api-url": CLI_OPTION_DEFINITIONS["api-url"],
 } as const;
 
 const GQL_OPTION_DEFINITIONS = {
@@ -101,7 +101,9 @@ const GQL_OPTION_DEFINITIONS = {
   stdin: CLI_OPTION_DEFINITIONS.stdin,
   file: CLI_OPTION_DEFINITIONS.file,
   "vars-file": CLI_OPTION_DEFINITIONS["vars-file"],
-  var: CLI_OPTION_DEFINITIONS.var
+  var: CLI_OPTION_DEFINITIONS.var,
+  "no-retry": CLI_OPTION_DEFINITIONS["no-retry"],
+  "max-retries": CLI_OPTION_DEFINITIONS["max-retries"],
 } as const;
 
 const SCHEMA_OPTION_DEFINITIONS = {
@@ -114,7 +116,9 @@ const SCHEMA_OPTION_DEFINITIONS = {
   "credentials-file": CLI_OPTION_DEFINITIONS["credentials-file"],
   profile: CLI_OPTION_DEFINITIONS.profile,
   "api-url": CLI_OPTION_DEFINITIONS["api-url"],
-  "output-dir": CLI_OPTION_DEFINITIONS["output-dir"]
+  "output-dir": CLI_OPTION_DEFINITIONS["output-dir"],
+  "no-retry": CLI_OPTION_DEFINITIONS["no-retry"],
+  "max-retries": CLI_OPTION_DEFINITIONS["max-retries"],
 } as const;
 
 const ISSUE_OPTION_DEFINITIONS = {
@@ -142,7 +146,9 @@ const ISSUE_OPTION_DEFINITIONS = {
   all: CLI_OPTION_DEFINITIONS.all,
   max: CLI_OPTION_DEFINITIONS.max,
   "page-size": CLI_OPTION_DEFINITIONS["page-size"],
-  after: CLI_OPTION_DEFINITIONS.after
+  after: CLI_OPTION_DEFINITIONS.after,
+  "no-retry": CLI_OPTION_DEFINITIONS["no-retry"],
+  "max-retries": CLI_OPTION_DEFINITIONS["max-retries"],
 } as const;
 
 const PROJECT_OPTION_DEFINITIONS = {
@@ -162,7 +168,9 @@ const PROJECT_OPTION_DEFINITIONS = {
   all: CLI_OPTION_DEFINITIONS.all,
   max: CLI_OPTION_DEFINITIONS.max,
   "page-size": CLI_OPTION_DEFINITIONS["page-size"],
-  after: CLI_OPTION_DEFINITIONS.after
+  after: CLI_OPTION_DEFINITIONS.after,
+  "no-retry": CLI_OPTION_DEFINITIONS["no-retry"],
+  "max-retries": CLI_OPTION_DEFINITIONS["max-retries"],
 } as const;
 
 const CYCLE_OPTION_DEFINITIONS = {
@@ -183,7 +191,9 @@ const CYCLE_OPTION_DEFINITIONS = {
   all: CLI_OPTION_DEFINITIONS.all,
   max: CLI_OPTION_DEFINITIONS.max,
   "page-size": CLI_OPTION_DEFINITIONS["page-size"],
-  after: CLI_OPTION_DEFINITIONS.after
+  after: CLI_OPTION_DEFINITIONS.after,
+  "no-retry": CLI_OPTION_DEFINITIONS["no-retry"],
+  "max-retries": CLI_OPTION_DEFINITIONS["max-retries"],
 } as const;
 
 const TEAM_OPTION_DEFINITIONS = {
@@ -199,7 +209,9 @@ const TEAM_OPTION_DEFINITIONS = {
   all: CLI_OPTION_DEFINITIONS.all,
   max: CLI_OPTION_DEFINITIONS.max,
   "page-size": CLI_OPTION_DEFINITIONS["page-size"],
-  after: CLI_OPTION_DEFINITIONS.after
+  after: CLI_OPTION_DEFINITIONS.after,
+  "no-retry": CLI_OPTION_DEFINITIONS["no-retry"],
+  "max-retries": CLI_OPTION_DEFINITIONS["max-retries"],
 } as const;
 
 const USER_OPTION_DEFINITIONS = {
@@ -215,7 +227,9 @@ const USER_OPTION_DEFINITIONS = {
   all: CLI_OPTION_DEFINITIONS.all,
   max: CLI_OPTION_DEFINITIONS.max,
   "page-size": CLI_OPTION_DEFINITIONS["page-size"],
-  after: CLI_OPTION_DEFINITIONS.after
+  after: CLI_OPTION_DEFINITIONS.after,
+  "no-retry": CLI_OPTION_DEFINITIONS["no-retry"],
+  "max-retries": CLI_OPTION_DEFINITIONS["max-retries"],
 } as const;
 
 const LABEL_OPTION_DEFINITIONS = {
@@ -235,7 +249,9 @@ const LABEL_OPTION_DEFINITIONS = {
   all: CLI_OPTION_DEFINITIONS.all,
   max: CLI_OPTION_DEFINITIONS.max,
   "page-size": CLI_OPTION_DEFINITIONS["page-size"],
-  after: CLI_OPTION_DEFINITIONS.after
+  after: CLI_OPTION_DEFINITIONS.after,
+  "no-retry": CLI_OPTION_DEFINITIONS["no-retry"],
+  "max-retries": CLI_OPTION_DEFINITIONS["max-retries"],
 } as const;
 
 const COMMENT_OPTION_DEFINITIONS = {
@@ -253,7 +269,9 @@ const COMMENT_OPTION_DEFINITIONS = {
   all: CLI_OPTION_DEFINITIONS.all,
   max: CLI_OPTION_DEFINITIONS.max,
   "page-size": CLI_OPTION_DEFINITIONS["page-size"],
-  after: CLI_OPTION_DEFINITIONS.after
+  after: CLI_OPTION_DEFINITIONS.after,
+  "no-retry": CLI_OPTION_DEFINITIONS["no-retry"],
+  "max-retries": CLI_OPTION_DEFINITIONS["max-retries"],
 } as const;
 
 const ATTACHMENT_OPTION_DEFINITIONS = {
@@ -272,7 +290,9 @@ const ATTACHMENT_OPTION_DEFINITIONS = {
   all: CLI_OPTION_DEFINITIONS.all,
   max: CLI_OPTION_DEFINITIONS.max,
   "page-size": CLI_OPTION_DEFINITIONS["page-size"],
-  after: CLI_OPTION_DEFINITIONS.after
+  after: CLI_OPTION_DEFINITIONS.after,
+  "no-retry": CLI_OPTION_DEFINITIONS["no-retry"],
+  "max-retries": CLI_OPTION_DEFINITIONS["max-retries"],
 } as const;
 
 const FILE_OPTION_DEFINITIONS = {
@@ -287,7 +307,9 @@ const FILE_OPTION_DEFINITIONS = {
   "api-url": CLI_OPTION_DEFINITIONS["api-url"],
   issue: CLI_OPTION_DEFINITIONS.issue,
   output: CLI_OPTION_DEFINITIONS.output,
-  "expires-in": CLI_OPTION_DEFINITIONS["expires-in"]
+  "expires-in": CLI_OPTION_DEFINITIONS["expires-in"],
+  "no-retry": CLI_OPTION_DEFINITIONS["no-retry"],
+  "max-retries": CLI_OPTION_DEFINITIONS["max-retries"],
 } as const;
 
 const API_OPTION_DEFINITIONS = {
@@ -305,7 +327,9 @@ const API_OPTION_DEFINITIONS = {
   "input-file": CLI_OPTION_DEFINITIONS["input-file"],
   "input-stdin": CLI_OPTION_DEFINITIONS["input-stdin"],
   fields: CLI_OPTION_DEFINITIONS.fields,
-  raw: CLI_OPTION_DEFINITIONS.raw
+  raw: CLI_OPTION_DEFINITIONS.raw,
+  "no-retry": CLI_OPTION_DEFINITIONS["no-retry"],
+  "max-retries": CLI_OPTION_DEFINITIONS["max-retries"],
 } as const;
 
 function printTopLevelHelp(): void {

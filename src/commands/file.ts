@@ -395,8 +395,14 @@ async function handleFileDownload(
   downloadUrl: string,
   options: FileCommandOptions
 ): Promise<number> {
-  if (!downloadUrl.includes("uploads.linear.app")) {
-    process.stderr.write("Error: file download only supports uploads.linear.app URLs.\n");
+  try {
+    const parsed = new URL(downloadUrl);
+    if (parsed.hostname !== "uploads.linear.app") {
+      process.stderr.write("Error: file download only supports uploads.linear.app URLs.\n");
+      return ExitCode.ValidationError;
+    }
+  } catch {
+    process.stderr.write("Error: invalid URL.\n");
     return ExitCode.ValidationError;
   }
 
