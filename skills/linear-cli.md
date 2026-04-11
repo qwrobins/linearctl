@@ -68,11 +68,21 @@ Raw GraphQL should not be used merely because it is possible. It is the fallback
 - `linear schema pull --json`
 - `linear schema check --json`
 
+### Bulk operations
+- `linear issue bulk-update --ids <id1,id2,...> [--state <id>] [--assignee <id>] [--priority <0-4>] [--label <id>] --json`
+- `linear issue bulk-close --ids <id1,id2,...> --json`
+- `linear issue bulk-assign --ids <id1,id2,...> --assignee <id> --json`
+
 ### Auth
 - `linear auth status --json`
 - `linear auth login --profile <name> --api-key-env <ENV>`
+- `linear auth login --profile <name> --oauth --oauth-client-id <id>`
 - `linear auth logout --profile <name>`
 - `linear auth switch <profile>`
+- `linear auth whoami --json`
+
+### Workspace
+- `linear workspace list --json`
 
 ## Generated commands
 
@@ -86,7 +96,26 @@ When no curated command exists, use `linear api <resource> <operation>`:
 
 - Use `--json` when parsing output programmatically
 - Use `--json-envelope` only when metadata (pagination, rate limits, complexity) is needed
+- Use `--jsonl` for streaming large list results (one JSON object per line, auto-paginates)
 - Do not parse human-readable default output
+
+## Name resolution
+
+Curated commands resolve friendly names to IDs automatically:
+- `--team "Infrastructure"` or `--team INF` resolves to the team's UUID
+- `--assignee "me"` resolves to the current user's ID
+- `--assignee "quentin@example.com"` resolves by email
+- `--state "In Progress"` resolves to the workflow state ID (team-scoped)
+- `--label "bug"` resolves to the label ID (team-scoped when possible)
+
+If a value looks like a UUID, it's passed through directly. On ambiguous matches, the CLI errors with candidates.
+
+## Dry run
+
+Use `--dry-run` on any mutating command to preview what would happen without executing:
+- `linear issue create --title "test" --team INF --dry-run --json`
+- `linear issue bulk-close --ids "id1,id2" --dry-run --json`
+- Works on create, update, close, assign, comment, delete, and upload operations
 
 ## Pagination
 

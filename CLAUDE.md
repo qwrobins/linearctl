@@ -2,21 +2,23 @@
 
 ## Purpose
 
-This repository builds an agent-first `linear` CLI. The primary consumer is AI agents, not only human operators. The CLI and the skill layer are a single product:
+This repository is an agent-first `linear` CLI. The primary consumer is AI agents, not only human operators. The CLI and the skill layer are a single product:
 
 - The CLI is the execution layer
 - The skills are the routing and decision layer
 
 ## Key Documents
 
-Read these before making architectural or behavioral changes:
-
-- `docs/linear-cli-spec.md`
-- `docs/linear-cli-requirements.md`
-- `docs/linear-cli-implementation-handoff.md`
-- `docs/linear-cli-round-2-decisions.md`
-- `docs/linear-skill-suite.md`
-- `docs/implementation-progress.md` — durable handoff between sessions; update it when a PR lands, a phase boundary changes, or the next implementation slice changes
+- `docs/getting-started.md` — installation and first-time setup
+- `docs/commands.md` — full command reference
+- `docs/auth-and-profiles.md` — authentication and profile management
+- `docs/output-modes.md` — JSON, JSONL, envelope, and raw output
+- `docs/filtering-and-pagination.md` — filters, ordering, and pagination
+- `docs/agent-usage.md` — how AI agents should use the CLI
+- `docs/schema-and-generated.md` — schema management and generated API layer
+- `docs/implementation-progress.md` — implementation status and history
+- `skills/linear-cli.md` — default agent skill with routing rules
+- `skills/linear-raw-gql.md` — raw GraphQL fallback skill
 
 ## Stack
 
@@ -52,20 +54,21 @@ Routing prefers curated → generated → raw GraphQL.
 - Do not parse human-oriented output when machine-readable output is available.
 - Mark destructive or confirmation-requiring commands explicitly in metadata and docs.
 - Prefer deterministic command discovery over guessing.
+- Use `--dry-run` to preview destructive operations before executing.
 
 ## Auth and Safety
 
-- Support named profiles.
+- Support named profiles with API key and OAuth authentication.
 - Never silently choose among multiple profiles.
-- MVP auth source is the credentials file.
-- OAuth/keychain fallback is post-MVP only.
+- OAuth uses PKCE flow with local loopback callback; auto-refreshes expired tokens.
 - Never accept secrets as plain CLI arguments when a safer input method exists.
+- Credentials file uses restrictive permissions (0600).
 
 ## Editing Rules
 
 - Keep changes minimal and local.
 - If you change command behavior, update `docs/` in the same change.
-- If you change routing, output contracts, auth semantics, or generated naming, update the relevant design docs before the task is complete.
+- If you change output contracts or auth semantics, update the relevant docs before the task is complete.
 
 ## Review Gate
 
@@ -73,15 +76,6 @@ Routing prefers curated → generated → raw GraphQL.
 - Treat CodeRabbit findings as blocking unless there is a documented reason not to.
 - Fix issues, re-run, and repeat until the review passes cleanly.
 - Only push/open a PR after CodeRabbit passes.
-
-## Implementation Order
-
-1. Agent contract and command metadata
-2. Core execution layer
-3. Raw GraphQL fallback
-4. Curated high-value commands
-5. Generated parity layer
-6. Skill packaging and validation
 
 ## When Code and Docs Disagree
 

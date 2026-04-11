@@ -362,6 +362,8 @@ async function handleOAuthLogin(options: AuthCommandOptions): Promise<number> {
   const clientId = options.oauthClientId ?? options.env.LINEAR_CLI_CLIENT_ID;
   if (clientId === undefined || clientId.trim() === "") {
     process.stderr.write("Error: --oauth-client-id or LINEAR_CLI_CLIENT_ID environment variable is required for OAuth login.\n");
+    process.stderr.write("  Create an OAuth application at: https://linear.app/settings/api/applications\n");
+    process.stderr.write("  Then pass the client ID via --oauth-client-id <id> or set LINEAR_CLI_CLIENT_ID.\n");
     return ExitCode.ValidationError;
   }
 
