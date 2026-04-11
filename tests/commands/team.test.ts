@@ -58,8 +58,6 @@ function makeRawTeam(overrides?: Partial<Record<string, unknown>>) {
     key: "INF",
     name: "Infrastructure",
     description: "Infra team",
-    private: false,
-    url: "https://linear.app/team/INF",
     createdAt: "2026-04-09T10:00:00Z",
     updatedAt: "2026-04-09T11:00:00Z",
     ...overrides
@@ -89,7 +87,7 @@ describe("normalizeTeam", () => {
     expect(normalized.id).toBe("team-uuid-1");
     expect(normalized.key).toBe("INF");
     expect(normalized.name).toBe("Infrastructure");
-    expect(normalized.private).toBe(false);
+    expect(normalized.description).toBe("Infra team");
   });
 });
 

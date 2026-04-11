@@ -261,7 +261,8 @@ async function handleCycleList(options: CycleCommandOptions): Promise<number> {
     });
 
     let filter: Record<string, unknown> | undefined;
-    if (options.team !== undefined) {
+    const effectiveTeam = options.team ?? profile.metadata.defaultTeam;
+    if (effectiveTeam !== undefined) {
       const resolverOpts: ResolverOptions = {
         credentials: profile.credentials,
         ...(options.apiUrl === undefined
@@ -271,7 +272,7 @@ async function handleCycleList(options: CycleCommandOptions): Promise<number> {
           : { apiUrl: options.apiUrl }),
         ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl })
       };
-      const teamIdResolved = looksLikeId(options.team) ? options.team : await resolveTeamId(options.team, resolverOpts);
+      const teamIdResolved = looksLikeId(effectiveTeam) ? effectiveTeam : await resolveTeamId(effectiveTeam, resolverOpts);
       filter = { team: { id: { eq: teamIdResolved } } };
     }
 

@@ -5,7 +5,8 @@ import { mapCommandFailure } from "../core/errors/command-failure.js";
 import { ExitCode } from "../core/errors/exit-codes.js";
 import { executeGraphQL } from "../core/transport/graphql.js";
 import type { FetchLike, GraphQLErrorPayload } from "../core/transport/graphql.js";
-import { resolveStoredProfile } from "../core/auth/runtime.js";
+import { loadOptionalConfig, resolveStoredProfile } from "../core/auth/runtime.js";
+import { setProfileMetadata, writeLinearConfigFile } from "../core/config/config-file.js";
 import { paginateGraphQL, validatePaginationOptions } from "../core/pagination/pagination.js";
 import type { PaginationOptions } from "../core/pagination/pagination.js";
 import { streamPaginateGraphQL } from "../core/pagination/streaming.js";
@@ -20,6 +21,7 @@ export interface TeamCommandOptions {
   apiUrl?: string;
   env: Record<string, string | undefined>;
   fetchImpl?: FetchLike;
+  setDefault?: boolean;
   // pagination flags
   all?: boolean;
   max?: number;
@@ -32,8 +34,6 @@ interface RawTeam {
   key: string;
   name: string;
   description: string | null;
-  private: boolean;
-  url: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -43,8 +43,6 @@ export interface NormalizedTeam {
   key: string;
   name: string;
   description: string | null;
-  private: boolean;
-  url: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -55,8 +53,6 @@ fragment CuratedTeam on Team {
   key
   name
   description
-  private
-  url
   createdAt
   updatedAt
 }`;
@@ -89,8 +85,6 @@ export function normalizeTeam(raw: RawTeam): NormalizedTeam {
     key: raw.key,
     name: raw.name,
     description: raw.description,
-    private: raw.private,
-    url: raw.url,
     createdAt: raw.createdAt,
     updatedAt: raw.updatedAt
   };
@@ -101,8 +95,6 @@ function printHumanTeam(team: NormalizedTeam): void {
   if (team.description !== null) {
     process.stdout.write(`  Description: ${team.description}\n`);
   }
-  process.stdout.write(`  Private:     ${team.private}\n`);
-  process.stdout.write(`  URL:         ${team.url}\n`);
 }
 
 async function handleTeamGet(
@@ -159,6 +151,19 @@ async function handleTeamGet(
     }
 
     const team = normalizeTeam(response.body.data.team);
+
+    if (options.setDefault) {
+      const config = await loadOptionalConfig(options.configFile);
+      const existingMetadata = config.profiles[profile.name] ?? {};
+      const updatedConfig = setProfileMetadata(config, profile.name, {
+        ...existingMetadata,
+        defaultTeam: team.id
+      });
+      await writeLinearConfigFile(options.configFile, updatedConfig);
+      if (!options.json && !options.jsonEnvelope) {
+        process.stderr.write(`Default team set to "${team.key}" (${team.name}) for profile "${profile.name}".\n`);
+      }
+    }
 
     if (options.jsonEnvelope) {
       const envelope = successEnvelope(team, { sourceLayer: "curated", profile: profile.name });

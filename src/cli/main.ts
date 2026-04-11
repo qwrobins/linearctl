@@ -228,6 +228,7 @@ const TEAM_OPTION_DEFINITIONS = {
   max: CLI_OPTION_DEFINITIONS.max,
   "page-size": CLI_OPTION_DEFINITIONS["page-size"],
   after: CLI_OPTION_DEFINITIONS.after,
+  "set-default": CLI_OPTION_DEFINITIONS["set-default"],
   "no-retry": CLI_OPTION_DEFINITIONS["no-retry"],
   "max-retries": CLI_OPTION_DEFINITIONS["max-retries"],
 } as const;
@@ -397,7 +398,7 @@ Commands:
   linear cycle list [--team <id>] [--json]
   linear cycle create --team <id> [--name ...] [--starts-at ...] [--ends-at ...] [--json]
   linear cycle update <id> [--name ...] [--starts-at ...] [--ends-at ...] [--json]
-  linear team get <id-or-key> [--json]
+  linear team get <id-or-key> [--set-default] [--json]
   linear team list [--json]
   linear user get <id> [--json]
   linear user me [--json]
@@ -967,6 +968,7 @@ async function main(argv: string[]): Promise<number> {
         configFile: args.configFile,
         credentialsFile: args.credentialsFile,
         ...(args.apiUrl === undefined ? {} : { apiUrl: args.apiUrl }),
+        setDefault: args.setDefault,
         ...(args.all ? { all: true } : {}),
         ...(args.max === undefined ? {} : { max: args.max }),
         ...(args.pageSize === undefined ? {} : { pageSize: args.pageSize }),
