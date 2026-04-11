@@ -107,11 +107,7 @@ const ISSUE_OPTION_DEFINITIONS = {
   assignee: CLI_OPTION_DEFINITIONS.assignee,
   label: CLI_OPTION_DEFINITIONS.label,
   state: CLI_OPTION_DEFINITIONS.state,
-  "input-json": CLI_OPTION_DEFINITIONS["input-json"],
-  all: CLI_OPTION_DEFINITIONS.all,
-  max: CLI_OPTION_DEFINITIONS.max,
-  "page-size": CLI_OPTION_DEFINITIONS["page-size"],
-  after: CLI_OPTION_DEFINITIONS.after
+  "input-json": CLI_OPTION_DEFINITIONS["input-json"]
 } as const;
 
 function printTopLevelHelp(): void {
