@@ -485,7 +485,7 @@ export async function handleFileCommand(
 
   if (subcommand === "upload") {
     const filePath = rest[0];
-    if (filePath === undefined || filePath .trim() === "") {
+    if (filePath === undefined || filePath.trim() === "") {
       return emitValidationError("usage: linear file upload <path>", options);
     }
     if (rest.length > 1) {
@@ -496,7 +496,7 @@ export async function handleFileCommand(
 
   if (subcommand === "url") {
     const attachmentId = rest[0];
-    if (attachmentId === undefined || attachmentId .trim() === "") {
+    if (attachmentId === undefined || attachmentId.trim() === "") {
       return emitValidationError("usage: linear file url <attachment-id>", options);
     }
     if (rest.length > 1) {
@@ -507,7 +507,7 @@ export async function handleFileCommand(
 
   if (subcommand === "download") {
     const downloadUrl = rest[0];
-    if (downloadUrl === undefined || downloadUrl .trim() === "") {
+    if (downloadUrl === undefined || downloadUrl.trim() === "") {
       return emitValidationError("usage: linear file download <url>", options);
     }
     if (rest.length > 1) {

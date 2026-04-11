@@ -204,15 +204,24 @@ async function handleAttachmentList(options: AttachmentCommandOptions): Promise<
 }
 
 async function handleAttachmentCreate(options: AttachmentCommandOptions): Promise<number> {
-  if (options.issue === undefined || options.issue .trim() === "") {
+  if (options.issue === undefined || options.issue.trim() === "") {
     return emitValidationError("--issue is required for attachment create.", options);
   }
 
-  if (options.url === undefined || options.url .trim() === "") {
+  if (options.url === undefined || options.url.trim() === "") {
     return emitValidationError("--url is required for attachment create.", options);
   }
 
-  if (options.title === undefined || options.title .trim() === "") {
+  try {
+    const parsed = new URL(options.url.trim());
+    if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
+      return emitValidationError("--url must be a valid http/https URL.", options);
+    }
+  } catch {
+    return emitValidationError("--url must be a valid http/https URL.", options);
+  }
+
+  if (options.title === undefined || options.title.trim() === "") {
     return emitValidationError("--title is required for attachment create.", options);
   }
 
@@ -384,7 +393,7 @@ export async function handleAttachmentCommand(
 
   if (subcommand === "delete") {
     const attachmentId = rest[0];
-    if (attachmentId === undefined || attachmentId .trim() === "") {
+    if (attachmentId === undefined || attachmentId.trim() === "") {
       return emitValidationError("usage: linear attachment delete <attachmentId>", options);
     }
     if (rest.length > 1) {

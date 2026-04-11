@@ -462,7 +462,7 @@ export async function handleCommentCommand(
 
   if (subcommand === "update") {
     const commentId = rest[0];
-    if (commentId === undefined || commentId .trim() === "") {
+    if (commentId === undefined || commentId.trim() === "") {
       return emitValidationError("usage: linear comment update <commentId> --body <text>", options);
     }
     if (rest.length > 1) {
@@ -473,7 +473,7 @@ export async function handleCommentCommand(
 
   if (subcommand === "delete") {
     const commentId = rest[0];
-    if (commentId === undefined || commentId .trim() === "") {
+    if (commentId === undefined || commentId.trim() === "") {
       return emitValidationError("usage: linear comment delete <commentId>", options);
     }
     if (rest.length > 1) {
