@@ -50,6 +50,18 @@ linear issue create --title "Fix pagination bug" --team INF --priority 2 --json
 | [api](docs/commands.md#generated-api) | Generated commands for any Linear API resource |
 | [gql](docs/commands.md#raw-graphql) | Raw GraphQL queries and mutations |
 
+## Profiles
+
+Credentials are stored in AWS CLI-style INI files at `~/.config/linear/`:
+
+```
+~/.config/linear/
+  config          # default profile, workspace metadata
+  credentials     # API keys and OAuth tokens (0600 permissions)
+```
+
+Each profile is a named section. Resolution order: `--profile` flag > `LINEAR_PROFILE` env var > configured default. See [auth and profiles](docs/auth-and-profiles.md) for the full file layout and OAuth setup.
+
 ## Output modes
 
 | Flag | Description |
