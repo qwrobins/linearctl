@@ -57,6 +57,7 @@ linear project get <id> --json
 linear project list --json
 linear project create --name <name> [--description <text>] [--team <name|key|id>] --json
 linear project update <id> [--name <text>] [--description <text>] [--state <state>] --json
+linear project delete <id> --json              # [destructive]
 ```
 
 ## Cycle
@@ -89,7 +90,19 @@ linear user list --json
 linear label get <id> --json
 linear label list [--team <name|key|id>] --json
 linear label create --name <name> [--description <text>] [--color <hex>] [--team <name|key|id>] --json
+linear label delete <id> --json                # [destructive]
 ```
+
+## Workflow state
+
+```bash
+linear state get <id> --json
+linear state list [--team <name|key|id>] [--everything] --json
+linear state create --name <name> --team <name|key|id> --state-type <type> \
+  [--description <text>] [--color <hex>] [--position <n>] --json
+```
+
+`--state-type` must be one of: `backlog`, `unstarted`, `started`, `completed`, `canceled`.
 
 ## Comment
 

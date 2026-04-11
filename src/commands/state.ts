@@ -13,7 +13,9 @@ import { emitDryRunResult } from "../core/output/dry-run.js";
 import { resolveTeamId, looksLikeId } from "../core/resolution/resolve.js";
 import type { ResolverOptions } from "../core/resolution/resolve.js";
 
-export interface LabelCommandOptions {
+const VALID_STATE_TYPES = ["backlog", "unstarted", "started", "completed", "canceled"] as const;
+
+export interface StateCommandOptions {
   json: boolean;
   jsonEnvelope: boolean;
   jsonl?: boolean;
@@ -24,10 +26,12 @@ export interface LabelCommandOptions {
   env: Record<string, string | undefined>;
   fetchImpl?: FetchLike;
   dryRun?: boolean;
-  // label create flags
+  // state create flags
   name?: string;
+  stateType?: string;
   description?: string;
   color?: string;
+  position?: string;
   team?: string;
   everything?: boolean;
   // pagination flags
@@ -37,53 +41,56 @@ export interface LabelCommandOptions {
   after?: string;
 }
 
-interface RawLabel {
+interface RawWorkflowState {
   id: string;
   name: string;
+  type: string;
+  position: number;
   description: string | null;
   color: string;
-  parent: { id: string; name: string } | null;
-  team: { id: string; key: string; name: string } | null;
+  team: { id: string; key: string; name: string };
   createdAt: string;
   updatedAt: string;
 }
 
-export interface NormalizedLabel {
+export interface NormalizedWorkflowState {
   id: string;
   name: string;
+  type: string;
+  position: number;
   description: string | null;
   color: string;
-  parent: { id: string; name: string } | null;
-  team: { id: string; key: string; name: string } | null;
+  team: { id: string; key: string; name: string };
   createdAt: string;
   updatedAt: string;
 }
 
-const CURATED_LABEL_FRAGMENT = `
-fragment CuratedLabel on IssueLabel {
+const CURATED_STATE_FRAGMENT = `
+fragment CuratedWorkflowState on WorkflowState {
   id
   name
+  type
+  position
   description
   color
-  parent { id name }
   team { id key name }
   createdAt
   updatedAt
 }`;
 
-const LABEL_GET_QUERY = `
-query LabelGet($id: String!) {
-  issueLabel(id: $id) {
-    ...CuratedLabel
+const STATE_GET_QUERY = `
+query StateGet($id: String!) {
+  workflowState(id: $id) {
+    ...CuratedWorkflowState
   }
 }
-${CURATED_LABEL_FRAGMENT}`;
+${CURATED_STATE_FRAGMENT}`;
 
-const LABEL_LIST_QUERY = `
-query LabelList($first: Int!, $after: String, $filter: IssueLabelFilter) {
-  issueLabels(first: $first, after: $after, filter: $filter) {
+const STATE_LIST_QUERY = `
+query StateList($first: Int!, $after: String, $filter: WorkflowStateFilter) {
+  workflowStates(first: $first, after: $after, filter: $filter) {
     nodes {
-      ...CuratedLabel
+      ...CuratedWorkflowState
     }
     pageInfo {
       hasNextPage
@@ -91,55 +98,44 @@ query LabelList($first: Int!, $after: String, $filter: IssueLabelFilter) {
     }
   }
 }
-${CURATED_LABEL_FRAGMENT}`;
+${CURATED_STATE_FRAGMENT}`;
 
-const LABEL_CREATE_MUTATION = `
-mutation LabelCreate($input: IssueLabelCreateInput!) {
-  issueLabelCreate(input: $input) {
+const STATE_CREATE_MUTATION = `
+mutation StateCreate($input: WorkflowStateCreateInput!) {
+  workflowStateCreate(input: $input) {
     success
-    issueLabel {
-      ...CuratedLabel
+    workflowState {
+      ...CuratedWorkflowState
     }
   }
 }
-${CURATED_LABEL_FRAGMENT}`;
+${CURATED_STATE_FRAGMENT}`;
 
-const LABEL_DELETE_MUTATION = `
-mutation LabelDelete($id: String!) {
-  issueLabelDelete(id: $id) {
-    success
-  }
-}`;
-
-export function normalizeLabel(raw: RawLabel): NormalizedLabel {
+export function normalizeWorkflowState(raw: RawWorkflowState): NormalizedWorkflowState {
   return {
     id: raw.id,
     name: raw.name,
+    type: raw.type,
+    position: raw.position,
     description: raw.description,
     color: raw.color,
-    parent: raw.parent,
     team: raw.team,
     createdAt: raw.createdAt,
     updatedAt: raw.updatedAt
   };
 }
 
-function printHumanLabel(label: NormalizedLabel): void {
-  process.stdout.write(`${label.name}  (${label.color})\n`);
-  if (label.description !== null) {
-    process.stdout.write(`  Description: ${label.description}\n`);
+function printHumanState(state: NormalizedWorkflowState): void {
+  process.stdout.write(`${state.name}  ${state.type}  (${state.color})\n`);
+  if (state.description !== null) {
+    process.stdout.write(`  Description: ${state.description}\n`);
   }
-  if (label.team !== null) {
-    process.stdout.write(`  Team:        ${label.team.name}\n`);
-  }
-  if (label.parent !== null) {
-    process.stdout.write(`  Parent:      ${label.parent.name}\n`);
-  }
+  process.stdout.write(`  Team:        ${state.team.name}\n`);
 }
 
-async function handleLabelGet(
+async function handleStateGet(
   identifier: string,
-  options: LabelCommandOptions
+  options: StateCommandOptions
 ): Promise<number> {
   try {
     const profile = await resolveStoredProfile({
@@ -151,8 +147,8 @@ async function handleLabelGet(
       env: options.env
     });
 
-    const response = await executeGraphQL<{ issueLabel: RawLabel | null }>({
-      query: LABEL_GET_QUERY,
+    const response = await executeGraphQL<{ workflowState: RawWorkflowState | null }>({
+      query: STATE_GET_QUERY,
       variables: { id: identifier },
       credentials: profile.credentials,
       ...(options.apiUrl === undefined
@@ -172,33 +168,33 @@ async function handleLabelGet(
         });
         process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
       } else {
-        process.stderr.write(`Error: ${errors[0]?.message ?? "Label query failed"}\n`);
+        process.stderr.write(`Error: ${errors[0]?.message ?? "Workflow state query failed"}\n`);
       }
       return ExitCode.GeneralError;
     }
 
-    if (response.body.data?.issueLabel === null || response.body.data?.issueLabel === undefined) {
+    if (response.body.data?.workflowState === null || response.body.data?.workflowState === undefined) {
       if (options.jsonEnvelope) {
         const envelope = failureEnvelope(
-          [{ category: "not-found", message: "Label not found" }],
+          [{ category: "not-found", message: "Workflow state not found" }],
           { sourceLayer: "curated", profile: profile.name }
         );
         process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
       } else {
-        process.stderr.write("Error: Label not found\n");
+        process.stderr.write("Error: Workflow state not found\n");
       }
       return ExitCode.NotFound;
     }
 
-    const label = normalizeLabel(response.body.data.issueLabel);
+    const state = normalizeWorkflowState(response.body.data.workflowState);
 
     if (options.jsonEnvelope) {
-      const envelope = successEnvelope(label, { sourceLayer: "curated", profile: profile.name });
+      const envelope = successEnvelope(state, { sourceLayer: "curated", profile: profile.name });
       process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
     } else if (options.json) {
-      process.stdout.write(`${JSON.stringify(label, null, 2)}\n`);
+      process.stdout.write(`${JSON.stringify(state, null, 2)}\n`);
     } else {
-      printHumanLabel(label);
+      printHumanState(state);
     }
 
     return ExitCode.Success;
@@ -219,7 +215,7 @@ async function handleLabelGet(
   }
 }
 
-async function handleLabelList(options: LabelCommandOptions): Promise<number> {
+async function handleStateList(options: StateCommandOptions): Promise<number> {
   const paginationOptions: PaginationOptions = {
     all: options.all,
     max: options.max,
@@ -261,41 +257,41 @@ async function handleLabelList(options: LabelCommandOptions): Promise<number> {
     }
 
     const commonPaginateInput = {
-      query: LABEL_LIST_QUERY,
+      query: STATE_LIST_QUERY,
       variables,
       credentials: profile.credentials,
       ...(apiUrl === undefined ? {} : { apiUrl }),
       ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl }),
       extractConnection: (data: unknown) => {
-        const d = data as { issueLabels: { nodes: RawLabel[]; pageInfo: PageInfo } };
-        return d.issueLabels;
+        const d = data as { workflowStates: { nodes: RawWorkflowState[]; pageInfo: PageInfo } };
+        return d.workflowStates;
       }
     };
 
     if (options.jsonl === true) {
-      await streamPaginateGraphQL<RawLabel>({
+      await streamPaginateGraphQL<RawWorkflowState>({
         ...commonPaginateInput,
         options: { ...paginationOptions, all: paginationOptions.all ?? true },
         onItem: (raw) => {
-          process.stdout.write(`${JSON.stringify(normalizeLabel(raw))}\n`);
+          process.stdout.write(`${JSON.stringify(normalizeWorkflowState(raw))}\n`);
         }
       });
     } else {
-      const { items, pageInfo } = await paginateGraphQL<RawLabel>({
+      const { items, pageInfo } = await paginateGraphQL<RawWorkflowState>({
         ...commonPaginateInput,
         options: paginationOptions
       });
 
-      const labels = items.map(normalizeLabel);
+      const states = items.map(normalizeWorkflowState);
 
       if (options.jsonEnvelope) {
-        const envelope = successEnvelope(labels, { sourceLayer: "curated", profile: profile.name }, pageInfo);
+        const envelope = successEnvelope(states, { sourceLayer: "curated", profile: profile.name }, pageInfo);
         process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
       } else if (options.json) {
-        process.stdout.write(`${JSON.stringify(labels, null, 2)}\n`);
+        process.stdout.write(`${JSON.stringify(states, null, 2)}\n`);
       } else {
-        for (const label of labels) {
-          printHumanLabel(label);
+        for (const state of states) {
+          printHumanState(state);
           process.stdout.write("\n");
         }
       }
@@ -319,13 +315,29 @@ async function handleLabelList(options: LabelCommandOptions): Promise<number> {
   }
 }
 
-async function handleLabelCreate(options: LabelCommandOptions): Promise<number> {
+async function handleStateCreate(options: StateCommandOptions): Promise<number> {
   if (options.name === undefined) {
-    return emitValidationError("--name is required for label create.", options);
+    return emitValidationError("--name is required for state create.", options);
+  }
+
+  if (options.team === undefined) {
+    return emitValidationError("--team is required for state create.", options);
+  }
+
+  if (options.stateType === undefined) {
+    return emitValidationError("--state-type is required for state create.", options);
+  }
+
+  if (!(VALID_STATE_TYPES as readonly string[]).includes(options.stateType)) {
+    return emitValidationError(
+      `--state-type must be one of: ${VALID_STATE_TYPES.join(", ")}. Got "${options.stateType}".`,
+      options
+    );
   }
 
   const input: Record<string, unknown> = {
-    name: options.name
+    name: options.name,
+    type: options.stateType
   };
 
   if (options.description !== undefined) {
@@ -334,6 +346,14 @@ async function handleLabelCreate(options: LabelCommandOptions): Promise<number> 
   if (options.color !== undefined) {
     input.color = options.color;
   }
+  if (options.position !== undefined) {
+    const pos = parseFloat(options.position);
+    if (Number.isNaN(pos)) {
+      return emitValidationError("--position must be a number.", options);
+    }
+    input.position = pos;
+  }
+
   try {
     const profile = await resolveStoredProfile({
       paths: {
@@ -344,27 +364,25 @@ async function handleLabelCreate(options: LabelCommandOptions): Promise<number> 
       env: options.env
     });
 
-    if (options.team !== undefined) {
-      const resolverOpts: ResolverOptions = {
-        credentials: profile.credentials,
-        ...(options.apiUrl === undefined
-          ? profile.metadata.baseUrl === undefined
-            ? {}
-            : { apiUrl: profile.metadata.baseUrl }
-          : { apiUrl: options.apiUrl }),
-        ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl })
-      };
-      input.teamId = looksLikeId(options.team) ? options.team : await resolveTeamId(options.team, resolverOpts);
-    }
+    const resolverOpts: ResolverOptions = {
+      credentials: profile.credentials,
+      ...(options.apiUrl === undefined
+        ? profile.metadata.baseUrl === undefined
+          ? {}
+          : { apiUrl: profile.metadata.baseUrl }
+        : { apiUrl: options.apiUrl }),
+      ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl })
+    };
+    input.teamId = looksLikeId(options.team) ? options.team : await resolveTeamId(options.team, resolverOpts);
 
     if (options.dryRun === true) {
-      return emitDryRunResult("create", "label", input, options);
+      return emitDryRunResult("create", "state", input, options);
     }
 
     const response = await executeGraphQL<{
-      issueLabelCreate: { success: boolean; issueLabel: RawLabel | null };
+      workflowStateCreate: { success: boolean; workflowState: RawWorkflowState | null };
     }>({
-      query: LABEL_CREATE_MUTATION,
+      query: STATE_CREATE_MUTATION,
       variables: { input },
       credentials: profile.credentials,
       ...(options.apiUrl === undefined
@@ -377,32 +395,32 @@ async function handleLabelCreate(options: LabelCommandOptions): Promise<number> 
 
     if (
       hasErrors(response.body.errors) ||
-      response.body.data?.issueLabelCreate?.issueLabel === null ||
-      response.body.data?.issueLabelCreate?.issueLabel === undefined
+      response.body.data?.workflowStateCreate?.workflowState === null ||
+      response.body.data?.workflowStateCreate?.workflowState === undefined
     ) {
       if (options.jsonEnvelope) {
         const errors = mapGraphQLErrors(response.body.errors);
         const envelope = failureEnvelope(
-          errors.length > 0 ? errors : [{ category: "general", message: "Label creation failed" }],
+          errors.length > 0 ? errors : [{ category: "general", message: "Workflow state creation failed" }],
           { sourceLayer: "curated", profile: profile.name }
         );
         process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
       } else {
-        const errorMessage = response.body.errors?.[0]?.message ?? "Label creation failed";
+        const errorMessage = response.body.errors?.[0]?.message ?? "Workflow state creation failed";
         process.stderr.write(`Error: ${errorMessage}\n`);
       }
       return ExitCode.GeneralError;
     }
 
-    const label = normalizeLabel(response.body.data.issueLabelCreate.issueLabel);
+    const state = normalizeWorkflowState(response.body.data.workflowStateCreate.workflowState);
 
     if (options.jsonEnvelope) {
-      const envelope = successEnvelope(label, { sourceLayer: "curated", profile: profile.name });
+      const envelope = successEnvelope(state, { sourceLayer: "curated", profile: profile.name });
       process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
     } else if (options.json) {
-      process.stdout.write(`${JSON.stringify(label, null, 2)}\n`);
+      process.stdout.write(`${JSON.stringify(state, null, 2)}\n`);
     } else {
-      process.stdout.write(`Created label: ${label.name} (${label.color})\n`);
+      process.stdout.write(`Created state: ${state.name} (${state.type})\n`);
     }
 
     return ExitCode.Success;
@@ -423,125 +441,38 @@ async function handleLabelCreate(options: LabelCommandOptions): Promise<number> 
   }
 }
 
-async function handleLabelDelete(labelId: string, options: LabelCommandOptions): Promise<number> {
-  if (options.dryRun === true) {
-    return emitDryRunResult("delete", "label", { id: labelId }, options);
-  }
-
-  try {
-    const profile = await resolveStoredProfile({
-      paths: {
-        configFile: options.configFile,
-        credentialsFile: options.credentialsFile
-      },
-      ...(options.profile === undefined ? {} : { explicitProfile: options.profile }),
-      env: options.env
-    });
-
-    const response = await executeGraphQL<{
-      issueLabelDelete: { success: boolean };
-    }>({
-      query: LABEL_DELETE_MUTATION,
-      variables: { id: labelId },
-      credentials: profile.credentials,
-      ...(options.apiUrl === undefined
-        ? profile.metadata.baseUrl === undefined
-          ? {}
-          : { apiUrl: profile.metadata.baseUrl }
-        : { apiUrl: options.apiUrl }),
-      ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl })
-    });
-
-    if (
-      hasErrors(response.body.errors) ||
-      !response.body.data?.issueLabelDelete?.success
-    ) {
-      if (options.jsonEnvelope) {
-        const errors = mapGraphQLErrors(response.body.errors);
-        const envelope = failureEnvelope(
-          errors.length > 0 ? errors : [{ category: "general", message: "Label deletion failed" }],
-          { sourceLayer: "curated", profile: profile.name }
-        );
-        process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
-      } else {
-        const errorMessage = response.body.errors?.[0]?.message ?? "Label deletion failed";
-        process.stderr.write(`Error: ${errorMessage}\n`);
-      }
-      return ExitCode.GeneralError;
-    }
-
-    const result = { id: labelId, deleted: true };
-
-    if (options.jsonEnvelope) {
-      const envelope = successEnvelope(result, { sourceLayer: "curated", profile: profile.name });
-      process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
-    } else if (options.json) {
-      process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
-    } else {
-      process.stdout.write(`Deleted label ${labelId}\n`);
-    }
-
-    return ExitCode.Success;
-  } catch (error) {
-    const failure = mapCommandFailure(error);
-
-    if (options.jsonEnvelope) {
-      const envelope = failureEnvelope([failure.error], {
-        sourceLayer: "curated",
-        ...(options.profile === undefined ? {} : { profile: options.profile })
-      });
-      process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
-    } else {
-      process.stderr.write(`Error: ${failure.error.message}\n`);
-    }
-
-    return failure.exitCode;
-  }
-}
-
-export async function handleLabelCommand(
+export async function handleStateCommand(
   positionals: string[],
-  options: LabelCommandOptions
+  options: StateCommandOptions
 ): Promise<number> {
   const [subcommand, ...rest] = positionals;
 
   if (subcommand === "get") {
     const identifier = rest[0];
     if (identifier === undefined || identifier === "") {
-      return emitValidationError("usage: linear label get <id>", options);
+      return emitValidationError("usage: linear state get <id>", options);
     }
     if (rest.length > 1) {
-      return emitValidationError("label get accepts exactly one identifier.", options);
+      return emitValidationError("state get accepts exactly one identifier.", options);
     }
-    return handleLabelGet(identifier, options);
+    return handleStateGet(identifier, options);
   }
 
   if (subcommand === "list") {
     if (rest.length > 0) {
-      return emitValidationError("label list does not accept positional arguments.", options);
+      return emitValidationError("state list does not accept positional arguments.", options);
     }
-    return handleLabelList(options);
+    return handleStateList(options);
   }
 
   if (subcommand === "create") {
     if (rest.length > 0) {
-      return emitValidationError("label create does not accept positional arguments.", options);
+      return emitValidationError("state create does not accept positional arguments.", options);
     }
-    return handleLabelCreate(options);
+    return handleStateCreate(options);
   }
 
-  if (subcommand === "delete") {
-    const labelId = rest[0];
-    if (labelId === undefined || labelId.trim() === "") {
-      return emitValidationError("usage: linear label delete <id>", options);
-    }
-    if (rest.length > 1) {
-      return emitValidationError("label delete accepts exactly one identifier.", options);
-    }
-    return handleLabelDelete(labelId, options);
-  }
-
-  return emitValidationError("unsupported label command. Try linear label get, list, create, or delete.", options);
+  return emitValidationError("unsupported state command. Try linear state get, linear state list, or linear state create.", options);
 }
 
 function hasErrors(errors: GraphQLErrorPayload[] | undefined): boolean {

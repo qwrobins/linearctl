@@ -214,6 +214,30 @@ describe("handleLabelCommand — label create", () => {
   });
 });
 
+describe("handleLabelCommand — label delete", () => {
+  it("returns { id, deleted: true }", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-label-"));
+    const paths = await writeProfileFiles(directory);
+    const fetchImpl = makeFetch({
+      data: { issueLabelDelete: { success: true } }
+    });
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleLabelCommand(["delete", "label-uuid-1"], {
+        ...baseOptions(paths),
+        fetchImpl
+      });
+
+      expect(exitCode).toBe(0);
+      const parsed = JSON.parse(output.stdout.join(""));
+      expect(parsed).toEqual({ id: "label-uuid-1", deleted: true });
+    } finally {
+      output.restore();
+    }
+  });
+});
+
 describe("handleLabelCommand — validation", () => {
   it("rejects missing identifier for label get", async () => {
     const directory = await mkdtemp(join(tmpdir(), "linear-cli-label-"));

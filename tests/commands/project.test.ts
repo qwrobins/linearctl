@@ -185,6 +185,30 @@ describe("handleProjectCommand — project create", () => {
   });
 });
 
+describe("handleProjectCommand — project delete", () => {
+  it("returns { id, deleted: true }", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-project-"));
+    const paths = await writeProfileFiles(directory);
+    const fetchImpl = makeFetch({
+      data: { projectDelete: { success: true } }
+    });
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleProjectCommand(["delete", "proj-uuid-1"], {
+        ...baseOptions(paths),
+        fetchImpl
+      });
+
+      expect(exitCode).toBe(0);
+      const parsed = JSON.parse(output.stdout.join(""));
+      expect(parsed).toEqual({ id: "proj-uuid-1", deleted: true });
+    } finally {
+      output.restore();
+    }
+  });
+});
+
 describe("handleProjectCommand — project list", () => {
   it("returns array of projects", async () => {
     const directory = await mkdtemp(join(tmpdir(), "linear-cli-project-"));
