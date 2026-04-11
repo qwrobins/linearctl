@@ -95,6 +95,13 @@ mutation ProjectUpdate($id: String!, $input: ProjectUpdateInput!) {
 }
 ${CURATED_PROJECT_FRAGMENT}`;
 
+const PROJECT_DELETE_MUTATION = `
+mutation ProjectDelete($id: String!) {
+  projectDelete(id: $id) {
+    success
+  }
+}`;
+
 interface RawProject {
   id: string;
   name: string;
@@ -535,6 +542,82 @@ async function handleProjectUpdate(
   }
 }
 
+async function handleProjectDelete(id: string, options: ProjectCommandOptions): Promise<number> {
+  if (options.dryRun === true) {
+    return emitDryRunResult("delete", "project", { id }, options);
+  }
+
+  try {
+    const profile = await resolveStoredProfile({
+      paths: {
+        configFile: options.configFile,
+        credentialsFile: options.credentialsFile
+      },
+      ...(options.profile === undefined ? {} : { explicitProfile: options.profile }),
+      env: options.env
+    });
+
+    const response = await executeGraphQL<{
+      projectDelete: { success: boolean };
+    }>({
+      query: PROJECT_DELETE_MUTATION,
+      variables: { id },
+      credentials: profile.credentials,
+      ...(options.apiUrl === undefined
+        ? profile.metadata.baseUrl === undefined
+          ? {}
+          : { apiUrl: profile.metadata.baseUrl }
+        : { apiUrl: options.apiUrl }),
+      ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl })
+    });
+
+    if (
+      hasErrors(response.body.errors) ||
+      !response.body.data?.projectDelete?.success
+    ) {
+      if (options.jsonEnvelope) {
+        const errors = mapGraphQLErrors(response.body.errors);
+        const envelope = failureEnvelope(
+          errors.length > 0 ? errors : [{ category: "general", message: "Project deletion failed" }],
+          { sourceLayer: "curated", profile: profile.name }
+        );
+        process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
+      } else {
+        const errorMessage = response.body.errors?.[0]?.message ?? "Project deletion failed";
+        process.stderr.write(`Error: ${errorMessage}\n`);
+      }
+      return ExitCode.GeneralError;
+    }
+
+    const result = { id, deleted: true };
+
+    if (options.jsonEnvelope) {
+      const envelope = successEnvelope(result, { sourceLayer: "curated", profile: profile.name });
+      process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
+    } else if (options.json) {
+      process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+    } else {
+      process.stdout.write(`Deleted project ${id}\n`);
+    }
+
+    return ExitCode.Success;
+  } catch (error) {
+    const failure = mapCommandFailure(error);
+
+    if (options.jsonEnvelope) {
+      const envelope = failureEnvelope([failure.error], {
+        sourceLayer: "curated",
+        ...(options.profile === undefined ? {} : { profile: options.profile })
+      });
+      process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
+    } else {
+      process.stderr.write(`Error: ${failure.error.message}\n`);
+    }
+
+    return failure.exitCode;
+  }
+}
+
 export async function handleProjectCommand(
   positionals: string[],
   options: ProjectCommandOptions
@@ -577,7 +660,18 @@ export async function handleProjectCommand(
     return handleProjectUpdate(id, options);
   }
 
-  return emitValidationError("unsupported project command. Try linear project get, list, create, or update.", options);
+  if (subcommand === "delete") {
+    const id = rest[0];
+    if (id === undefined || id === "") {
+      return emitValidationError("usage: linear project delete <id>", options);
+    }
+    if (rest.length > 1) {
+      return emitValidationError("project delete accepts exactly one identifier.", options);
+    }
+    return handleProjectDelete(id, options);
+  }
+
+  return emitValidationError("unsupported project command. Try linear project get, list, create, update, or delete.", options);
 }
 
 function hasErrors(errors: GraphQLErrorPayload[] | undefined): boolean {
