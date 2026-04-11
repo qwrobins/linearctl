@@ -2,6 +2,21 @@
 
 Default skill for all Linear CLI usage. Use this skill for any request involving Linear data unless raw GraphQL is explicitly required or the curated/generated layers cannot cover the operation.
 
+## First-time setup
+
+If the user has not configured the CLI yet, help them bootstrap:
+
+1. Create the config directory: `mkdir -p ~/.config/linear`
+2. Create a credentials file with their API key:
+   ```bash
+   export LINEAR_API_KEY=lin_api_...
+   linear auth login --profile <name> --api-key-env LINEAR_API_KEY --set-default
+   ```
+3. Set a default team: `linear team list --json` to find team keys, then `linear team get <key> --set-default`
+4. Verify: `linear auth whoami --json`
+
+API keys are created at https://linear.app/settings/api. For OAuth, see https://linear.app/settings/api/applications.
+
 ## Command routing
 
 1. Use curated commands when they cover the operation.
@@ -14,27 +29,32 @@ Raw GraphQL should not be used merely because it is possible. It is the fallback
 
 ### Issues
 - `linear issue get <identifier> --json` — fetch a single issue by identifier (e.g. INF-2975) or UUID
-- `linear issue list [--state <name>] [--assignee <id>] [--team <id>] [--label <id>] [--priority <0-4>] [--filter-json <json>] --json` — list issues with filters
+- `linear issue list [--state <name>] [--assignee <id>] [--team <id>] [--everything] [--json]` — list issues with filters
 - `linear issue create --title <title> --team <id> [--description <text>] [--priority <0-4>] [--assignee <id>] [--label <id>] [--state <id>] --json` — create an issue
 - `linear issue update <identifier> [--title <text>] [--description <text>] [--priority <0-4>] [--assignee <id>] [--state <id>] --json` — update an issue
 - `linear issue close <identifier> --json` — archive an issue
 - `linear issue assign <identifier> <assignee-id> --json` — assign an issue
 - `linear issue comment <identifier> --body <text> --json` — add a comment to an issue
 
+### Bulk operations
+- `linear issue bulk-update --ids <id1,id2,...> [--state <id>] [--assignee <id>] [--priority <0-4>] [--label <id>] --json`
+- `linear issue bulk-close --ids <id1,id2,...> --json`
+- `linear issue bulk-assign --ids <id1,id2,...> --assignee <id> --json`
+
 ### Projects
 - `linear project get <id> --json`
-- `linear project list --json`
+- `linear project list [--team <id>] [--everything] --json`
 - `linear project create --name <name> [--description <text>] [--team <id>] --json`
 - `linear project update <id> [--name <text>] [--description <text>] [--state <state>] --json`
 
 ### Cycles
 - `linear cycle get <id> --json`
-- `linear cycle list [--team <id>] --json`
+- `linear cycle list [--team <id>] [--everything] --json`
 - `linear cycle create --team <id> [--name <text>] [--starts-at <date>] [--ends-at <date>] --json`
 - `linear cycle update <id> [--name <text>] [--starts-at <date>] [--ends-at <date>] --json`
 
 ### Teams
-- `linear team get <id-or-key> --json`
+- `linear team get <id-or-key> [--set-default] --json` — fetch team; --set-default saves as profile default
 - `linear team list --json`
 
 ### Users
@@ -44,7 +64,7 @@ Raw GraphQL should not be used merely because it is possible. It is the fallback
 
 ### Labels
 - `linear label get <id> --json`
-- `linear label list [--team <id>] --json`
+- `linear label list [--team <id>] [--everything] --json`
 - `linear label create --name <name> [--description <text>] [--color <hex>] [--team <id>] --json`
 
 ### Comments
@@ -67,11 +87,6 @@ Raw GraphQL should not be used merely because it is possible. It is the fallback
 - `linear schema version --json`
 - `linear schema pull --json`
 - `linear schema check --json`
-
-### Bulk operations
-- `linear issue bulk-update --ids <id1,id2,...> [--state <id>] [--assignee <id>] [--priority <0-4>] [--label <id>] --json`
-- `linear issue bulk-close --ids <id1,id2,...> --json`
-- `linear issue bulk-assign --ids <id1,id2,...> --assignee <id> --json`
 
 ### Auth
 - `linear auth status --json`
@@ -98,6 +113,15 @@ When no curated command exists, use `linear api <resource> <operation>`:
 - Use `--json-envelope` only when metadata (pagination, rate limits, complexity) is needed
 - Use `--jsonl` for streaming large list results (one JSON object per line, auto-paginates)
 - Do not parse human-readable default output
+
+## Default team
+
+Each profile can have a default team. When set, list commands (issue, project, cycle, label) automatically filter to that team.
+
+- Set it: `linear team get <key> --set-default`
+- Override per-command: `--team <other>`
+- Bypass and see everything: `--everything`
+- `--team` and `--everything` cannot be used together
 
 ## Name resolution
 

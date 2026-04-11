@@ -88,17 +88,28 @@ export LINEAR_PROFILE=personal
 linear issue list --json
 ```
 
+## Set a default team
+
+Most workspaces have one primary team. Setting a default team scopes list commands automatically so you don't need `--team` on every call.
+
+```bash
+# Find your team key
+linear team list --json
+
+# Set it as the default for your profile
+linear team get <team-key> --set-default
+```
+
+Now `linear issue list --json` returns only issues from that team. Override with `--team <other>` or bypass with `--everything`.
+
 ## First commands
 
 ```bash
 # Current user
 linear user me --json
 
-# List teams
-linear team list --json
-
-# List issues for a team (by key or name)
-linear issue list --team INF --json
+# List issues (scoped to default team if set)
+linear issue list --json
 
 # List your in-progress issues
 linear issue list --assignee me --state "In Progress" --json
@@ -106,8 +117,11 @@ linear issue list --assignee me --state "In Progress" --json
 # Get a specific issue
 linear issue get INF-42 --json
 
-# Create an issue
-linear issue create --title "Update docs" --team INF --priority 1 --json
+# Create an issue (uses default team if set, or specify --team)
+linear issue create --title "Update docs" --priority 1 --json
+
+# See all projects across teams
+linear project list --everything --json
 ```
 
 All data commands support `--json` for machine-readable output. See [output modes](output-modes.md).
