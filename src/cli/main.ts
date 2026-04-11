@@ -26,7 +26,11 @@ const CLI_OPTION_DEFINITIONS = {
   file: { type: "string" },
   "vars-file": { type: "string" },
   var: { type: "string", multiple: true },
-  "output-dir": { type: "string" }
+  "output-dir": { type: "string" },
+  all: { type: "boolean" },
+  max: { type: "string" },
+  "page-size": { type: "string" },
+  after: { type: "string" }
 } as const;
 
 const AUTH_OPTION_DEFINITIONS = {
@@ -127,6 +131,10 @@ interface ParsedCliArguments {
   varsFile?: string;
   vars: string[];
   outputDir?: string;
+  all: boolean;
+  max?: number;
+  pageSize?: number;
+  after?: string;
   positionals: string[];
 }
 
@@ -288,6 +296,10 @@ function toParsedCliArguments(values: Record<string, unknown>, positionals: stri
     ...(typeof values["vars-file"] === "string" ? { varsFile: values["vars-file"] } : {}),
     vars: Array.isArray(values.var) ? values.var.filter((value): value is string => typeof value === "string") : [],
     ...(typeof values["output-dir"] === "string" ? { outputDir: values["output-dir"] } : {}),
+    all: values.all === true,
+    ...(typeof values.max === "string" ? { max: Number(values.max) } : {}),
+    ...(typeof values["page-size"] === "string" ? { pageSize: Number(values["page-size"]) } : {}),
+    ...(typeof values.after === "string" ? { after: values.after } : {}),
     positionals
   };
 }
