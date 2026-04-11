@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  executeGraphQL,
   authorizationHeader,
   GraphQLTransportError,
   requestGraphQL
@@ -71,5 +72,45 @@ describe("requestGraphQL", () => {
         fetchImpl
       })
     ).rejects.toThrow(GraphQLTransportError);
+  });
+
+  it("preserves HTTP status when an error response body is not valid JSON", async () => {
+    const fetchImpl = vi.fn(async () => new Response("not json", { status: 401 })) as FetchLike;
+
+    await expect(
+      executeGraphQL({
+        query: "query { viewer { id } }",
+        credentials: {
+          profileName: "work",
+          type: "api_key",
+          apiKey: "bad"
+        },
+        fetchImpl
+      })
+    ).rejects.toMatchObject({
+      kind: "http",
+      status: 401
+    });
+  });
+
+  it("prefers GraphQL errors over missing data", async () => {
+    const fetchImpl = vi.fn(async () =>
+      new Response(JSON.stringify({ errors: [{ message: "Resolver failed" }] }), { status: 200 })
+    ) as FetchLike;
+
+    await expect(
+      requestGraphQL({
+        query: "query { viewer { id } }",
+        credentials: {
+          profileName: "work",
+          type: "api_key",
+          apiKey: "bad"
+        },
+        fetchImpl
+      })
+    ).rejects.toMatchObject({
+      kind: "graphql",
+      errors: [{ message: "Resolver failed" }]
+    });
   });
 });

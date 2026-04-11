@@ -181,7 +181,7 @@ async function validateApiKey(
 
     return data.viewer;
   } catch (error) {
-    if (error instanceof GraphQLTransportError) {
+    if (error instanceof GraphQLTransportError && (error.status === 401 || error.status === 403)) {
       process.stderr.write(`Error: authentication failed: ${error.message}\n`);
       return undefined;
     }

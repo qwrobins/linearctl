@@ -153,7 +153,7 @@ Do not silently choose among multiple profiles.
 ### Raw GraphQL examples
 
 - `linear gql query '{ viewer { id name email } }' --json`
-- `cat query.graphql | linear gql query --stdin --vars-file vars.json`
+- `cat query.graphql | linear gql query --stdin --vars-file vars.json --json-envelope`
 
 ## Anti-Patterns The Skills Must Prohibit
 

@@ -7,6 +7,7 @@ import {
   parseLinearConfig,
   removeProfileMetadata,
   setDefaultProfile,
+  setProfileMetadata,
   stringifyLinearConfig,
   writeLinearConfigFile
 } from "../../../src/core/config/config-file.js";
@@ -152,5 +153,14 @@ describe("parseLinearConfig", () => {
         personal: { workspace: "personal" }
       }
     });
+  });
+
+  it("rejects invalid profile names when mutating config", () => {
+    expect(() => setDefaultProfile({ profiles: {} }, "bad[name]")).toThrow(
+      "default profile contains unsupported characters"
+    );
+    expect(() => setProfileMetadata({ profiles: {} }, "bad[name]", {})).toThrow(
+      "profile section name contains unsupported characters"
+    );
   });
 });

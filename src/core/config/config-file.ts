@@ -55,11 +55,7 @@ export function stringifyLinearConfig(config: LinearConfig): string {
 }
 
 export function setDefaultProfile(config: LinearConfig, profileName: string): LinearConfig {
-  const trimmedProfileName = profileName.trim();
-
-  if (trimmedProfileName === "") {
-    throw new Error("default profile cannot be empty");
-  }
+  const trimmedProfileName = validateProfileName(profileName, "default profile");
 
   return {
     ...config,
@@ -79,11 +75,7 @@ export function setProfileMetadata(
   profileName: string,
   metadata: ProfileMetadata
 ): LinearConfig {
-  const trimmedProfileName = profileName.trim();
-
-  if (trimmedProfileName === "") {
-    throw new Error("profile section name is required");
-  }
+  const trimmedProfileName = validateProfileName(profileName, "profile section name");
 
   return {
     ...config,
@@ -169,4 +161,22 @@ export async function loadLinearConfigFile(configFile: string): Promise<LinearCo
 
 export async function writeLinearConfigFile(configFile: string, config: LinearConfig): Promise<void> {
   await writeFileAtomically(configFile, stringifyLinearConfig(config), { mode: 0o600 });
+}
+
+function validateProfileName(profileName: string, subject: string): string {
+  const trimmedProfileName = profileName.trim();
+
+  if (trimmedProfileName === "") {
+    throw new Error(`${subject} cannot be empty`);
+  }
+
+  if (
+    trimmedProfileName.includes("\n") ||
+    trimmedProfileName.includes("[") ||
+    trimmedProfileName.includes("]")
+  ) {
+    throw new Error(`${subject} contains unsupported characters`);
+  }
+
+  return trimmedProfileName;
 }

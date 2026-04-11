@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from "vitest";
 import { handleAuthCommand } from "../../src/commands/auth.js";
 import { loadCredentialsFile } from "../../src/core/auth/credentials.js";
 import { loadLinearConfigFile } from "../../src/core/config/config-file.js";
+import { GraphQLTransportError } from "../../src/core/transport/graphql.js";
 import type { FetchLike } from "../../src/core/transport/graphql.js";
 
 function successfulViewerFetch() {
@@ -119,6 +120,25 @@ describe("handleAuthCommand", () => {
         })
       )
     ).resolves.toBe(2);
+  });
+
+  it("rethrows non-auth transport failures during API key validation", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-auth-"));
+    const fetchImpl = vi.fn(async () =>
+      new Response(JSON.stringify({ errors: [{ message: "Slow down" }] }), { status: 429 })
+    ) as FetchLike;
+
+    await expect(
+      handleAuthCommand(
+        ["login"],
+        baseOptions(directory, {
+          profile: "work",
+          apiKeyEnv: "LINEAR_API_KEY",
+          env: { LINEAR_API_KEY: "bad" },
+          fetchImpl
+        })
+      )
+    ).rejects.toBeInstanceOf(GraphQLTransportError);
   });
 
   it("logs out by removing credentials and clearing the default profile", async () => {

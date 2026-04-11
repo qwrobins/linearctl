@@ -61,10 +61,15 @@ export function setCredentialsProfile(
   credentials: CredentialsStore,
   profileCredentials: ProfileCredentials
 ): CredentialsStore {
+  const profileName = profileCredentials.profileName.trim();
+
   return {
     profiles: {
       ...credentials.profiles,
-      [profileCredentials.profileName]: profileCredentials
+      [profileName]: {
+        ...profileCredentials,
+        profileName
+      }
     }
   };
 }
@@ -73,10 +78,11 @@ export function removeCredentialsProfile(
   credentials: CredentialsStore,
   profileName: string
 ): CredentialsStore {
+  const trimmedProfileName = profileName.trim();
   const profiles = Object.create(null) as Record<string, ProfileCredentials>;
 
   for (const [existingProfileName, profileCredentials] of Object.entries(credentials.profiles)) {
-    if (existingProfileName !== profileName) {
+    if (existingProfileName !== trimmedProfileName) {
       profiles[existingProfileName] = profileCredentials;
     }
   }

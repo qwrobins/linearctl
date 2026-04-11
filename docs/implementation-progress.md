@@ -52,7 +52,7 @@ Completed:
   - `linear gql mutation` with inline document text, `--file`, or `--stdin`
   - variable input via repeated `--var key=value` and `--vars-file`
   - resolved-profile runtime auth for raw GraphQL commands
-  - `--json`, `--json-envelope`, and `--raw` output modes for raw GraphQL commands
+  - explicit `--json`, `--json-envelope`, or `--raw` output modes for raw GraphQL commands
 
 ## Recommended Next Slice
 

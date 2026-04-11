@@ -84,7 +84,7 @@ function parseCliArguments(argv: string[]): ParsedCliArguments {
       var: { type: "string", multiple: true }
     },
     allowPositionals: true,
-    strict: false
+    strict: true
   });
 
   help = values.help === true;

@@ -255,4 +255,61 @@ describe("handleGqlCommand", () => {
       output.restore();
     }
   });
+
+  it("rejects vars-file roots that are not JSON objects", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-gql-"));
+    const { configFile, credentialsFile } = await writeProfileFiles(directory);
+    const varsFile = join(directory, "vars-invalid-root.json");
+    await writeFile(varsFile, '["issue-1"]');
+    const output = captureOutput();
+
+    try {
+      await expect(
+        handleGqlCommand(["query", "query { viewer { id } }"], {
+          json: true,
+          jsonEnvelope: false,
+          raw: false,
+          stdin: false,
+          varsFile,
+          vars: [],
+          configFile,
+          credentialsFile,
+          env: {},
+          stdinStream: Readable.from([]),
+          fetchImpl: vi.fn() as unknown as FetchLike
+        })
+      ).resolves.toBe(1);
+
+      expect(output.stderr.join("")).toContain(`Failed to parse vars file "${varsFile}": expected JSON object`);
+    } finally {
+      output.restore();
+    }
+  });
+
+  it("requires an explicit output mode", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-gql-"));
+    const { configFile, credentialsFile } = await writeProfileFiles(directory);
+    const output = captureOutput();
+
+    try {
+      await expect(
+        handleGqlCommand(["query", "query { viewer { id } }"], {
+          json: false,
+          jsonEnvelope: false,
+          raw: false,
+          stdin: false,
+          vars: [],
+          configFile,
+          credentialsFile,
+          env: {},
+          stdinStream: Readable.from([]),
+          fetchImpl: vi.fn() as unknown as FetchLike
+        })
+      ).resolves.toBe(5);
+
+      expect(output.stderr.join("")).toContain("one of --json, --json-envelope, or --raw is required");
+    } finally {
+      output.restore();
+    }
+  });
 });

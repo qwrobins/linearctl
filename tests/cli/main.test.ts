@@ -45,6 +45,13 @@ describe("CLI scaffold", () => {
     });
   });
 
+  it("rejects unknown flags", async () => {
+    await expect(runCli(["--no-such-flag"])).rejects.toMatchObject({
+      code: 5,
+      stderr: expect.stringContaining("Unknown option '--no-such-flag'")
+    });
+  });
+
   it("prints auth status as JSON from local config and credentials files", async () => {
     const directory = await mkdtemp(join(tmpdir(), "linear-cli-main-"));
     const configFile = join(directory, "config");

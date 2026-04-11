@@ -123,6 +123,7 @@ Common flags:
 - `--var key=value`
 - `--vars-file <path>`
 - `--json`
+- `--json-envelope`
 - `--raw`
 - `--profile`
 

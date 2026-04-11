@@ -5,6 +5,8 @@ import { describe, expect, it } from "vitest";
 import {
   loadCredentialsFile,
   parseCredentials,
+  removeCredentialsProfile,
+  setCredentialsProfile,
   stringifyCredentials,
   writeCredentialsFile
 } from "../../../src/core/auth/credentials.js";
@@ -193,5 +195,23 @@ describe("parseCredentials", () => {
       ["[work]", "type = api_key", "api_key = lin_api_work", ""].join("\n")
     );
     expect((await stat(credentialsFile)).mode & 0o777).toBe(0o600);
+  });
+
+  it("trims profile names when mutating credentials", () => {
+    const stored = setCredentialsProfile(
+      { profiles: {} },
+      {
+        profileName: " work ",
+        type: "api_key",
+        apiKey: "lin_api_work"
+      }
+    );
+
+    expect(stored.profiles.work).toEqual({
+      profileName: "work",
+      type: "api_key",
+      apiKey: "lin_api_work"
+    });
+    expect(removeCredentialsProfile(stored, " work ")).toEqual({ profiles: {} });
   });
 });

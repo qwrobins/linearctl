@@ -57,7 +57,18 @@ export async function executeGraphQL<TData>(input: GraphQLRequestInput): Promise
   });
 
   const responseText = await response.text();
-  const responseBody = parseGraphQLResponse<TData>(responseText);
+  let responseBody: GraphQLResponse<TData> | undefined;
+  let parseError: GraphQLTransportError | undefined;
+
+  try {
+    responseBody = parseGraphQLResponse<TData>(responseText, response.status);
+  } catch (error) {
+    if (error instanceof GraphQLTransportError) {
+      parseError = error;
+    } else {
+      throw error;
+    }
+  }
 
   if (!response.ok) {
     throw new GraphQLTransportError(
@@ -66,6 +77,14 @@ export async function executeGraphQL<TData>(input: GraphQLRequestInput): Promise
       response.status,
       responseBody?.errors
     );
+  }
+
+  if (parseError !== undefined) {
+    throw parseError;
+  }
+
+  if (responseBody === undefined) {
+    throw new GraphQLTransportError("Linear GraphQL response was missing body", "invalid-response", response.status);
   }
 
   return {
@@ -79,10 +98,6 @@ export async function executeGraphQL<TData>(input: GraphQLRequestInput): Promise
 export async function requestGraphQL<TData>(input: GraphQLRequestInput): Promise<TData> {
   const response = await executeGraphQL<TData>(input);
 
-  if (response.body.data === undefined) {
-    throw new GraphQLTransportError("Linear GraphQL response was missing data", "invalid-response");
-  }
-
   if (Array.isArray(response.body.errors) && response.body.errors.length > 0) {
     throw new GraphQLTransportError(
       response.body.errors[0]?.message ?? "Linear GraphQL request returned errors",
@@ -90,6 +105,10 @@ export async function requestGraphQL<TData>(input: GraphQLRequestInput): Promise
       undefined,
       response.body.errors
     );
+  }
+
+  if (response.body.data === undefined) {
+    throw new GraphQLTransportError("Linear GraphQL response was missing data", "invalid-response");
   }
 
   return response.body.data;
@@ -111,7 +130,7 @@ export function authorizationHeader(credentials: GraphQLRequestInput["credential
   throw new Error("credentials are missing usable auth material");
 }
 
-function parseGraphQLResponse<TData>(responseText: string): GraphQLResponse<TData> {
+function parseGraphQLResponse<TData>(responseText: string, status?: number): GraphQLResponse<TData> {
   let parsed: unknown;
 
   try {
@@ -120,12 +139,13 @@ function parseGraphQLResponse<TData>(responseText: string): GraphQLResponse<TDat
     const message = error instanceof Error ? error.message : "JSON parse failed";
     throw new GraphQLTransportError(
       `Linear GraphQL response was not valid JSON: ${message}`,
-      "invalid-response"
+      "invalid-response",
+      status
     );
   }
 
   if (parsed === null || typeof parsed !== "object") {
-    throw new GraphQLTransportError("Linear GraphQL response was not valid JSON data", "invalid-response");
+    throw new GraphQLTransportError("Linear GraphQL response was not valid JSON data", "invalid-response", status);
   }
 
   return parsed as GraphQLResponse<TData>;

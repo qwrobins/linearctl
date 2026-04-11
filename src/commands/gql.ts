@@ -34,6 +34,12 @@ export async function handleGqlCommand(
     return 5;
   }
 
+  const outputValidationError = validateOutputMode(options);
+  if (outputValidationError !== undefined) {
+    process.stderr.write(`Error: ${outputValidationError}\n`);
+    return 5;
+  }
+
   try {
     const document = await resolveGraphQLDocument(rest, options);
     if (document === undefined) {
@@ -84,9 +90,14 @@ export async function handleGqlCommand(
       return 1;
     }
 
-    const data = response.body.data ?? null;
-    process.stdout.write(`${JSON.stringify(data, null, 2)}\n`);
-    return 0;
+    if (options.json) {
+      const data = response.body.data ?? null;
+      process.stdout.write(`${JSON.stringify(data, null, 2)}\n`);
+      return 0;
+    }
+
+    process.stderr.write("Error: one of --json, --json-envelope, or --raw is required.\n");
+    return 5;
   } catch (error) {
     const failure = mapCommandFailure(error);
 
@@ -156,8 +167,16 @@ async function resolveVariables(options: Pick<GqlCommandOptions, "varsFile" | "v
   let fileVariables: Record<string, unknown>;
 
   try {
-    fileVariables = JSON.parse(await readFile(options.varsFile, "utf8")) as Record<string, unknown>;
+    const parsed = JSON.parse(await readFile(options.varsFile, "utf8")) as unknown;
+    if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+      throw new Error(`Failed to parse vars file "${options.varsFile}": expected JSON object`);
+    }
+    fileVariables = parsed as Record<string, unknown>;
   } catch (error) {
+    if (error instanceof Error && error.message.startsWith(`Failed to parse vars file "${options.varsFile}":`)) {
+      throw error;
+    }
+
     if (error instanceof SyntaxError) {
       throw new Error(`Failed to parse vars file "${options.varsFile}": ${error.message}`);
     }
@@ -169,6 +188,20 @@ async function resolveVariables(options: Pick<GqlCommandOptions, "varsFile" | "v
     ...fileVariables,
     ...inlineVariables
   };
+}
+
+function validateOutputMode(options: Pick<GqlCommandOptions, "json" | "jsonEnvelope" | "raw">): string | undefined {
+  const selectedModes = [options.json, options.jsonEnvelope, options.raw].filter(Boolean).length;
+
+  if (selectedModes === 0) {
+    return "one of --json, --json-envelope, or --raw is required";
+  }
+
+  if (selectedModes > 1) {
+    return "--json, --json-envelope, and --raw are mutually exclusive";
+  }
+
+  return undefined;
 }
 
 function parseVariableValue(rawValue: string): unknown {
