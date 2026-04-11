@@ -206,12 +206,22 @@ describe("handleAuthCommand", () => {
       ).resolves.toBe(0);
 
       const parsed = JSON.parse(stdoutChunks.join(""));
+      expect(Object.keys(parsed).sort()).toEqual(["data", "errors", "meta", "ok", "pageInfo"]);
       expect(parsed.ok).toBe(true);
-      expect(parsed.data.defaultProfile).toBe("work");
-      expect(parsed.data.profiles).toHaveLength(1);
+      expect(parsed.data).toEqual({
+        defaultProfile: "work",
+        profiles: [
+          {
+            name: "work",
+            type: "api_key",
+            workspace: "main",
+            source: "credentials-file"
+          }
+        ]
+      });
       expect(parsed.errors).toEqual([]);
       expect(parsed.pageInfo).toBeNull();
-      expect(parsed.meta.sourceLayer).toBe("curated");
+      expect(parsed.meta).toEqual({ sourceLayer: "curated" });
     } finally {
       spy.mockRestore();
     }

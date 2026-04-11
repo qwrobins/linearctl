@@ -172,8 +172,8 @@ async function handleSchemaPull(positionals: string[], options: SchemaCommandOpt
 }
 
 function defaultSchemaOutputDir(): string {
-  // Resolve relative to the project root (two levels up from src/commands/).
-  // This ensures schema pull writes to the correct location regardless of CWD.
+  // Resolve relative to the source root (one level up from src/commands/ → src/).
+  // This ensures schema pull writes to src/generated/manifest/ regardless of CWD.
   const thisDir = dirname(fileURLToPath(import.meta.url));
   return join(thisDir, "..", "generated", "manifest");
 }
