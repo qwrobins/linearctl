@@ -1,4 +1,7 @@
 import { execFile } from "node:child_process";
+import { chmod, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { promisify } from "node:util";
 import { describe, expect, it } from "vitest";
 
@@ -39,6 +42,143 @@ describe("CLI scaffold", () => {
     await expect(runCli(["--metadata"])).rejects.toMatchObject({
       code: 5,
       stderr: expect.stringContaining("Error:")
+    });
+  });
+
+  it("prints auth status as JSON from local config and credentials files", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-main-"));
+    const configFile = join(directory, "config");
+    const credentialsFile = join(directory, "credentials");
+    await writeFile(
+      configFile,
+      [
+        "[default]",
+        "profile = work",
+        "",
+        "[profile work]",
+        "workspace = main",
+        "user_email = quentin@example.com",
+        ""
+      ].join("\n")
+    );
+    await writeFile(
+      credentialsFile,
+      ["[work]", "type = api_key", "api_key = lin_api_work", ""].join("\n"),
+      { mode: 0o600 }
+    );
+    await chmod(credentialsFile, 0o600);
+
+    const { stdout: output } = await runCli([
+      "auth",
+      "status",
+      "--json",
+      "--config",
+      configFile,
+      "--credentials",
+      credentialsFile
+    ]);
+
+    expect(JSON.parse(output)).toEqual({
+      defaultProfile: "work",
+      profiles: [
+        {
+          name: "work",
+          type: "api_key",
+          workspace: "main",
+          userEmail: "quentin@example.com",
+          source: "credentials-file"
+        }
+      ]
+    });
+  });
+
+  it("switches the default profile in config without modifying credentials", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-main-"));
+    const configFile = join(directory, "config");
+    const credentialsFile = join(directory, "credentials");
+    await writeFile(
+      configFile,
+      [
+        "[default]",
+        "profile = personal",
+        "",
+        "[profile personal]",
+        "workspace = personal",
+        "",
+        "[profile work]",
+        "workspace = main",
+        ""
+      ].join("\n")
+    );
+    await writeFile(
+      credentialsFile,
+      [
+        "[personal]",
+        "type = api_key",
+        "api_key = lin_api_personal",
+        "",
+        "[work]",
+        "type = api_key",
+        "api_key = lin_api_work",
+        ""
+      ].join("\n"),
+      { mode: 0o600 }
+    );
+    await chmod(credentialsFile, 0o600);
+    const originalCredentials = await readFile(credentialsFile, "utf8");
+
+    const { stdout: output } = await runCli([
+      "auth",
+      "switch",
+      "work",
+      "--config",
+      configFile,
+      "--credentials",
+      credentialsFile
+    ]);
+
+    expect(output).toBe('Default Linear profile set to "work".\n');
+    expect(await readFile(credentialsFile, "utf8")).toBe(originalCredentials);
+    expect(await readFile(configFile, "utf8")).toContain("profile = work");
+  });
+
+  it("fails auth switch when the profile does not exist", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-main-"));
+    const configFile = join(directory, "config");
+    const credentialsFile = join(directory, "credentials");
+
+    await expect(
+      runCli(["auth", "switch", "missing", "--config", configFile, "--credentials", credentialsFile])
+    ).rejects.toMatchObject({
+      code: 5,
+      stderr: 'Error: Profile "missing" does not exist.\n'
+    });
+  });
+
+  it("rejects API key login without an explicit secret source", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-main-"));
+
+    await expect(
+      runCli([
+        "auth",
+        "login",
+        "--profile",
+        "work",
+        "--config",
+        join(directory, "config"),
+        "--credentials",
+        join(directory, "credentials")
+      ])
+    ).rejects.toMatchObject({
+      code: 5,
+      stderr: "Error: API key login requires --api-key-env <ENV> or --api-key-stdin.\n"
+    });
+  });
+
+  it("rejects logout without a profile flag", async () => {
+    await expect(runCli(["auth", "logout"])).rejects.toMatchObject({
+      code: 5,
+      stderr: "Error: --profile <name> is required for auth logout.\n"
     });
   });
 });

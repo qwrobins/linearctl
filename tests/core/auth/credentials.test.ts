@@ -1,8 +1,13 @@
-import { chmod, mkdtemp, writeFile } from "node:fs/promises";
+import { chmod, mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { loadCredentialsFile, parseCredentials } from "../../../src/core/auth/credentials.js";
+import {
+  loadCredentialsFile,
+  parseCredentials,
+  stringifyCredentials,
+  writeCredentialsFile
+} from "../../../src/core/auth/credentials.js";
 import { parseIni } from "../../../src/core/config/ini.js";
 
 describe("parseCredentials", () => {
@@ -134,5 +139,59 @@ describe("parseCredentials", () => {
     await expect(loadCredentialsFile(credentialsFile)).rejects.toThrow(
       "credentials file permissions must not allow group or other access"
     );
+  });
+
+  it("serializes credentials without unknown fields", () => {
+    expect(
+      stringifyCredentials({
+        profiles: {
+          work: {
+            profileName: "work",
+            type: "api_key",
+            apiKey: "lin_api_work"
+          },
+          oauth: {
+            profileName: "oauth",
+            type: "oauth",
+            accessToken: "lin_access",
+            refreshToken: "lin_refresh",
+            expiresAt: "2026-04-07T18:45:00Z"
+          }
+        }
+      })
+    ).toBe(
+      [
+        "[work]",
+        "type = api_key",
+        "api_key = lin_api_work",
+        "",
+        "[oauth]",
+        "type = oauth",
+        "access_token = lin_access",
+        "refresh_token = lin_refresh",
+        "expires_at = 2026-04-07T18:45:00Z",
+        ""
+      ].join("\n")
+    );
+  });
+
+  it("writes credentials atomically with restrictive permissions", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-credentials-"));
+    const credentialsFile = join(directory, "nested", "credentials");
+
+    await writeCredentialsFile(credentialsFile, {
+      profiles: {
+        work: {
+          profileName: "work",
+          type: "api_key",
+          apiKey: "lin_api_work"
+        }
+      }
+    });
+
+    expect(await readFile(credentialsFile, "utf8")).toBe(
+      ["[work]", "type = api_key", "api_key = lin_api_work", ""].join("\n")
+    );
+    expect((await stat(credentialsFile)).mode & 0o777).toBe(0o600);
   });
 });

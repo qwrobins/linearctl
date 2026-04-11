@@ -1,7 +1,8 @@
 import { open, readFile } from "node:fs/promises";
 import type { FileHandle } from "node:fs/promises";
 import type { IniDocument } from "../config/ini.js";
-import { parseIni } from "../config/ini.js";
+import { parseIni, stringifyIni } from "../config/ini.js";
+import { writeFileAtomically } from "../config/atomic-file.js";
 
 export type CredentialType = "api_key" | "oauth";
 
@@ -29,6 +30,58 @@ export interface CredentialsStore {
 
 export interface LoadCredentialsFileOptions {
   checkPermissions?: boolean;
+}
+
+export function stringifyCredentials(credentials: CredentialsStore): string {
+  const document = Object.create(null) as IniDocument;
+
+  for (const credential of Object.values(credentials.profiles)) {
+    if (credential.type === "api_key") {
+      document[credential.profileName] = {
+        type: "api_key",
+        api_key: credential.apiKey
+      };
+      continue;
+    }
+
+    document[credential.profileName] = {
+      type: "oauth",
+      access_token: credential.accessToken,
+      refresh_token: credential.refreshToken,
+      expires_at: credential.expiresAt,
+      ...(credential.scopes === undefined ? {} : { scopes: credential.scopes }),
+      ...(credential.oauthClientId === undefined ? {} : { oauth_client_id: credential.oauthClientId })
+    };
+  }
+
+  return stringifyIni(document);
+}
+
+export function setCredentialsProfile(
+  credentials: CredentialsStore,
+  profileCredentials: ProfileCredentials
+): CredentialsStore {
+  return {
+    profiles: {
+      ...credentials.profiles,
+      [profileCredentials.profileName]: profileCredentials
+    }
+  };
+}
+
+export function removeCredentialsProfile(
+  credentials: CredentialsStore,
+  profileName: string
+): CredentialsStore {
+  const profiles = Object.create(null) as Record<string, ProfileCredentials>;
+
+  for (const [existingProfileName, profileCredentials] of Object.entries(credentials.profiles)) {
+    if (existingProfileName !== profileName) {
+      profiles[existingProfileName] = profileCredentials;
+    }
+  }
+
+  return { profiles };
 }
 
 export function parseCredentials(document: IniDocument): CredentialsStore {
@@ -106,6 +159,13 @@ export async function loadCredentialsFile(
   }
 
   return parseCredentials(parseIni(await readFile(credentialsFile, "utf8")));
+}
+
+export async function writeCredentialsFile(
+  credentialsFile: string,
+  credentials: CredentialsStore
+): Promise<void> {
+  await writeFileAtomically(credentialsFile, stringifyCredentials(credentials), { mode: 0o600 });
 }
 
 export async function assertCredentialsFilePermissions(credentialsFile: string): Promise<void> {
