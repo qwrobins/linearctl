@@ -106,6 +106,7 @@ export async function paginateGraphQL<TNode>(
     }
 
     const connection = extractConnection(response.body.data);
+    const previousCount = items.length;
     items.push(...connection.nodes);
     lastPageInfo = connection.pageInfo;
 
@@ -123,6 +124,10 @@ export async function paginateGraphQL<TNode>(
     }
 
     if (!lastPageInfo.hasNextPage || lastPageInfo.endCursor == null) {
+      break;
+    }
+
+    if (items.length === previousCount || lastPageInfo.endCursor === cursor) {
       break;
     }
 

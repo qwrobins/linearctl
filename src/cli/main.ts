@@ -302,11 +302,10 @@ function mergeStringArrays(left: unknown, right: unknown): string[] | undefined 
 }
 
 function parsePositiveInt(value: string, flagName: string): number {
-  const parsed = Number(value);
-  if (!Number.isInteger(parsed) || parsed <= 0) {
+  if (!/^[1-9]\d*$/.test(value)) {
     throw new Error(`--${flagName} must be a positive integer`);
   }
-  return parsed;
+  return parseInt(value, 10);
 }
 
 function toParsedCliArguments(values: Record<string, unknown>, positionals: string[]): ParsedCliArguments {
