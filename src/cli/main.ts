@@ -790,6 +790,11 @@ async function main(argv: string[]): Promise<number> {
     return ExitCode.Success;
   }
 
+  if (args.team !== undefined && args.everything) {
+    process.stderr.write("Error: --team cannot be used with --everything\n");
+    return ExitCode.ValidationError;
+  }
+
   if (args.metadata === "curated" && args.json) {
     printCuratedMetadata();
     return ExitCode.Success;
