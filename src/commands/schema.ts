@@ -42,7 +42,11 @@ export async function handleSchemaCommand(
     return handleSchemaPull(rest, options);
   }
 
-  process.stderr.write("Error: unsupported schema command. Try linear schema version or linear schema pull.\n");
+  if (subcommand === "check") {
+    return handleSchemaCheck(rest, options);
+  }
+
+  process.stderr.write("Error: unsupported schema command. Try linear schema version, linear schema pull, or linear schema check.\n");
   return ExitCode.ValidationError;
 }
 
@@ -154,6 +158,82 @@ async function handleSchemaPull(positionals: string[], options: SchemaCommandOpt
     process.stdout.write(`Metadata: ${output.metaFile}\n`);
 
     return ExitCode.Success;
+  } catch (error) {
+    const failure = mapCommandFailure(error);
+
+    if (options.jsonEnvelope) {
+      const envelope = failureEnvelope([failure.error], {
+        sourceLayer: "curated",
+        ...(options.profile === undefined ? {} : { profile: options.profile })
+      });
+      process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
+    } else {
+      process.stderr.write(`Error: ${failure.error.message}\n`);
+    }
+
+    return failure.exitCode;
+  }
+}
+
+async function handleSchemaCheck(positionals: string[], options: SchemaCommandOptions): Promise<number> {
+  if (positionals.length > 0) {
+    process.stderr.write("Error: schema check does not accept positional arguments.\n");
+    return ExitCode.ValidationError;
+  }
+
+  try {
+    const bundledMeta = loadBundledSchemaMetadata();
+    const bundledVersion = bundledMeta.schemaVersion;
+
+    const profile = await resolveStoredProfile({
+      paths: {
+        configFile: options.configFile,
+        credentialsFile: options.credentialsFile
+      },
+      ...(options.profile === undefined ? {} : { explicitProfile: options.profile }),
+      env: options.env
+    });
+
+    const response = await executeGraphQL<{ __schema: unknown }>({
+      query: INTROSPECTION_QUERY,
+      credentials: profile.credentials,
+      ...(options.apiUrl === undefined
+        ? profile.metadata.baseUrl === undefined
+          ? {}
+          : { apiUrl: profile.metadata.baseUrl }
+        : { apiUrl: options.apiUrl }),
+      ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl })
+    });
+
+    if (response.body.data === undefined || response.body.data.__schema === undefined) {
+      process.stderr.write("Error: introspection response did not contain schema data.\n");
+      return ExitCode.GeneralError;
+    }
+
+    const schema = response.body.data.__schema as Record<string, unknown>;
+    const liveVersion = extractSchemaVersion(schema);
+    const drifted = bundledVersion === null || bundledVersion !== liveVersion;
+
+    const output = { bundledVersion, liveVersion, drifted };
+
+    if (options.jsonEnvelope) {
+      const envelope = successEnvelope(output, { sourceLayer: "curated" });
+      process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
+      return drifted ? ExitCode.SchemaDrift : ExitCode.Success;
+    }
+
+    if (options.json) {
+      process.stdout.write(`${JSON.stringify(output, null, 2)}\n`);
+      return drifted ? ExitCode.SchemaDrift : ExitCode.Success;
+    }
+
+    if (drifted) {
+      process.stdout.write(`Schema drift detected. Bundled: ${bundledVersion ?? "(none)"}, Live: ${liveVersion ?? "(unknown)"}\n`);
+    } else {
+      process.stdout.write("Schema is up to date.\n");
+    }
+
+    return drifted ? ExitCode.SchemaDrift : ExitCode.Success;
   } catch (error) {
     const failure = mapCommandFailure(error);
 
