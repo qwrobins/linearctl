@@ -502,8 +502,9 @@ async function handleIssueList(options: IssueCommandOptions): Promise<number> {
     if (filter === undefined) {
       const buildFilter: Record<string, unknown> = {};
       let resolvedTeamId: string | undefined;
-      if (options.team !== undefined) {
-        resolvedTeamId = looksLikeId(options.team) ? options.team : await resolveTeamId(options.team, resolverOpts);
+      const effectiveTeam = options.team === "" ? undefined : (options.team ?? profile.metadata.defaultTeam);
+      if (effectiveTeam !== undefined) {
+        resolvedTeamId = looksLikeId(effectiveTeam) ? effectiveTeam : await resolveTeamId(effectiveTeam, resolverOpts);
         buildFilter.team = { id: { eq: resolvedTeamId } };
       }
       if (options.state !== undefined) {

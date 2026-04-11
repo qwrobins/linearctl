@@ -241,13 +241,14 @@ async function handleLabelList(options: LabelCommandOptions): Promise<number> {
       : options.apiUrl;
 
     const variables: Record<string, unknown> = {};
-    if (options.team !== undefined) {
+    const effectiveTeam = options.team === "" ? undefined : (options.team ?? profile.metadata.defaultTeam);
+    if (effectiveTeam !== undefined) {
       const resolverOpts: ResolverOptions = {
         credentials: profile.credentials,
         ...(apiUrl === undefined ? {} : { apiUrl }),
         ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl })
       };
-      const teamIdResolved = looksLikeId(options.team) ? options.team : await resolveTeamId(options.team, resolverOpts);
+      const teamIdResolved = looksLikeId(effectiveTeam) ? effectiveTeam : await resolveTeamId(effectiveTeam, resolverOpts);
       variables.filter = { team: { id: { eq: teamIdResolved } } };
     }
 

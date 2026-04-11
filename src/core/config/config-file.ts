@@ -9,6 +9,7 @@ export interface ProfileMetadata {
   userEmail?: string;
   baseUrl?: string;
   oauthRedirectUri?: string;
+  defaultTeam?: string;
 }
 
 export interface LinearConfig {
@@ -46,6 +47,10 @@ export function stringifyLinearConfig(config: LinearConfig): string {
 
     if (metadata.oauthRedirectUri !== undefined) {
       section.oauth_redirect_uri = metadata.oauthRedirectUri;
+    }
+
+    if (metadata.defaultTeam !== undefined) {
+      section.default_team = metadata.defaultTeam;
     }
 
     document[`profile ${profileName}`] = section;
@@ -140,6 +145,10 @@ export function parseLinearConfig(document: IniDocument): LinearConfig {
 
     if (section.oauth_redirect_uri !== undefined) {
       metadata.oauthRedirectUri = section.oauth_redirect_uri;
+    }
+
+    if (section.default_team !== undefined && section.default_team.trim() !== "") {
+      metadata.defaultTeam = section.default_team.trim();
     }
 
     profiles[profileName] = metadata;

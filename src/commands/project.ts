@@ -59,8 +59,8 @@ query ProjectGet($id: String!) {
 ${CURATED_PROJECT_FRAGMENT}`;
 
 const PROJECT_LIST_QUERY = `
-query ProjectList($first: Int!, $after: String) {
-  projects(first: $first, after: $after) {
+query ProjectList($first: Int!, $after: String, $filter: ProjectFilter) {
+  projects(first: $first, after: $after, filter: $filter) {
     nodes {
       ...CuratedProject
     }
@@ -258,8 +258,23 @@ async function handleProjectList(options: ProjectCommandOptions): Promise<number
       env: options.env
     });
 
+    const effectiveTeam = options.team === "" ? undefined : (options.team ?? profile.metadata.defaultTeam);
+    let filter: Record<string, unknown> | undefined;
+    if (effectiveTeam !== undefined) {
+      const resolverOpts = {
+        credentials: profile.credentials,
+        ...(options.apiUrl === undefined
+          ? profile.metadata.baseUrl === undefined ? {} : { apiUrl: profile.metadata.baseUrl }
+          : { apiUrl: options.apiUrl }),
+        ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl })
+      };
+      const teamId = looksLikeId(effectiveTeam) ? effectiveTeam : await resolveTeamId(effectiveTeam, resolverOpts);
+      filter = { accessibleTeams: { some: { id: { eq: teamId } } } };
+    }
+
     const commonPaginateInput = {
       query: PROJECT_LIST_QUERY,
+      ...(filter === undefined ? {} : { variables: { filter } }),
       credentials: profile.credentials,
       ...(options.apiUrl === undefined
         ? profile.metadata.baseUrl === undefined
