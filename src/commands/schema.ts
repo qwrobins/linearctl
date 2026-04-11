@@ -9,6 +9,7 @@ import { executeGraphQL } from "../core/transport/graphql.js";
 import type { FetchLike } from "../core/transport/graphql.js";
 import { INTROSPECTION_QUERY } from "../core/schema/introspection-query.js";
 import {
+  computeSchemaFingerprint,
   loadBundledSchemaMetadata,
   loadSchemaFile,
   schemaVersionOutput,
@@ -283,44 +284,5 @@ function defaultSchemaOutputDir(): string {
 }
 
 function extractSchemaVersion(schema: Record<string, unknown>): string | null {
-  // Linear does not expose a schema version in standard introspection.
-  // Use a hash of type names as a stable version fingerprint.
-  const types = schema.types;
-  if (!Array.isArray(types)) {
-    return null;
-  }
-
-  const typeEntries = types
-    .filter((t): t is { name: string; fields?: Array<{ name: string }> } =>
-      t !== null && typeof t === "object" && typeof (t as Record<string, unknown>).name === "string"
-    )
-    .filter((t) => !t.name.startsWith("__"))
-    .sort((a, b) => a.name.localeCompare(b.name))
-    .map((t) => {
-      const fieldNames = Array.isArray(t.fields)
-        ? t.fields.map((f) => f.name).sort().join(",")
-        : "";
-      return fieldNames.length > 0 ? `${t.name}:${fieldNames}` : t.name;
-    });
-
-  if (typeEntries.length === 0) {
-    return null;
-  }
-
-  // Stable fingerprint — same types and fields in same order produce same version.
-  return hashTypeNames(typeEntries);
-}
-
-function hashTypeNames(names: string[]): string {
-  const input = names.join("\n");
-  let hash = 0;
-
-  for (let i = 0; i < input.length; i++) {
-    const char = input.charCodeAt(i);
-    hash = ((hash << 5) - hash + char) | 0;
-  }
-
-  // Convert to hex and zero-pad to 8 chars.
-  const hex = (hash >>> 0).toString(16).padStart(8, "0");
-  return `introspect-${hex}`;
+  return computeSchemaFingerprint(schema);
 }

@@ -1116,7 +1116,21 @@ async function executeBulk(
     }
   }
 
-  if (options.json) {
+  const exitCode = result.succeeded.length > 0 ? ExitCode.Success : ExitCode.GeneralError;
+
+  if (options.jsonEnvelope) {
+    const envelopeFn = exitCode === ExitCode.Success ? successEnvelope : failureEnvelope;
+    if (exitCode === ExitCode.Success) {
+      const envelope = successEnvelope(result, { sourceLayer: "curated" });
+      process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
+    } else {
+      const envelope = failureEnvelope(
+        [{ category: "general", message: `All ${result.failed.length} operations failed` }],
+        { sourceLayer: "curated" }
+      );
+      process.stdout.write(`${JSON.stringify({ ...envelope, data: result }, null, 2)}\n`);
+    }
+  } else if (options.json) {
     process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
   } else {
     if (result.succeeded.length > 0) {
@@ -1127,7 +1141,7 @@ async function executeBulk(
     }
   }
 
-  return result.succeeded.length > 0 ? ExitCode.Success : ExitCode.GeneralError;
+  return exitCode;
 }
 
 async function handleBulkUpdate(options: IssueCommandOptions): Promise<number> {
@@ -1156,6 +1170,10 @@ async function handleBulkUpdate(options: IssueCommandOptions): Promise<number> {
 
   if (Object.keys(input).length === 0) {
     return emitValidationError("bulk-update requires at least one field to update (--state, --assignee, --priority, --label).", options);
+  }
+
+  if (options.dryRun) {
+    return emitDryRunResult("bulk-update", "issue", { ids: identifiers, update: input }, options);
   }
 
   try {
@@ -1239,6 +1257,10 @@ async function handleBulkClose(options: IssueCommandOptions): Promise<number> {
     return emitValidationError("--ids is required for issue bulk-close.", options);
   }
 
+  if (options.dryRun) {
+    return emitDryRunResult("bulk-close", "issue", { ids: identifiers }, options);
+  }
+
   try {
     const profile = await resolveStoredProfile({
       paths: {
@@ -1302,6 +1324,10 @@ async function handleBulkAssign(options: IssueCommandOptions): Promise<number> {
 
   if (options.assignee === undefined || options.assignee.trim() === "") {
     return emitValidationError("--assignee is required for issue bulk-assign.", options);
+  }
+
+  if (options.dryRun) {
+    return emitDryRunResult("bulk-assign", "issue", { ids: identifiers, assignee: options.assignee }, options);
   }
 
   try {

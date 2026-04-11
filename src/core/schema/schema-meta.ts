@@ -56,3 +56,38 @@ export async function loadSchemaFile(filePath: string): Promise<unknown> {
   const raw = await readFile(filePath, "utf8");
   return JSON.parse(raw) as unknown;
 }
+
+export function computeSchemaFingerprint(schema: Record<string, unknown>): string | null {
+  const types = schema.types;
+  if (!Array.isArray(types)) {
+    return null;
+  }
+
+  const typeEntries = types
+    .filter((t): t is { name: string; fields?: Array<{ name: string }>; inputFields?: Array<{ name: string }>; enumValues?: Array<{ name: string }> } =>
+      t !== null && typeof t === "object" && typeof (t as Record<string, unknown>).name === "string"
+    )
+    .filter((t) => !t.name.startsWith("__"))
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map((t) => {
+      const fields = [
+        ...(Array.isArray(t.fields) ? t.fields.map((f) => f.name) : []),
+        ...(Array.isArray(t.inputFields) ? t.inputFields.map((f) => f.name) : []),
+        ...(Array.isArray(t.enumValues) ? t.enumValues.map((f) => f.name) : [])
+      ].sort().join(",");
+      return fields.length > 0 ? `${t.name}:${fields}` : t.name;
+    });
+
+  if (typeEntries.length === 0) {
+    return null;
+  }
+
+  const input = typeEntries.join("\n");
+  let hash = 0;
+  for (let i = 0; i < input.length; i++) {
+    const char = input.charCodeAt(i);
+    hash = ((hash << 5) - hash + char) | 0;
+  }
+  const hex = (hash >>> 0).toString(16).padStart(8, "0");
+  return `introspect-${hex}`;
+}

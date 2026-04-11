@@ -68,31 +68,13 @@ function parseArgs(argv: string[]): RegenerateOptions {
 }
 
 // ---------------------------------------------------------------------------
-// Schema version extraction (duplicated from schema.ts to avoid coupling)
+// Schema version extraction — uses shared fingerprint from schema-meta
 // ---------------------------------------------------------------------------
 
+import { computeSchemaFingerprint } from "../core/schema/schema-meta.js";
+
 function extractSchemaVersion(schema: Record<string, unknown>): string | null {
-  const types = schema.types;
-  if (!Array.isArray(types)) return null;
-
-  const typeNames = types
-    .filter((t): t is { name: string } =>
-      t !== null && typeof t === "object" && typeof (t as Record<string, unknown>).name === "string"
-    )
-    .map((t) => t.name)
-    .filter((name) => !name.startsWith("__"))
-    .sort();
-
-  if (typeNames.length === 0) return null;
-
-  const input = typeNames.join("\n");
-  let hash = 0;
-  for (let i = 0; i < input.length; i++) {
-    const char = input.charCodeAt(i);
-    hash = ((hash << 5) - hash + char) | 0;
-  }
-  const hex = (hash >>> 0).toString(16).padStart(8, "0");
-  return `introspect-${hex}`;
+  return computeSchemaFingerprint(schema);
 }
 
 // ---------------------------------------------------------------------------
