@@ -100,7 +100,7 @@ linear team list --json
 linear team get <team-key> --set-default
 ```
 
-Now `linear issue list --json` returns only issues from that team. Override with `--team <other>` or bypass with `--everything`.
+Now `linear issue list --json` returns only issues from that team. Override with `--team <other>` or bypass with `--everything`. Note that `--team` and `--everything` cannot be used together.
 
 ## First commands
 
