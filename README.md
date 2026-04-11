@@ -16,20 +16,23 @@ Requires [Bun](https://bun.sh) to build. The compiled binary has no runtime depe
 ## Quick start
 
 ```bash
-# Authenticate with an API key (store the key in an env var, not as a CLI argument)
+# Authenticate with an API key (create one at https://linear.app/settings/api)
 export LINEAR_API_KEY=lin_api_...
-linear auth login --profile work --api-key-env LINEAR_API_KEY
+linear auth login --profile work --api-key-env LINEAR_API_KEY --set-default
 
-# Verify auth
-linear auth status --json
+# Set a default team so list commands are scoped automatically
+linear team list --json
+linear team get <team-key> --set-default
 
-# List your issues
-linear user me --json
-linear issue list --team INF --state "In Progress" --json
+# Verify setup
+linear auth whoami --json
 
-# Create an issue
-linear issue create --title "Fix pagination bug" --team INF --priority 2 --json
+# Use it
+linear issue list --json
+linear issue create --title "Fix pagination bug" --priority 2 --json
 ```
+
+LLM agents can bootstrap this setup for you — the [linear-cli skill](skills/linear-cli.md) includes first-time setup instructions.
 
 ## Commands
 
