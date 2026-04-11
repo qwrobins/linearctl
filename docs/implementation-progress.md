@@ -14,7 +14,7 @@ The normative product docs remain:
 
 ## Current Status
 
-The project has started implementation and `main` now includes the auth foundations plus the initial raw GraphQL slice from PR #3.
+The project has started implementation and `main` now includes the auth foundations plus the initial raw GraphQL slice through PR #4.
 
 Completed:
 
@@ -51,6 +51,7 @@ Completed:
   - `linear gql query` with inline query text, `--file`, or `--stdin`
   - `linear gql mutation` with inline document text, `--file`, or `--stdin`
   - `linear gql introspect` with the built-in GraphQL introspection query
+  - `linear gql introspect` rejects document-source and variable flags that do not apply to the built-in query
   - variable input via repeated `--var key=value` and `--vars-file`
   - resolved-profile runtime auth for raw GraphQL commands
   - explicit `--json`, `--json-envelope`, or `--raw` output modes for raw GraphQL commands
