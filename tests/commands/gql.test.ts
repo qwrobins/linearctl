@@ -143,6 +143,134 @@ describe("handleGqlCommand", () => {
     }
   });
 
+  it("runs gql introspect with the built-in introspection query", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-gql-"));
+    const { configFile, credentialsFile } = await writeProfileFiles(directory);
+    const fetchSpy = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
+      new Response(JSON.stringify({ data: { __schema: { queryType: { name: "Query" } } } }), { status: 200 })
+    );
+    const fetchImpl = fetchSpy as unknown as FetchLike;
+    const output = captureOutput();
+
+    try {
+      await expect(
+        handleGqlCommand(["introspect"], {
+          json: true,
+          jsonEnvelope: false,
+          raw: false,
+          stdin: false,
+          vars: [],
+          configFile,
+          credentialsFile,
+          env: {},
+          stdinStream: Readable.from([]),
+          fetchImpl
+        })
+      ).resolves.toBe(0);
+
+      expect(output.stdout.join("")).toBe(`{
+  "__schema": {
+    "queryType": {
+      "name": "Query"
+    }
+  }
+}
+`);
+      const fetchBody = JSON.parse(String(fetchSpy.mock.calls[0]?.[1]?.body));
+      expect(fetchBody.query).toContain("query IntrospectionQuery");
+      expect(fetchBody.variables).toBeUndefined();
+    } finally {
+      output.restore();
+    }
+  });
+
+  it("rejects gql introspect document input flags", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-gql-"));
+    const { configFile, credentialsFile } = await writeProfileFiles(directory);
+    const documentFile = join(directory, "introspection.graphql");
+    await writeFile(documentFile, "query { __schema { queryType { name } } }");
+
+    const invalidSources = [
+      {
+        positionals: ["introspect", "query { viewer { id } }"] as string[],
+        options: {
+          stdin: false,
+          stdinStream: Readable.from([]),
+          fetchImpl: vi.fn() as unknown as FetchLike
+        }
+      },
+      {
+        positionals: ["introspect"] as string[],
+        options: {
+          file: documentFile,
+          stdin: false,
+          stdinStream: Readable.from([]),
+          fetchImpl: vi.fn() as unknown as FetchLike
+        }
+      },
+      {
+        positionals: ["introspect"] as string[],
+        options: {
+          stdin: true,
+          stdinStream: Readable.from(["query { viewer { id } }"]),
+          fetchImpl: vi.fn() as unknown as FetchLike
+        }
+      }
+    ];
+
+    for (const invalidSource of invalidSources) {
+      const output = captureOutput();
+
+      try {
+        await expect(
+          handleGqlCommand(invalidSource.positionals, {
+            json: true,
+            jsonEnvelope: false,
+            raw: false,
+            vars: [],
+            configFile,
+            credentialsFile,
+            env: {},
+            ...invalidSource.options
+          })
+        ).resolves.toBe(5);
+
+        expect(output.stderr.join("")).toContain(
+          "gql introspect does not accept inline documents, --file, or --stdin"
+        );
+      } finally {
+        output.restore();
+      }
+    }
+  });
+
+  it("rejects gql introspect variable input", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-gql-"));
+    const { configFile, credentialsFile } = await writeProfileFiles(directory);
+    const output = captureOutput();
+
+    try {
+      await expect(
+        handleGqlCommand(["introspect"], {
+          json: true,
+          jsonEnvelope: false,
+          raw: false,
+          stdin: false,
+          vars: ['includeDeprecated=true'],
+          configFile,
+          credentialsFile,
+          env: {},
+          stdinStream: Readable.from([]),
+          fetchImpl: vi.fn() as unknown as FetchLike
+        })
+      ).resolves.toBe(5);
+
+      expect(output.stderr.join("")).toContain("gql introspect does not accept --var or --vars-file input");
+    } finally {
+      output.restore();
+    }
+  });
+
   it("runs gql mutation from a file and merges vars-file with inline vars", async () => {
     const directory = await mkdtemp(join(tmpdir(), "linear-cli-gql-"));
     const { configFile, credentialsFile } = await writeProfileFiles(directory);

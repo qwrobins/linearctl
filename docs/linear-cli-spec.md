@@ -63,6 +63,7 @@ Purpose:
 
 Examples:
 
+- `linear gql introspect --json`
 - `linear gql query '{ viewer { id name } }' --json`
 - `linear gql mutation --file issue-create.graphql --vars-file vars.json --json-envelope`
 

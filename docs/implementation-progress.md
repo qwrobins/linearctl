@@ -14,13 +14,7 @@ The normative product docs remain:
 
 ## Current Status
 
-The project has started implementation and `main` includes the first two foundational slices.
-
-In flight on PR #3 (`codex/auth-and-raw-graphql-foundations`, head `94786cd`):
-
-- review follow-up for the auth and raw GraphQL slice has been pushed
-- local CodeRabbit review on the committed diff is clean
-- GitHub may still show older CodeRabbit comments tied to the original PR head commit
+The project has started implementation and `main` now includes the auth foundations plus the initial raw GraphQL slice from PR #3.
 
 Completed:
 
@@ -56,6 +50,7 @@ Completed:
 - Initial Phase 3 raw GraphQL support:
   - `linear gql query` with inline query text, `--file`, or `--stdin`
   - `linear gql mutation` with inline document text, `--file`, or `--stdin`
+  - `linear gql introspect` with the built-in GraphQL introspection query
   - variable input via repeated `--var key=value` and `--vars-file`
   - resolved-profile runtime auth for raw GraphQL commands
   - explicit `--json`, `--json-envelope`, or `--raw` output modes for raw GraphQL commands
@@ -72,7 +67,6 @@ Continue Phase 3 raw GraphQL support and close the remaining auth/runtime gaps.
 
 Suggested scope:
 
-- `linear gql introspect`
 - initial `linear schema version`
 - initial `linear schema pull` scaffolding and bundled schema-version surface
 - JSON envelope support for auth commands where useful

@@ -77,6 +77,7 @@ Current scaffold:
   linear auth logout --profile <name>
   linear auth status [--json]
   linear auth switch <profile>
+  linear gql introspect --json
   linear gql query '{ viewer { id } }' --json
   linear --help
 `);

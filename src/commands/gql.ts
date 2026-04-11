@@ -29,8 +29,8 @@ export async function handleGqlCommand(
 ): Promise<number> {
   const [subcommand, ...rest] = positionals;
 
-  if (subcommand !== "query" && subcommand !== "mutation") {
-    process.stderr.write("Error: unsupported gql command. Try linear gql query or linear gql mutation.\n");
+  if (subcommand !== "query" && subcommand !== "mutation" && subcommand !== "introspect") {
+    process.stderr.write("Error: unsupported gql command. Try linear gql query, linear gql mutation, or linear gql introspect.\n");
     return 5;
   }
 
@@ -41,12 +41,17 @@ export async function handleGqlCommand(
   }
 
   try {
-    const document = await resolveGraphQLDocument(rest, options);
+    const document = await resolveGraphQLDocument(subcommand, rest, options);
     if (document === undefined) {
       return 5;
     }
 
     const variables = await resolveVariables(options);
+    if (subcommand === "introspect" && (Object.keys(variables).length > 0 || options.varsFile !== undefined)) {
+      process.stderr.write("Error: gql introspect does not accept --var or --vars-file input.\n");
+      return 5;
+    }
+
     const profile = await resolveStoredProfile({
       paths: {
         configFile: options.configFile,
@@ -116,9 +121,19 @@ export async function handleGqlCommand(
 }
 
 async function resolveGraphQLDocument(
+  subcommand: string,
   positionals: string[],
   options: Pick<GqlCommandOptions, "stdin" | "file" | "stdinStream">
 ): Promise<string | undefined> {
+  if (subcommand === "introspect") {
+    if (positionals.length > 0 || options.stdin || options.file !== undefined) {
+      process.stderr.write("Error: gql introspect does not accept inline documents, --file, or --stdin.\n");
+      return undefined;
+    }
+
+    return INTROSPECTION_QUERY;
+  }
+
   const inlineQuery = positionals.join(" ").trim();
   const sourceCount = [inlineQuery !== "", options.stdin, options.file !== undefined].filter(Boolean).length;
 
@@ -269,3 +284,103 @@ async function readAllStdin(stdin: NodeJS.ReadableStream): Promise<string> {
 function isTtyInput(stdin: NodeJS.ReadableStream): boolean {
   return "isTTY" in stdin && stdin.isTTY === true;
 }
+
+const INTROSPECTION_QUERY = `query IntrospectionQuery {
+  __schema {
+    queryType {
+      name
+    }
+    mutationType {
+      name
+    }
+    subscriptionType {
+      name
+    }
+    types {
+      ...FullType
+    }
+    directives {
+      name
+      description
+      locations
+      args {
+        ...InputValue
+      }
+    }
+  }
+}
+
+fragment FullType on __Type {
+  kind
+  name
+  description
+  fields(includeDeprecated: true) {
+    name
+    description
+    args {
+      ...InputValue
+    }
+    type {
+      ...TypeRef
+    }
+    isDeprecated
+    deprecationReason
+  }
+  inputFields {
+    ...InputValue
+  }
+  interfaces {
+    ...TypeRef
+  }
+  enumValues(includeDeprecated: true) {
+    name
+    description
+    isDeprecated
+    deprecationReason
+  }
+  possibleTypes {
+    ...TypeRef
+  }
+}
+
+fragment InputValue on __InputValue {
+  name
+  description
+  type {
+    ...TypeRef
+  }
+  defaultValue
+}
+
+fragment TypeRef on __Type {
+  kind
+  name
+  ofType {
+    kind
+    name
+    ofType {
+      kind
+      name
+      ofType {
+        kind
+        name
+        ofType {
+          kind
+          name
+          ofType {
+            kind
+            name
+            ofType {
+              kind
+              name
+              ofType {
+                kind
+                name
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}`;
