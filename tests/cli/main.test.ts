@@ -162,6 +162,13 @@ describe("CLI scaffold", () => {
     });
   });
 
+  it("rejects command-specific flags on auth commands", async () => {
+    await expect(runCli(["auth", "status", "--raw"])).rejects.toMatchObject({
+      code: 5,
+      stderr: expect.stringContaining("Unknown option '--raw'")
+    });
+  });
+
   it("rejects API key login without an explicit secret source", async () => {
     const directory = await mkdtemp(join(tmpdir(), "linear-cli-main-"));
 

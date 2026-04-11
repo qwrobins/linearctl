@@ -214,4 +214,21 @@ describe("parseCredentials", () => {
     });
     expect(removeCredentialsProfile(stored, " work ")).toEqual({ profiles: {} });
   });
+
+  it("rejects invalid profile names when mutating credentials", () => {
+    expect(() =>
+      setCredentialsProfile(
+        { profiles: {} },
+        {
+          profileName: " bad[name] ",
+          type: "api_key",
+          apiKey: "lin_api_work"
+        }
+      )
+    ).toThrow("credentials profile name contains unsupported characters");
+
+    expect(() => removeCredentialsProfile({ profiles: {} }, " ")).toThrow(
+      "credentials profile name cannot be empty"
+    );
+  });
 });

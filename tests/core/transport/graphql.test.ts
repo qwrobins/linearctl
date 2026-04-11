@@ -113,4 +113,22 @@ describe("requestGraphQL", () => {
       errors: [{ message: "Resolver failed" }]
     });
   });
+
+  it("rejects array JSON responses as invalid GraphQL payloads", async () => {
+    const fetchImpl = vi.fn(async () => new Response("[]", { status: 200 })) as FetchLike;
+
+    await expect(
+      executeGraphQL({
+        query: "query { viewer { id } }",
+        credentials: {
+          profileName: "work",
+          type: "api_key",
+          apiKey: "lin_api_work"
+        },
+        fetchImpl
+      })
+    ).rejects.toMatchObject({
+      kind: "invalid-response"
+    });
+  });
 });

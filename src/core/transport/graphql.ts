@@ -144,7 +144,7 @@ function parseGraphQLResponse<TData>(responseText: string, status?: number): Gra
     );
   }
 
-  if (parsed === null || typeof parsed !== "object") {
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
     throw new GraphQLTransportError("Linear GraphQL response was not valid JSON data", "invalid-response", status);
   }
 

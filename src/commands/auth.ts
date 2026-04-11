@@ -444,18 +444,18 @@ export async function handleAuthCommand(
       return ExitCode.ValidationError;
     }
 
-    const config = await loadOptionalConfig(options.configFile);
-    let profileExists = Object.hasOwn(config.profiles, profileName);
-
-    if (!profileExists && (await fileExists(options.credentialsFile))) {
-      const credentials = await loadCredentialsFile(options.credentialsFile);
-      profileExists = Object.hasOwn(credentials.profiles, profileName);
-    }
-
-    if (!profileExists) {
+    if (!(await fileExists(options.credentialsFile))) {
       process.stderr.write(`Error: Profile "${profileName}" does not exist.\n`);
       return ExitCode.ValidationError;
     }
+
+    const credentials = await loadCredentialsFile(options.credentialsFile);
+    if (!Object.hasOwn(credentials.profiles, profileName)) {
+      process.stderr.write(`Error: Profile "${profileName}" does not exist.\n`);
+      return ExitCode.ValidationError;
+    }
+
+    const config = await loadOptionalConfig(options.configFile);
 
     await writeLinearConfigFile(options.configFile, setDefaultProfile(config, profileName));
 

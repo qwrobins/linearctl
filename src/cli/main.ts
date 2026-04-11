@@ -4,6 +4,63 @@ import { handleAuthCommand } from "../commands/auth.js";
 import { handleGqlCommand } from "../commands/gql.js";
 import { curatedCommandMetadata, defaultLinearConfigPaths, ExitCode } from "../index.js";
 
+const CLI_OPTION_DEFINITIONS = {
+  help: { type: "boolean", short: "h" },
+  json: { type: "boolean" },
+  "json-envelope": { type: "boolean" },
+  metadata: { type: "string" },
+  config: { type: "string" },
+  "config-file": { type: "string" },
+  credentials: { type: "string" },
+  "credentials-file": { type: "string" },
+  profile: { type: "string" },
+  "api-key-env": { type: "string" },
+  "api-key-stdin": { type: "boolean" },
+  oauth: { type: "boolean" },
+  "set-default": { type: "boolean" },
+  "remove-config": { type: "boolean" },
+  "api-url": { type: "string" },
+  raw: { type: "boolean" },
+  stdin: { type: "boolean" },
+  file: { type: "string" },
+  "vars-file": { type: "string" },
+  var: { type: "string", multiple: true }
+} as const;
+
+const AUTH_OPTION_DEFINITIONS = {
+  help: CLI_OPTION_DEFINITIONS.help,
+  json: CLI_OPTION_DEFINITIONS.json,
+  "json-envelope": CLI_OPTION_DEFINITIONS["json-envelope"],
+  config: CLI_OPTION_DEFINITIONS.config,
+  "config-file": CLI_OPTION_DEFINITIONS["config-file"],
+  credentials: CLI_OPTION_DEFINITIONS.credentials,
+  "credentials-file": CLI_OPTION_DEFINITIONS["credentials-file"],
+  profile: CLI_OPTION_DEFINITIONS.profile,
+  "api-key-env": CLI_OPTION_DEFINITIONS["api-key-env"],
+  "api-key-stdin": CLI_OPTION_DEFINITIONS["api-key-stdin"],
+  oauth: CLI_OPTION_DEFINITIONS.oauth,
+  "set-default": CLI_OPTION_DEFINITIONS["set-default"],
+  "remove-config": CLI_OPTION_DEFINITIONS["remove-config"],
+  "api-url": CLI_OPTION_DEFINITIONS["api-url"]
+} as const;
+
+const GQL_OPTION_DEFINITIONS = {
+  help: CLI_OPTION_DEFINITIONS.help,
+  json: CLI_OPTION_DEFINITIONS.json,
+  "json-envelope": CLI_OPTION_DEFINITIONS["json-envelope"],
+  config: CLI_OPTION_DEFINITIONS.config,
+  "config-file": CLI_OPTION_DEFINITIONS["config-file"],
+  credentials: CLI_OPTION_DEFINITIONS.credentials,
+  "credentials-file": CLI_OPTION_DEFINITIONS["credentials-file"],
+  profile: CLI_OPTION_DEFINITIONS.profile,
+  "api-url": CLI_OPTION_DEFINITIONS["api-url"],
+  raw: CLI_OPTION_DEFINITIONS.raw,
+  stdin: CLI_OPTION_DEFINITIONS.stdin,
+  file: CLI_OPTION_DEFINITIONS.file,
+  "vars-file": CLI_OPTION_DEFINITIONS["vars-file"],
+  var: CLI_OPTION_DEFINITIONS.var
+} as const;
+
 function printTopLevelHelp(): void {
   process.stdout.write(`linear
 
@@ -52,40 +109,121 @@ interface ParsedCliArguments {
 }
 
 function parseCliArguments(argv: string[]): ParsedCliArguments {
+  const [leadingOptionArgs, commandAndArgs] = splitArgvAtFirstPositional(argv);
+  const topLevel = parseCliOptionSet(leadingOptionArgs, CLI_OPTION_DEFINITIONS);
+
+  if (commandAndArgs.length === 0) {
+    return toParsedCliArguments(topLevel.values, topLevel.positionals);
+  }
+
+  const [command, ...subcommandArgv] = commandAndArgs;
+
+  if (command === "auth") {
+    const commandParse = parseCliOptionSet(subcommandArgv, AUTH_OPTION_DEFINITIONS);
+    return mergeParsedCliArguments(topLevel.values, commandParse.values, [command, ...commandParse.positionals]);
+  }
+
+  if (command === "gql") {
+    const commandParse = parseCliOptionSet(subcommandArgv, GQL_OPTION_DEFINITIONS);
+    return mergeParsedCliArguments(topLevel.values, commandParse.values, [command, ...commandParse.positionals]);
+  }
+
+  return toParsedCliArguments(topLevel.values, commandAndArgs);
+}
+
+function parseCliOptionSet(
+  argv: string[],
+  options: typeof CLI_OPTION_DEFINITIONS | typeof AUTH_OPTION_DEFINITIONS | typeof GQL_OPTION_DEFINITIONS
+): { values: Record<string, unknown>; positionals: string[] } {
+  const { values, positionals } = parseArgs({
+    args: argv,
+    options,
+    allowPositionals: true,
+    strict: true
+  });
+
+  return {
+    values: values as Record<string, unknown>,
+    positionals
+  };
+}
+
+function splitArgvAtFirstPositional(argv: string[]): [string[], string[]] {
+  let index = 0;
+
+  while (index < argv.length) {
+    const token = argv[index];
+
+    if (token === undefined) {
+      break;
+    }
+
+    if (token === "--") {
+      return [argv.slice(0, index), argv.slice(index + 1)];
+    }
+
+    if (!token.startsWith("-") || token === "-") {
+      return [argv.slice(0, index), argv.slice(index)];
+    }
+
+    if (token.startsWith("--")) {
+      const [optionName] = token.slice(2).split("=", 1);
+      const optionDefinition = CLI_OPTION_DEFINITIONS[optionName as keyof typeof CLI_OPTION_DEFINITIONS];
+
+      if (optionDefinition === undefined) {
+        return [argv.slice(), []];
+      }
+
+      if (optionDefinition.type === "string" && !token.includes("=")) {
+        index += 2;
+        continue;
+      }
+
+      index += 1;
+      continue;
+    }
+
+    if (token === "-h") {
+      index += 1;
+      continue;
+    }
+
+    return [argv.slice(), []];
+  }
+
+  return [argv.slice(), []];
+}
+
+function mergeParsedCliArguments(
+  topLevelValues: Record<string, unknown>,
+  commandValues: Record<string, unknown>,
+  positionals: string[]
+): ParsedCliArguments {
+  return toParsedCliArguments(
+    {
+      ...topLevelValues,
+      ...commandValues,
+      var: mergeStringArrays(topLevelValues.var, commandValues.var)
+    },
+    positionals
+  );
+}
+
+function mergeStringArrays(left: unknown, right: unknown): string[] | undefined {
+  const merged = [
+    ...(Array.isArray(left) ? left : []),
+    ...(Array.isArray(right) ? right : [])
+  ].filter((value): value is string => typeof value === "string");
+
+  return merged.length > 0 ? merged : undefined;
+}
+
+function toParsedCliArguments(values: Record<string, unknown>, positionals: string[]): ParsedCliArguments {
   let help = false;
   let json = false;
   let metadata: string | undefined;
   let configFile = defaultLinearConfigPaths().configFile;
   let credentialsFile = defaultLinearConfigPaths().credentialsFile;
-  let positionals: string[] = [];
-
-  const { values, positionals: parsedPositionals } = parseArgs({
-    args: argv,
-    options: {
-      help: { type: "boolean", short: "h" },
-      json: { type: "boolean" },
-      "json-envelope": { type: "boolean" },
-      metadata: { type: "string" },
-      config: { type: "string" },
-      "config-file": { type: "string" },
-      credentials: { type: "string" },
-      "credentials-file": { type: "string" },
-      profile: { type: "string" },
-      "api-key-env": { type: "string" },
-      "api-key-stdin": { type: "boolean" },
-      oauth: { type: "boolean" },
-      "set-default": { type: "boolean" },
-      "remove-config": { type: "boolean" },
-      "api-url": { type: "string" },
-      raw: { type: "boolean" },
-      stdin: { type: "boolean" },
-      file: { type: "string" },
-      "vars-file": { type: "string" },
-      var: { type: "string", multiple: true }
-    },
-    allowPositionals: true,
-    strict: true
-  });
 
   help = values.help === true;
   json = values.json === true;
@@ -102,7 +240,6 @@ function parseCliArguments(argv: string[]): ParsedCliArguments {
   if (typeof values["credentials-file"] === "string") {
     credentialsFile = values["credentials-file"];
   }
-  positionals = parsedPositionals;
 
   return {
     help,

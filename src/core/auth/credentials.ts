@@ -61,7 +61,7 @@ export function setCredentialsProfile(
   credentials: CredentialsStore,
   profileCredentials: ProfileCredentials
 ): CredentialsStore {
-  const profileName = profileCredentials.profileName.trim();
+  const profileName = normalizeAndValidateProfileName(profileCredentials.profileName);
 
   return {
     profiles: {
@@ -78,11 +78,11 @@ export function removeCredentialsProfile(
   credentials: CredentialsStore,
   profileName: string
 ): CredentialsStore {
-  const trimmedProfileName = profileName.trim();
+  const trimmedProfileName = normalizeAndValidateProfileName(profileName);
   const profiles = Object.create(null) as Record<string, ProfileCredentials>;
 
   for (const [existingProfileName, profileCredentials] of Object.entries(credentials.profiles)) {
-    if (existingProfileName !== trimmedProfileName) {
+    if (normalizeAndValidateProfileName(existingProfileName) !== trimmedProfileName) {
       profiles[existingProfileName] = profileCredentials;
     }
   }
@@ -189,4 +189,23 @@ export async function assertCredentialsFileHandlePermissions(handle: FileHandle)
   if ((mode & 0o077) !== 0) {
     throw new Error("credentials file permissions must not allow group or other access");
   }
+}
+
+function normalizeAndValidateProfileName(profileName: string): string {
+  const normalized = profileName.trim();
+
+  if (normalized === "") {
+    throw new Error("credentials profile name cannot be empty");
+  }
+
+  if (
+    normalized.includes("\n") ||
+    normalized.includes("\r") ||
+    normalized.includes("[") ||
+    normalized.includes("]")
+  ) {
+    throw new Error("credentials profile name contains unsupported characters");
+  }
+
+  return normalized;
 }

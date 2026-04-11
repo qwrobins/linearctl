@@ -175,4 +175,27 @@ describe("handleAuthCommand", () => {
     expect(await readFile(credentialsFile, "utf8")).toBe("\n");
     await expect(loadLinearConfigFile(configFile)).resolves.toEqual({ profiles: {} });
   });
+
+  it("rejects auth switch when only config metadata exists", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-auth-"));
+    const configFile = join(directory, "config");
+    await writeFile(
+      configFile,
+      [
+        "[default]",
+        "profile = work",
+        "",
+        "[profile work]",
+        "workspace = main",
+        ""
+      ].join("\n")
+    );
+
+    await expect(
+      handleAuthCommand(
+        ["switch", "work"],
+        baseOptions(directory)
+      )
+    ).resolves.toBe(5);
+  });
 });
