@@ -11,5 +11,7 @@ export * from "./core/metadata/command-metadata.js";
 export * from "./core/output/envelope.js";
 export * from "./core/io/stdin.js";
 export * from "./core/schema/schema-meta.js";
+export * from "./core/pagination/pagination.js";
 export * from "./core/transport/graphql.js";
+export * from "./commands/issue.js";
 export * from "./commands/metadata/curated-taxonomy.js";
