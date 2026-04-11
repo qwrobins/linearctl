@@ -1,9 +1,12 @@
 import { failureEnvelope, successEnvelope } from "../core/output/envelope.js";
+import type { PageInfo } from "../core/output/envelope.js";
 import { mapCommandFailure } from "../core/errors/command-failure.js";
 import { ExitCode } from "../core/errors/exit-codes.js";
 import { executeGraphQL } from "../core/transport/graphql.js";
 import type { FetchLike, GraphQLErrorPayload } from "../core/transport/graphql.js";
 import { resolveStoredProfile } from "../core/auth/runtime.js";
+import { paginateGraphQL, validatePaginationOptions } from "../core/pagination/pagination.js";
+import type { PaginationOptions } from "../core/pagination/pagination.js";
 
 export interface IssueCommandOptions {
   json: boolean;
@@ -14,7 +17,7 @@ export interface IssueCommandOptions {
   apiUrl?: string;
   env: Record<string, string | undefined>;
   fetchImpl?: FetchLike;
-  // issue create flags
+  // issue create/update flags
   title?: string;
   team?: string;
   description?: string;
@@ -23,6 +26,17 @@ export interface IssueCommandOptions {
   label?: string;
   state?: string;
   inputJson?: string;
+  // issue comment flags
+  body?: string;
+  // issue list flags
+  filterJson?: string;
+  orderBy?: string;
+  orderDir?: string;
+  // pagination flags
+  all?: boolean;
+  max?: number;
+  pageSize?: number;
+  after?: string;
 }
 
 const CURATED_ISSUE_FRAGMENT = `
@@ -61,6 +75,51 @@ mutation IssueCreate($input: IssueCreateInput!) {
   }
 }
 ${CURATED_ISSUE_FRAGMENT}`;
+
+const ISSUE_LIST_QUERY = `
+query IssueList($first: Int!, $after: String, $filter: IssueFilter) {
+  issues(first: $first, after: $after, filter: $filter) {
+    nodes {
+      ...CuratedIssue
+    }
+    pageInfo {
+      hasNextPage
+      endCursor
+    }
+  }
+}
+${CURATED_ISSUE_FRAGMENT}`;
+
+const ISSUE_UPDATE_MUTATION = `
+mutation IssueUpdate($id: String!, $input: IssueUpdateInput!) {
+  issueUpdate(id: $id, input: $input) {
+    success
+    issue {
+      ...CuratedIssue
+    }
+  }
+}
+${CURATED_ISSUE_FRAGMENT}`;
+
+const ISSUE_ARCHIVE_MUTATION = `
+mutation IssueArchive($id: String!) {
+  issueArchive(id: $id) {
+    success
+  }
+}`;
+
+const COMMENT_CREATE_MUTATION = `
+mutation CommentCreate($input: CommentCreateInput!) {
+  commentCreate(input: $input) {
+    success
+    comment {
+      id
+      body
+      createdAt
+      user { id name email }
+    }
+  }
+}`;
 
 interface RawIssue {
   id: string;
@@ -348,6 +407,531 @@ async function handleIssueCreate(options: IssueCommandOptions): Promise<number> 
   }
 }
 
+async function handleIssueList(options: IssueCommandOptions): Promise<number> {
+  const paginationOptions: PaginationOptions = {
+    all: options.all,
+    max: options.max,
+    pageSize: options.pageSize,
+    after: options.after
+  };
+
+  const validationError = validatePaginationOptions(paginationOptions);
+  if (validationError !== undefined) {
+    process.stderr.write(`Error: ${validationError}\n`);
+    return ExitCode.ValidationError;
+  }
+
+  let filter: Record<string, unknown> | undefined;
+
+  if (options.filterJson !== undefined) {
+    try {
+      const parsed = JSON.parse(options.filterJson) as unknown;
+      if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+        process.stderr.write("Error: --filter-json must be a JSON object.\n");
+        return ExitCode.ValidationError;
+      }
+      filter = parsed as Record<string, unknown>;
+    } catch {
+      process.stderr.write("Error: --filter-json contains invalid JSON.\n");
+      return ExitCode.ValidationError;
+    }
+  }
+
+  if (filter === undefined) {
+    const buildFilter: Record<string, unknown> = {};
+    if (options.state !== undefined) {
+      buildFilter.state = { name: { eq: options.state } };
+    }
+    if (options.assignee !== undefined) {
+      buildFilter.assignee = { id: { eq: options.assignee } };
+    }
+    if (options.team !== undefined) {
+      buildFilter.team = { id: { eq: options.team } };
+    }
+    if (options.label !== undefined) {
+      buildFilter.labels = { some: { id: { eq: options.label } } };
+    }
+    if (options.priority !== undefined) {
+      const parsed = Number(options.priority);
+      if (!Number.isInteger(parsed)) {
+        process.stderr.write("Error: --priority must be an integer.\n");
+        return ExitCode.ValidationError;
+      }
+      buildFilter.priority = { eq: parsed };
+    }
+    if (Object.keys(buildFilter).length > 0) {
+      filter = buildFilter;
+    }
+  }
+
+  try {
+    const profile = await resolveStoredProfile({
+      paths: {
+        configFile: options.configFile,
+        credentialsFile: options.credentialsFile
+      },
+      ...(options.profile === undefined ? {} : { explicitProfile: options.profile }),
+      env: options.env
+    });
+
+    const result = await paginateGraphQL<RawIssue>({
+      query: ISSUE_LIST_QUERY,
+      variables: filter === undefined ? {} : { filter },
+      options: paginationOptions,
+      credentials: profile.credentials,
+      ...(options.apiUrl === undefined
+        ? profile.metadata.baseUrl === undefined
+          ? {}
+          : { apiUrl: profile.metadata.baseUrl }
+        : { apiUrl: options.apiUrl }),
+      ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl }),
+      extractConnection: (data: unknown) => {
+        const d = data as { issues: { nodes: RawIssue[]; pageInfo: PageInfo } };
+        return d.issues;
+      }
+    });
+
+    const issues = result.items.map(normalizeIssue);
+
+    if (options.jsonEnvelope) {
+      const envelope = successEnvelope(issues, { sourceLayer: "curated", profile: profile.name }, result.pageInfo);
+      process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
+    } else if (options.json) {
+      process.stdout.write(`${JSON.stringify(issues, null, 2)}\n`);
+    } else {
+      if (issues.length === 0) {
+        process.stderr.write("No issues found.\n");
+      } else {
+        for (const issue of issues) {
+          const state = issue.state !== null ? issue.state.name : "";
+          const assignee = issue.assignee !== null ? issue.assignee.name : "";
+          process.stdout.write(`${issue.identifier}\t${issue.title}\t${state}\t${assignee}\n`);
+        }
+      }
+    }
+
+    return ExitCode.Success;
+  } catch (error) {
+    const failure = mapCommandFailure(error);
+
+    if (options.jsonEnvelope) {
+      const envelope = failureEnvelope([failure.error], {
+        sourceLayer: "curated",
+        ...(options.profile === undefined ? {} : { profile: options.profile })
+      });
+      process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
+    } else {
+      process.stderr.write(`Error: ${failure.error.message}\n`);
+    }
+
+    return failure.exitCode;
+  }
+}
+
+async function handleIssueUpdate(
+  identifier: string,
+  options: IssueCommandOptions
+): Promise<number> {
+  let inputFromJson: Record<string, unknown> = {};
+
+  if (options.inputJson !== undefined) {
+    try {
+      const parsed = JSON.parse(options.inputJson) as unknown;
+      if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+        process.stderr.write("Error: --input-json must be a JSON object.\n");
+        return ExitCode.ValidationError;
+      }
+      inputFromJson = parsed as Record<string, unknown>;
+    } catch {
+      process.stderr.write("Error: --input-json contains invalid JSON.\n");
+      return ExitCode.ValidationError;
+    }
+  }
+
+  const input: Record<string, unknown> = { ...inputFromJson };
+
+  if (options.title !== undefined) {
+    input.title = options.title;
+  }
+  if (options.description !== undefined) {
+    input.description = options.description;
+  }
+  if (options.priority !== undefined) {
+    const parsed = Number(options.priority);
+    if (!Number.isInteger(parsed)) {
+      process.stderr.write("Error: --priority must be an integer.\n");
+      return ExitCode.ValidationError;
+    }
+    input.priority = parsed;
+  }
+  if (options.assignee !== undefined) {
+    input.assigneeId = options.assignee;
+  }
+  if (options.label !== undefined) {
+    input.labelIds = [options.label];
+  }
+  if (options.state !== undefined) {
+    input.stateId = options.state;
+  }
+
+  if (Object.keys(input).length === 0) {
+    process.stderr.write("Error: issue update requires at least one field to update.\n");
+    return ExitCode.ValidationError;
+  }
+
+  try {
+    const profile = await resolveStoredProfile({
+      paths: {
+        configFile: options.configFile,
+        credentialsFile: options.credentialsFile
+      },
+      ...(options.profile === undefined ? {} : { explicitProfile: options.profile }),
+      env: options.env
+    });
+
+    const response = await executeGraphQL<{
+      issueUpdate: { success: boolean; issue: RawIssue | null };
+    }>({
+      query: ISSUE_UPDATE_MUTATION,
+      variables: { id: identifier, input },
+      credentials: profile.credentials,
+      ...(options.apiUrl === undefined
+        ? profile.metadata.baseUrl === undefined
+          ? {}
+          : { apiUrl: profile.metadata.baseUrl }
+        : { apiUrl: options.apiUrl }),
+      ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl })
+    });
+
+    if (
+      hasErrors(response.body.errors) ||
+      response.body.data?.issueUpdate?.issue === null ||
+      response.body.data?.issueUpdate?.issue === undefined
+    ) {
+      if (options.jsonEnvelope) {
+        const errors = mapGraphQLErrors(response.body.errors);
+        const envelope = failureEnvelope(
+          errors.length > 0 ? errors : [{ category: "general", message: "Issue update failed" }],
+          { sourceLayer: "curated", profile: profile.name }
+        );
+        process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
+      } else {
+        const errorMessage = response.body.errors?.[0]?.message ?? "Issue update failed";
+        process.stderr.write(`Error: ${errorMessage}\n`);
+      }
+      return ExitCode.GeneralError;
+    }
+
+    const issue = normalizeIssue(response.body.data.issueUpdate.issue);
+
+    if (options.jsonEnvelope) {
+      const envelope = successEnvelope(issue, { sourceLayer: "curated", profile: profile.name });
+      process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
+    } else if (options.json) {
+      process.stdout.write(`${JSON.stringify(issue, null, 2)}\n`);
+    } else {
+      process.stdout.write(`Updated ${issue.identifier}: ${issue.title}\n`);
+    }
+
+    return ExitCode.Success;
+  } catch (error) {
+    const failure = mapCommandFailure(error);
+
+    if (options.jsonEnvelope) {
+      const envelope = failureEnvelope([failure.error], {
+        sourceLayer: "curated",
+        ...(options.profile === undefined ? {} : { profile: options.profile })
+      });
+      process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
+    } else {
+      process.stderr.write(`Error: ${failure.error.message}\n`);
+    }
+
+    return failure.exitCode;
+  }
+}
+
+async function handleIssueClose(
+  identifier: string,
+  options: IssueCommandOptions
+): Promise<number> {
+  try {
+    const profile = await resolveStoredProfile({
+      paths: {
+        configFile: options.configFile,
+        credentialsFile: options.credentialsFile
+      },
+      ...(options.profile === undefined ? {} : { explicitProfile: options.profile }),
+      env: options.env
+    });
+
+    const response = await executeGraphQL<{
+      issueArchive: { success: boolean };
+    }>({
+      query: ISSUE_ARCHIVE_MUTATION,
+      variables: { id: identifier },
+      credentials: profile.credentials,
+      ...(options.apiUrl === undefined
+        ? profile.metadata.baseUrl === undefined
+          ? {}
+          : { apiUrl: profile.metadata.baseUrl }
+        : { apiUrl: options.apiUrl }),
+      ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl })
+    });
+
+    if (
+      hasErrors(response.body.errors) ||
+      response.body.data?.issueArchive?.success !== true
+    ) {
+      if (options.jsonEnvelope) {
+        const errors = mapGraphQLErrors(response.body.errors);
+        const envelope = failureEnvelope(
+          errors.length > 0 ? errors : [{ category: "general", message: "Issue archive failed" }],
+          { sourceLayer: "curated", profile: profile.name }
+        );
+        process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
+      } else {
+        const errorMessage = response.body.errors?.[0]?.message ?? "Issue archive failed";
+        process.stderr.write(`Error: ${errorMessage}\n`);
+      }
+      return ExitCode.GeneralError;
+    }
+
+    const result = { id: identifier, identifier, archived: true };
+
+    if (options.jsonEnvelope) {
+      const envelope = successEnvelope(result, { sourceLayer: "curated", profile: profile.name });
+      process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
+    } else if (options.json) {
+      process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+    } else {
+      process.stdout.write(`Archived ${identifier}\n`);
+    }
+
+    return ExitCode.Success;
+  } catch (error) {
+    const failure = mapCommandFailure(error);
+
+    if (options.jsonEnvelope) {
+      const envelope = failureEnvelope([failure.error], {
+        sourceLayer: "curated",
+        ...(options.profile === undefined ? {} : { profile: options.profile })
+      });
+      process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
+    } else {
+      process.stderr.write(`Error: ${failure.error.message}\n`);
+    }
+
+    return failure.exitCode;
+  }
+}
+
+async function handleIssueAssign(
+  identifier: string,
+  assigneeId: string,
+  options: IssueCommandOptions
+): Promise<number> {
+  try {
+    const profile = await resolveStoredProfile({
+      paths: {
+        configFile: options.configFile,
+        credentialsFile: options.credentialsFile
+      },
+      ...(options.profile === undefined ? {} : { explicitProfile: options.profile }),
+      env: options.env
+    });
+
+    const response = await executeGraphQL<{
+      issueUpdate: { success: boolean; issue: RawIssue | null };
+    }>({
+      query: ISSUE_UPDATE_MUTATION,
+      variables: { id: identifier, input: { assigneeId } },
+      credentials: profile.credentials,
+      ...(options.apiUrl === undefined
+        ? profile.metadata.baseUrl === undefined
+          ? {}
+          : { apiUrl: profile.metadata.baseUrl }
+        : { apiUrl: options.apiUrl }),
+      ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl })
+    });
+
+    if (
+      hasErrors(response.body.errors) ||
+      response.body.data?.issueUpdate?.issue === null ||
+      response.body.data?.issueUpdate?.issue === undefined
+    ) {
+      if (options.jsonEnvelope) {
+        const errors = mapGraphQLErrors(response.body.errors);
+        const envelope = failureEnvelope(
+          errors.length > 0 ? errors : [{ category: "general", message: "Issue assign failed" }],
+          { sourceLayer: "curated", profile: profile.name }
+        );
+        process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
+      } else {
+        const errorMessage = response.body.errors?.[0]?.message ?? "Issue assign failed";
+        process.stderr.write(`Error: ${errorMessage}\n`);
+      }
+      return ExitCode.GeneralError;
+    }
+
+    const issue = normalizeIssue(response.body.data.issueUpdate.issue);
+
+    if (options.jsonEnvelope) {
+      const envelope = successEnvelope(issue, { sourceLayer: "curated", profile: profile.name });
+      process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
+    } else if (options.json) {
+      process.stdout.write(`${JSON.stringify(issue, null, 2)}\n`);
+    } else {
+      const name = issue.assignee !== null ? issue.assignee.name : assigneeId;
+      process.stdout.write(`Assigned ${issue.identifier} to ${name}\n`);
+    }
+
+    return ExitCode.Success;
+  } catch (error) {
+    const failure = mapCommandFailure(error);
+
+    if (options.jsonEnvelope) {
+      const envelope = failureEnvelope([failure.error], {
+        sourceLayer: "curated",
+        ...(options.profile === undefined ? {} : { profile: options.profile })
+      });
+      process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
+    } else {
+      process.stderr.write(`Error: ${failure.error.message}\n`);
+    }
+
+    return failure.exitCode;
+  }
+}
+
+interface RawComment {
+  id: string;
+  body: string;
+  createdAt: string;
+  user: { id: string; name: string; email: string } | null;
+}
+
+export interface NormalizedComment {
+  id: string;
+  body: string;
+  createdAt: string;
+  user: { id: string; name: string; email: string } | null;
+}
+
+async function handleIssueComment(
+  identifier: string,
+  options: IssueCommandOptions
+): Promise<number> {
+  if (options.body === undefined || options.body === "") {
+    process.stderr.write("Error: --body is required for issue comment.\n");
+    return ExitCode.ValidationError;
+  }
+
+  try {
+    const profile = await resolveStoredProfile({
+      paths: {
+        configFile: options.configFile,
+        credentialsFile: options.credentialsFile
+      },
+      ...(options.profile === undefined ? {} : { explicitProfile: options.profile }),
+      env: options.env
+    });
+
+    // Resolve identifier to issue ID
+    const getResponse = await executeGraphQL<{ issue: RawIssue | null }>({
+      query: ISSUE_GET_QUERY,
+      variables: { id: identifier },
+      credentials: profile.credentials,
+      ...(options.apiUrl === undefined
+        ? profile.metadata.baseUrl === undefined
+          ? {}
+          : { apiUrl: profile.metadata.baseUrl }
+        : { apiUrl: options.apiUrl }),
+      ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl })
+    });
+
+    if (
+      hasErrors(getResponse.body.errors) ||
+      getResponse.body.data?.issue === null ||
+      getResponse.body.data?.issue === undefined
+    ) {
+      if (options.jsonEnvelope) {
+        const errors = mapGraphQLErrors(getResponse.body.errors);
+        const envelope = failureEnvelope(
+          errors.length > 0 ? errors : [{ category: "not-found", message: "Issue not found" }],
+          { sourceLayer: "curated", profile: profile.name }
+        );
+        process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
+      } else {
+        process.stderr.write("Error: Issue not found\n");
+      }
+      return ExitCode.NotFound;
+    }
+
+    const issueId = getResponse.body.data.issue.id;
+
+    const response = await executeGraphQL<{
+      commentCreate: { success: boolean; comment: RawComment | null };
+    }>({
+      query: COMMENT_CREATE_MUTATION,
+      variables: { input: { issueId, body: options.body } },
+      credentials: profile.credentials,
+      ...(options.apiUrl === undefined
+        ? profile.metadata.baseUrl === undefined
+          ? {}
+          : { apiUrl: profile.metadata.baseUrl }
+        : { apiUrl: options.apiUrl }),
+      ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl })
+    });
+
+    if (
+      hasErrors(response.body.errors) ||
+      response.body.data?.commentCreate?.comment === null ||
+      response.body.data?.commentCreate?.comment === undefined
+    ) {
+      if (options.jsonEnvelope) {
+        const errors = mapGraphQLErrors(response.body.errors);
+        const envelope = failureEnvelope(
+          errors.length > 0 ? errors : [{ category: "general", message: "Comment creation failed" }],
+          { sourceLayer: "curated", profile: profile.name }
+        );
+        process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
+      } else {
+        const errorMessage = response.body.errors?.[0]?.message ?? "Comment creation failed";
+        process.stderr.write(`Error: ${errorMessage}\n`);
+      }
+      return ExitCode.GeneralError;
+    }
+
+    const comment: NormalizedComment = response.body.data.commentCreate.comment;
+
+    if (options.jsonEnvelope) {
+      const envelope = successEnvelope(comment, { sourceLayer: "curated", profile: profile.name });
+      process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
+    } else if (options.json) {
+      process.stdout.write(`${JSON.stringify(comment, null, 2)}\n`);
+    } else {
+      process.stdout.write(`Comment added to ${identifier}\n`);
+    }
+
+    return ExitCode.Success;
+  } catch (error) {
+    const failure = mapCommandFailure(error);
+
+    if (options.jsonEnvelope) {
+      const envelope = failureEnvelope([failure.error], {
+        sourceLayer: "curated",
+        ...(options.profile === undefined ? {} : { profile: options.profile })
+      });
+      process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
+    } else {
+      process.stderr.write(`Error: ${failure.error.message}\n`);
+    }
+
+    return failure.exitCode;
+  }
+}
+
 export async function handleIssueCommand(
   positionals: string[],
   options: IssueCommandOptions
@@ -375,7 +959,68 @@ export async function handleIssueCommand(
     return handleIssueCreate(options);
   }
 
-  process.stderr.write("Error: unsupported issue command. Try linear issue get or linear issue create.\n");
+  if (subcommand === "list") {
+    if (rest.length > 0) {
+      process.stderr.write("Error: issue list does not accept positional arguments.\n");
+      return ExitCode.ValidationError;
+    }
+    return handleIssueList(options);
+  }
+
+  if (subcommand === "update") {
+    const identifier = rest[0];
+    if (identifier === undefined || identifier === "") {
+      process.stderr.write("Error: usage: linear issue update <identifier> [--title ...]\n");
+      return ExitCode.ValidationError;
+    }
+    if (rest.length > 1) {
+      process.stderr.write("Error: issue update accepts exactly one identifier.\n");
+      return ExitCode.ValidationError;
+    }
+    return handleIssueUpdate(identifier, options);
+  }
+
+  if (subcommand === "close") {
+    const identifier = rest[0];
+    if (identifier === undefined || identifier === "") {
+      process.stderr.write("Error: usage: linear issue close <identifier>\n");
+      return ExitCode.ValidationError;
+    }
+    if (rest.length > 1) {
+      process.stderr.write("Error: issue close accepts exactly one identifier.\n");
+      return ExitCode.ValidationError;
+    }
+    return handleIssueClose(identifier, options);
+  }
+
+  if (subcommand === "assign") {
+    const identifier = rest[0];
+    const assigneeId = rest[1];
+    if (identifier === undefined || identifier === "" || assigneeId === undefined || assigneeId === "") {
+      process.stderr.write("Error: usage: linear issue assign <identifier> <assignee-id>\n");
+      return ExitCode.ValidationError;
+    }
+    if (rest.length > 2) {
+      process.stderr.write("Error: issue assign accepts exactly two positional arguments.\n");
+      return ExitCode.ValidationError;
+    }
+    return handleIssueAssign(identifier, assigneeId, options);
+  }
+
+  if (subcommand === "comment") {
+    const identifier = rest[0];
+    if (identifier === undefined || identifier === "") {
+      process.stderr.write("Error: usage: linear issue comment <identifier> --body <text>\n");
+      return ExitCode.ValidationError;
+    }
+    if (rest.length > 1) {
+      process.stderr.write("Error: issue comment accepts exactly one identifier.\n");
+      return ExitCode.ValidationError;
+    }
+    return handleIssueComment(identifier, options);
+  }
+
+  process.stderr.write("Error: unsupported issue command. Try: get, create, list, update, close, assign, comment.\n");
   return ExitCode.ValidationError;
 }
 

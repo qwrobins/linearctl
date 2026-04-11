@@ -72,23 +72,55 @@ Completed:
   - shared `src/core/schema/introspection-query.ts` extracted from duplicated introspection query in `gql.ts`
   - build pipeline updated to copy `schema-meta.json` to dist alongside `curated-commands.json`
 
-## Recommended Next Slice
+- Phase 3 schema check and transport retry:
+  - `linear schema check` with bundled-vs-live drift detection, exit code 6 on drift
+  - transport retry with bounded exponential backoff for 429 rate-limited responses
+  - `--no-retry` and `--max-retries` CLI flags
+  - injectable sleep for fast retry tests
 
-Begin Phase 3 schema check and Phase 4 curated MVP commands.
+- Phase 4 curated MVP commands (all 8 resource groups):
+  - `issue`: list, get, create, update, close, assign, comment (7 operations)
+  - `project`: list, get, create, update (4 operations)
+  - `cycle`: list, get, create, update (4 operations)
+  - `team`: list, get (2 operations)
+  - `user`: list, get, me (3 operations)
+  - `label`: list, get, create (3 operations)
+  - `comment`: list, create, update, delete (4 operations)
+  - `attachment`: list, create, delete (3 operations)
+  - pagination infrastructure with `--all`, `--max`, `--page-size`, `--after`
+  - filtering with `--state`, `--assignee`, `--team`, `--label`, `--priority`, `--filter-json`
+  - stable normalized JSON output contracts for all resources
+  - `--json` and `--json-envelope` support on all commands
+  - human-readable default output for all commands
 
-Suggested scope:
+- Phase 5 generated API layer:
+  - `linear api <resource> <operation>` command handler
+  - manifest-driven command discovery
+  - `linear api --help`, `linear api <resource> --help`, `linear api search <term>`
+  - `--id`, `--input-json`, `--input-file`, `--input-stdin`, `--fields` support
+  - schema-to-command manifest generator script
 
-- `linear schema check` to compare bundled vs live schema version
-- decide whether `--api-url` remains a hidden test/development override or should be documented as `base_url` behavior
-- begin curated `issue` commands: `issue list`, `issue get`, `issue create`
-- GraphQL transport retry with bounded exponential backoff for rate-limited requests
-- pagination infrastructure (`--all`, `--max`, `--page-size`, `--after`)
+- Phase 4 file commands:
+  - `linear file upload <path>` with authenticated PUT to pre-signed URL
+  - `linear file upload --issue <id>` with automatic attachment creation
+  - `linear file url <attachment-id>` with signed URL and `--expires-in`
+  - `linear file download <url>` with authenticated download
 
-Defer unless deliberately scoped:
+- Phase 6 skill packaging:
+  - `linear-cli` skill with full command routing rules and examples
+  - `linear-raw-gql` skill with raw GraphQL fallback guidance
+  - anti-pattern documentation
+  - error handling playbooks
 
-- OAuth browser callback flow
-- generated API layer
-- file upload/download commands
+## Remaining post-MVP work
+
+- OAuth browser callback flow (PKCE, loopback listener, token refresh)
+- JSONL streaming for large paginated outputs
+- Bulk-operation commands
+- Schema regeneration tooling for CI
+- Multi-organization selector UX
+- Name/identifier resolution (team name → ID, etc.)
+- `--dry-run` for destructive commands
 
 ## Verification Baseline
 

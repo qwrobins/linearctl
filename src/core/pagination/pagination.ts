@@ -4,10 +4,10 @@ import type { FetchLike } from "../transport/graphql.js";
 import { executeGraphQL } from "../transport/graphql.js";
 
 export interface PaginationOptions {
-  all?: boolean;
-  max?: number;
-  pageSize?: number;
-  after?: string;
+  all?: boolean | undefined;
+  max?: number | undefined;
+  pageSize?: number | undefined;
+  after?: string | undefined;
 }
 
 const DEFAULT_PAGE_SIZE = 50;
