@@ -181,7 +181,7 @@ async function handleAttachmentList(options: AttachmentCommandOptions): Promise<
         printHumanAttachment(attachment);
       }
       if (attachments.length === 0) {
-        process.stderr.write("No attachments found.\n");
+        process.stdout.write("No attachments found.\n");
       }
     }
 
@@ -204,15 +204,15 @@ async function handleAttachmentList(options: AttachmentCommandOptions): Promise<
 }
 
 async function handleAttachmentCreate(options: AttachmentCommandOptions): Promise<number> {
-  if (options.issue === undefined || options.issue === "") {
+  if (options.issue === undefined || options.issue .trim() === "") {
     return emitValidationError("--issue is required for attachment create.", options);
   }
 
-  if (options.url === undefined || options.url === "") {
+  if (options.url === undefined || options.url .trim() === "") {
     return emitValidationError("--url is required for attachment create.", options);
   }
 
-  if (options.title === undefined || options.title === "") {
+  if (options.title === undefined || options.title .trim() === "") {
     return emitValidationError("--title is required for attachment create.", options);
   }
 
@@ -384,7 +384,7 @@ export async function handleAttachmentCommand(
 
   if (subcommand === "delete") {
     const attachmentId = rest[0];
-    if (attachmentId === undefined || attachmentId === "") {
+    if (attachmentId === undefined || attachmentId .trim() === "") {
       return emitValidationError("usage: linear attachment delete <attachmentId>", options);
     }
     if (rest.length > 1) {

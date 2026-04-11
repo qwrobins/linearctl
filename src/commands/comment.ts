@@ -186,7 +186,7 @@ async function handleCommentList(options: CommentCommandOptions): Promise<number
         printHumanComment(comment);
       }
       if (comments.length === 0) {
-        process.stderr.write("No comments found.\n");
+        process.stdout.write("No items found.\n");
       }
     }
 
@@ -462,7 +462,7 @@ export async function handleCommentCommand(
 
   if (subcommand === "update") {
     const commentId = rest[0];
-    if (commentId === undefined || commentId === "") {
+    if (commentId === undefined || commentId .trim() === "") {
       return emitValidationError("usage: linear comment update <commentId> --body <text>", options);
     }
     if (rest.length > 1) {
@@ -473,7 +473,7 @@ export async function handleCommentCommand(
 
   if (subcommand === "delete") {
     const commentId = rest[0];
-    if (commentId === undefined || commentId === "") {
+    if (commentId === undefined || commentId .trim() === "") {
       return emitValidationError("usage: linear comment delete <commentId>", options);
     }
     if (rest.length > 1) {
