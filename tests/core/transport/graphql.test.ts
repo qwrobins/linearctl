@@ -114,6 +114,25 @@ describe("requestGraphQL", () => {
     });
   });
 
+  it("includes HTTP status when successful responses omit data", async () => {
+    const fetchImpl = vi.fn(async () => new Response("{}", { status: 200 })) as FetchLike;
+
+    await expect(
+      requestGraphQL({
+        query: "query { viewer { id } }",
+        credentials: {
+          profileName: "work",
+          type: "api_key",
+          apiKey: "lin_api_work"
+        },
+        fetchImpl
+      })
+    ).rejects.toMatchObject({
+      kind: "invalid-response",
+      status: 200
+    });
+  });
+
   it("rejects array JSON responses as invalid GraphQL payloads", async () => {
     const fetchImpl = vi.fn(async () => new Response("[]", { status: 200 })) as FetchLike;
 
@@ -130,5 +149,27 @@ describe("requestGraphQL", () => {
     ).rejects.toMatchObject({
       kind: "invalid-response"
     });
+  });
+
+  it("rejects empty API key authorization material", () => {
+    expect(() =>
+      authorizationHeader({
+        profileName: "work",
+        type: "api_key",
+        apiKey: ""
+      })
+    ).toThrow("credentials are missing usable auth material");
+  });
+
+  it("rejects empty OAuth access token authorization material", () => {
+    expect(() =>
+      authorizationHeader({
+        profileName: "work",
+        type: "oauth",
+        accessToken: "",
+        refreshToken: "lin_refresh",
+        expiresAt: "2026-04-07T18:45:00Z"
+      })
+    ).toThrow("credentials are missing usable auth material");
   });
 });

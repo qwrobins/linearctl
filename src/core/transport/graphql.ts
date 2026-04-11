@@ -108,21 +108,27 @@ export async function requestGraphQL<TData>(input: GraphQLRequestInput): Promise
   }
 
   if (response.body.data === undefined) {
-    throw new GraphQLTransportError("Linear GraphQL response was missing data", "invalid-response");
+    throw new GraphQLTransportError("Linear GraphQL response was missing data", "invalid-response", response.status);
   }
 
   return response.body.data;
 }
 
 export function authorizationHeader(credentials: GraphQLRequestInput["credentials"]): string {
-  if (credentials.type === "api_key" && "apiKey" in credentials && typeof credentials.apiKey === "string") {
+  if (
+    credentials.type === "api_key" &&
+    "apiKey" in credentials &&
+    typeof credentials.apiKey === "string" &&
+    credentials.apiKey !== ""
+  ) {
     return credentials.apiKey;
   }
 
   if (
     credentials.type === "oauth" &&
     "accessToken" in credentials &&
-    typeof credentials.accessToken === "string"
+    typeof credentials.accessToken === "string" &&
+    credentials.accessToken !== ""
   ) {
     return `Bearer ${credentials.accessToken}`;
   }
