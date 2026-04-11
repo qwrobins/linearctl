@@ -290,19 +290,25 @@ function extractSchemaVersion(schema: Record<string, unknown>): string | null {
     return null;
   }
 
-  const typeNames = types
-    .filter((t): t is { name: string } => t !== null && typeof t === "object" && typeof (t as Record<string, unknown>).name === "string")
-    .map((t) => t.name)
-    .filter((name) => !name.startsWith("__"))
-    .sort();
+  const typeEntries = types
+    .filter((t): t is { name: string; fields?: Array<{ name: string }> } =>
+      t !== null && typeof t === "object" && typeof (t as Record<string, unknown>).name === "string"
+    )
+    .filter((t) => !t.name.startsWith("__"))
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map((t) => {
+      const fieldNames = Array.isArray(t.fields)
+        ? t.fields.map((f) => f.name).sort().join(",")
+        : "";
+      return fieldNames.length > 0 ? `${t.name}:${fieldNames}` : t.name;
+    });
 
-  if (typeNames.length === 0) {
+  if (typeEntries.length === 0) {
     return null;
   }
 
-  // Simple hash: join names and compute a short digest.
-  // This is a stable fingerprint — same types in same order produce same version.
-  return hashTypeNames(typeNames);
+  // Stable fingerprint — same types and fields in same order produce same version.
+  return hashTypeNames(typeEntries);
 }
 
 function hashTypeNames(names: string[]): string {

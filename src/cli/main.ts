@@ -699,11 +699,18 @@ function toParsedCliArguments(values: Record<string, unknown>, positionals: stri
     credentialsFile = values["credentials-file"];
   }
 
+  const jsonl = values.jsonl === true;
+  const jsonEnvelope = values["json-envelope"] === true;
+
+  if (jsonl && jsonEnvelope) {
+    throw new Error("--jsonl and --json-envelope are mutually exclusive");
+  }
+
   return {
     help,
     json,
-    jsonEnvelope: values["json-envelope"] === true,
-    jsonl: values.jsonl === true,
+    jsonEnvelope,
+    jsonl,
     ...(metadata === undefined ? {} : { metadata }),
     configFile,
     credentialsFile,

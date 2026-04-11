@@ -501,19 +501,25 @@ async function handleIssueList(options: IssueCommandOptions): Promise<number> {
     // Build filter with name resolution when --filter-json is not provided
     if (filter === undefined) {
       const buildFilter: Record<string, unknown> = {};
+      let resolvedTeamId: string | undefined;
+      if (options.team !== undefined) {
+        resolvedTeamId = looksLikeId(options.team) ? options.team : await resolveTeamId(options.team, resolverOpts);
+        buildFilter.team = { id: { eq: resolvedTeamId } };
+      }
       if (options.state !== undefined) {
-        buildFilter.state = { name: { eq: options.state } };
+        if (looksLikeId(options.state)) {
+          buildFilter.state = { id: { eq: options.state } };
+        } else {
+          buildFilter.state = { name: { eq: options.state } };
+        }
       }
       if (options.assignee !== undefined) {
         const assigneeId = looksLikeId(options.assignee) ? options.assignee : await resolveUserId(options.assignee, resolverOpts);
         buildFilter.assignee = { id: { eq: assigneeId } };
       }
-      if (options.team !== undefined) {
-        const teamIdResolved = looksLikeId(options.team) ? options.team : await resolveTeamId(options.team, resolverOpts);
-        buildFilter.team = { id: { eq: teamIdResolved } };
-      }
       if (options.label !== undefined) {
-        buildFilter.labels = { some: { id: { eq: options.label } } };
+        const labelId = looksLikeId(options.label) ? options.label : await resolveLabelId(options.label, resolvedTeamId, resolverOpts);
+        buildFilter.labels = { some: { id: { eq: labelId } } };
       }
       if (options.priority !== undefined) {
         const parsed = Number(options.priority);
@@ -674,11 +680,13 @@ async function handleIssueUpdate(
     if (options.assignee !== undefined && !looksLikeId(options.assignee)) {
       input.assigneeId = await resolveUserId(options.assignee, resolverOpts);
     }
-    if (options.label !== undefined && !looksLikeId(options.label)) {
-      input.labelIds = [await resolveLabelId(options.label, undefined, resolverOpts)];
-    }
-    if (options.state !== undefined && !looksLikeId(options.state)) {
-      // State resolution needs team context — fetch the issue's team first
+
+    // Fetch the issue's team when label or state resolution needs it
+    const needsTeamLookup =
+      (options.label !== undefined && !looksLikeId(options.label)) ||
+      (options.state !== undefined && !looksLikeId(options.state));
+    let issueTeamId: string | undefined;
+    if (needsTeamLookup) {
       const issueData = await executeGraphQL<{ issue: { team: { id: string } } | null }>({
         query: `query IssueTeam($id: String!) { issue(id: $id) { team { id } } }`,
         variables: { id: identifier },
@@ -690,10 +698,17 @@ async function handleIssueUpdate(
           : { apiUrl: options.apiUrl }),
         ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl })
       });
-      const issueTeamId = issueData.body.data?.issue?.team?.id;
-      if (issueTeamId !== undefined) {
-        input.stateId = await resolveStateId(options.state, issueTeamId, resolverOpts);
+      issueTeamId = issueData.body.data?.issue?.team?.id;
+      if (issueTeamId === undefined) {
+        return emitValidationError(`Could not find issue "${identifier}" or its team for name resolution.`, options);
       }
+    }
+
+    if (options.label !== undefined && !looksLikeId(options.label)) {
+      input.labelIds = [await resolveLabelId(options.label, issueTeamId, resolverOpts)];
+    }
+    if (options.state !== undefined && !looksLikeId(options.state)) {
+      input.stateId = await resolveStateId(options.state, issueTeamId!, resolverOpts);
     }
 
     if (options.dryRun === true) {
@@ -1143,45 +1158,79 @@ async function handleBulkUpdate(options: IssueCommandOptions): Promise<number> {
     return emitValidationError("bulk-update requires at least one field to update (--state, --assignee, --priority, --label).", options);
   }
 
-  const profile = await resolveStoredProfile({
-    paths: {
-      configFile: options.configFile,
-      credentialsFile: options.credentialsFile
-    },
-    ...(options.profile === undefined ? {} : { explicitProfile: options.profile }),
-    env: options.env
-  });
+  try {
+    const profile = await resolveStoredProfile({
+      paths: {
+        configFile: options.configFile,
+        credentialsFile: options.credentialsFile
+      },
+      ...(options.profile === undefined ? {} : { explicitProfile: options.profile }),
+      env: options.env
+    });
 
-  return executeBulk(
-    identifiers,
-    async (id) => {
-      const response = await executeGraphQL<{
-        issueUpdate: { success: boolean; issue: RawIssue | null };
-      }>({
-        query: ISSUE_UPDATE_MUTATION,
-        variables: { id, input },
-        credentials: profile.credentials,
-        ...(options.apiUrl === undefined
-          ? profile.metadata.baseUrl === undefined
-            ? {}
-            : { apiUrl: profile.metadata.baseUrl }
-          : { apiUrl: options.apiUrl }),
-        ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl })
+    const resolverOpts: ResolverOptions = {
+      credentials: profile.credentials,
+      ...(options.apiUrl === undefined
+        ? profile.metadata.baseUrl === undefined
+          ? {}
+          : { apiUrl: profile.metadata.baseUrl }
+        : { apiUrl: options.apiUrl }),
+      ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl })
+    };
+
+    // Resolve friendly names to IDs once before the bulk loop
+    if (options.assignee !== undefined && !looksLikeId(options.assignee)) {
+      input.assigneeId = await resolveUserId(options.assignee, resolverOpts);
+    }
+    if (options.label !== undefined && !looksLikeId(options.label)) {
+      input.labelIds = [await resolveLabelId(options.label, undefined, resolverOpts)];
+    }
+
+    return await executeBulk(
+      identifiers,
+      async (id) => {
+        const response = await executeGraphQL<{
+          issueUpdate: { success: boolean; issue: RawIssue | null };
+        }>({
+          query: ISSUE_UPDATE_MUTATION,
+          variables: { id, input },
+          credentials: profile.credentials,
+          ...(options.apiUrl === undefined
+            ? profile.metadata.baseUrl === undefined
+              ? {}
+              : { apiUrl: profile.metadata.baseUrl }
+            : { apiUrl: options.apiUrl }),
+          ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl })
+        });
+
+        if (
+          hasErrors(response.body.errors) ||
+          response.body.data?.issueUpdate?.issue === null ||
+          response.body.data?.issueUpdate?.issue === undefined
+        ) {
+          throw new Error(response.body.errors?.[0]?.message ?? "Issue update failed");
+        }
+
+        const issue = normalizeIssue(response.body.data.issueUpdate.issue);
+        return { ...issue };
+      },
+      options
+    );
+  } catch (error) {
+    const failure = mapCommandFailure(error);
+
+    if (options.jsonEnvelope) {
+      const envelope = failureEnvelope([failure.error], {
+        sourceLayer: "curated",
+        ...(options.profile === undefined ? {} : { profile: options.profile })
       });
+      process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
+    } else {
+      process.stderr.write(`Error: ${failure.error.message}\n`);
+    }
 
-      if (
-        hasErrors(response.body.errors) ||
-        response.body.data?.issueUpdate?.issue === null ||
-        response.body.data?.issueUpdate?.issue === undefined
-      ) {
-        throw new Error(response.body.errors?.[0]?.message ?? "Issue update failed");
-      }
-
-      const issue = normalizeIssue(response.body.data.issueUpdate.issue);
-      return { ...issue };
-    },
-    options
-  );
+    return failure.exitCode;
+  }
 }
 
 async function handleBulkClose(options: IssueCommandOptions): Promise<number> {
@@ -1190,43 +1239,59 @@ async function handleBulkClose(options: IssueCommandOptions): Promise<number> {
     return emitValidationError("--ids is required for issue bulk-close.", options);
   }
 
-  const profile = await resolveStoredProfile({
-    paths: {
-      configFile: options.configFile,
-      credentialsFile: options.credentialsFile
-    },
-    ...(options.profile === undefined ? {} : { explicitProfile: options.profile }),
-    env: options.env
-  });
+  try {
+    const profile = await resolveStoredProfile({
+      paths: {
+        configFile: options.configFile,
+        credentialsFile: options.credentialsFile
+      },
+      ...(options.profile === undefined ? {} : { explicitProfile: options.profile }),
+      env: options.env
+    });
 
-  return executeBulk(
-    identifiers,
-    async (id) => {
-      const response = await executeGraphQL<{
-        issueArchive: { success: boolean };
-      }>({
-        query: ISSUE_ARCHIVE_MUTATION,
-        variables: { id },
-        credentials: profile.credentials,
-        ...(options.apiUrl === undefined
-          ? profile.metadata.baseUrl === undefined
-            ? {}
-            : { apiUrl: profile.metadata.baseUrl }
-          : { apiUrl: options.apiUrl }),
-        ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl })
+    return await executeBulk(
+      identifiers,
+      async (id) => {
+        const response = await executeGraphQL<{
+          issueArchive: { success: boolean };
+        }>({
+          query: ISSUE_ARCHIVE_MUTATION,
+          variables: { id },
+          credentials: profile.credentials,
+          ...(options.apiUrl === undefined
+            ? profile.metadata.baseUrl === undefined
+              ? {}
+              : { apiUrl: profile.metadata.baseUrl }
+            : { apiUrl: options.apiUrl }),
+          ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl })
+        });
+
+        if (
+          hasErrors(response.body.errors) ||
+          response.body.data?.issueArchive?.success !== true
+        ) {
+          throw new Error(response.body.errors?.[0]?.message ?? "Issue archive failed");
+        }
+
+        return { identifier: id, archived: true };
+      },
+      options
+    );
+  } catch (error) {
+    const failure = mapCommandFailure(error);
+
+    if (options.jsonEnvelope) {
+      const envelope = failureEnvelope([failure.error], {
+        sourceLayer: "curated",
+        ...(options.profile === undefined ? {} : { profile: options.profile })
       });
+      process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
+    } else {
+      process.stderr.write(`Error: ${failure.error.message}\n`);
+    }
 
-      if (
-        hasErrors(response.body.errors) ||
-        response.body.data?.issueArchive?.success !== true
-      ) {
-        throw new Error(response.body.errors?.[0]?.message ?? "Issue archive failed");
-      }
-
-      return { identifier: id, archived: true };
-    },
-    options
-  );
+    return failure.exitCode;
+  }
 }
 
 async function handleBulkAssign(options: IssueCommandOptions): Promise<number> {
@@ -1239,45 +1304,74 @@ async function handleBulkAssign(options: IssueCommandOptions): Promise<number> {
     return emitValidationError("--assignee is required for issue bulk-assign.", options);
   }
 
-  const profile = await resolveStoredProfile({
-    paths: {
-      configFile: options.configFile,
-      credentialsFile: options.credentialsFile
-    },
-    ...(options.profile === undefined ? {} : { explicitProfile: options.profile }),
-    env: options.env
-  });
+  try {
+    const profile = await resolveStoredProfile({
+      paths: {
+        configFile: options.configFile,
+        credentialsFile: options.credentialsFile
+      },
+      ...(options.profile === undefined ? {} : { explicitProfile: options.profile }),
+      env: options.env
+    });
 
-  return executeBulk(
-    identifiers,
-    async (id) => {
-      const response = await executeGraphQL<{
-        issueUpdate: { success: boolean; issue: RawIssue | null };
-      }>({
-        query: ISSUE_UPDATE_MUTATION,
-        variables: { id, input: { assigneeId: options.assignee } },
-        credentials: profile.credentials,
-        ...(options.apiUrl === undefined
-          ? profile.metadata.baseUrl === undefined
-            ? {}
-            : { apiUrl: profile.metadata.baseUrl }
-          : { apiUrl: options.apiUrl }),
-        ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl })
+    const resolverOpts: ResolverOptions = {
+      credentials: profile.credentials,
+      ...(options.apiUrl === undefined
+        ? profile.metadata.baseUrl === undefined
+          ? {}
+          : { apiUrl: profile.metadata.baseUrl }
+        : { apiUrl: options.apiUrl }),
+      ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl })
+    };
+
+    // Resolve assignee name once before the bulk loop
+    const assigneeId = looksLikeId(options.assignee) ? options.assignee : await resolveUserId(options.assignee, resolverOpts);
+
+    return await executeBulk(
+      identifiers,
+      async (id) => {
+        const response = await executeGraphQL<{
+          issueUpdate: { success: boolean; issue: RawIssue | null };
+        }>({
+          query: ISSUE_UPDATE_MUTATION,
+          variables: { id, input: { assigneeId } },
+          credentials: profile.credentials,
+          ...(options.apiUrl === undefined
+            ? profile.metadata.baseUrl === undefined
+              ? {}
+              : { apiUrl: profile.metadata.baseUrl }
+            : { apiUrl: options.apiUrl }),
+          ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl })
+        });
+
+        if (
+          hasErrors(response.body.errors) ||
+          response.body.data?.issueUpdate?.issue === null ||
+          response.body.data?.issueUpdate?.issue === undefined
+        ) {
+          throw new Error(response.body.errors?.[0]?.message ?? "Issue assign failed");
+        }
+
+        const issue = normalizeIssue(response.body.data.issueUpdate.issue);
+        return { ...issue };
+      },
+      options
+    );
+  } catch (error) {
+    const failure = mapCommandFailure(error);
+
+    if (options.jsonEnvelope) {
+      const envelope = failureEnvelope([failure.error], {
+        sourceLayer: "curated",
+        ...(options.profile === undefined ? {} : { profile: options.profile })
       });
+      process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
+    } else {
+      process.stderr.write(`Error: ${failure.error.message}\n`);
+    }
 
-      if (
-        hasErrors(response.body.errors) ||
-        response.body.data?.issueUpdate?.issue === null ||
-        response.body.data?.issueUpdate?.issue === undefined
-      ) {
-        throw new Error(response.body.errors?.[0]?.message ?? "Issue assign failed");
-      }
-
-      const issue = normalizeIssue(response.body.data.issueUpdate.issue);
-      return { ...issue };
-    },
-    options
-  );
+    return failure.exitCode;
+  }
 }
 
 export async function handleIssueCommand(

@@ -14,7 +14,7 @@ The normative product docs remain:
 
 ## Current Status
 
-The project has started implementation and `main` now includes the auth foundations plus the initial raw GraphQL slice through PR #4.
+The project is fully implemented. All MVP and post-MVP features are on main.
 
 Completed:
 

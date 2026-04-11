@@ -12,10 +12,11 @@ export interface CommandFailure {
 export function mapCommandFailure(error: unknown): CommandFailure {
   if (error instanceof ResolutionError) {
     return {
-      exitCode: ExitCode.GeneralError,
+      exitCode: error.kind === "not-found" ? ExitCode.NotFound : ExitCode.ValidationError,
       error: {
-        category: "resolution",
+        category: error.kind === "not-found" ? "not-found" : "validation",
         message: error.message,
+        code: error.kind,
         ...(error.candidates !== undefined ? { details: { candidates: error.candidates } } : {})
       }
     };
