@@ -187,16 +187,76 @@ describe("handleGqlCommand", () => {
   it("rejects gql introspect document input flags", async () => {
     const directory = await mkdtemp(join(tmpdir(), "linear-cli-gql-"));
     const { configFile, credentialsFile } = await writeProfileFiles(directory);
+    const documentFile = join(directory, "introspection.graphql");
+    await writeFile(documentFile, "query { __schema { queryType { name } } }");
+
+    const invalidSources = [
+      {
+        positionals: ["introspect", "query { viewer { id } }"] as string[],
+        options: {
+          stdin: false,
+          stdinStream: Readable.from([]),
+          fetchImpl: vi.fn() as unknown as FetchLike
+        }
+      },
+      {
+        positionals: ["introspect"] as string[],
+        options: {
+          file: documentFile,
+          stdin: false,
+          stdinStream: Readable.from([]),
+          fetchImpl: vi.fn() as unknown as FetchLike
+        }
+      },
+      {
+        positionals: ["introspect"] as string[],
+        options: {
+          stdin: true,
+          stdinStream: Readable.from(["query { viewer { id } }"]),
+          fetchImpl: vi.fn() as unknown as FetchLike
+        }
+      }
+    ];
+
+    for (const invalidSource of invalidSources) {
+      const output = captureOutput();
+
+      try {
+        await expect(
+          handleGqlCommand(invalidSource.positionals, {
+            json: true,
+            jsonEnvelope: false,
+            raw: false,
+            vars: [],
+            configFile,
+            credentialsFile,
+            env: {},
+            ...invalidSource.options
+          })
+        ).resolves.toBe(5);
+
+        expect(output.stderr.join("")).toContain(
+          "gql introspect does not accept inline documents, --file, or --stdin"
+        );
+      } finally {
+        output.restore();
+      }
+    }
+  });
+
+  it("rejects gql introspect variable input", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-gql-"));
+    const { configFile, credentialsFile } = await writeProfileFiles(directory);
     const output = captureOutput();
 
     try {
       await expect(
-        handleGqlCommand(["introspect", "query { viewer { id } }"], {
+        handleGqlCommand(["introspect"], {
           json: true,
           jsonEnvelope: false,
           raw: false,
           stdin: false,
-          vars: [],
+          vars: ['includeDeprecated=true'],
           configFile,
           credentialsFile,
           env: {},
@@ -205,9 +265,7 @@ describe("handleGqlCommand", () => {
         })
       ).resolves.toBe(5);
 
-      expect(output.stderr.join("")).toContain(
-        "gql introspect does not accept inline documents, --file, or --stdin"
-      );
+      expect(output.stderr.join("")).toContain("gql introspect does not accept --var or --vars-file input");
     } finally {
       output.restore();
     }

@@ -47,6 +47,11 @@ export async function handleGqlCommand(
     }
 
     const variables = await resolveVariables(options);
+    if (subcommand === "introspect" && Object.keys(variables).length > 0) {
+      process.stderr.write("Error: gql introspect does not accept --var or --vars-file input.\n");
+      return 5;
+    }
+
     const profile = await resolveStoredProfile({
       paths: {
         configFile: options.configFile,
