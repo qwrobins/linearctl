@@ -13,6 +13,7 @@ import { handleProjectCommand } from "../commands/project.js";
 import { handleSchemaCommand } from "../commands/schema.js";
 import { handleTeamCommand } from "../commands/team.js";
 import { handleUserCommand } from "../commands/user.js";
+import { handleProjectStatusCommand } from "../commands/project-status.js";
 import { handleStateCommand } from "../commands/state.js";
 import { handleWorkspaceCommand } from "../commands/workspace.js";
 import { curatedCommandMetadata, defaultLinearConfigPaths, ExitCode } from "../index.js";
@@ -77,6 +78,7 @@ const CLI_OPTION_DEFINITIONS = {
   "no-browser": { type: "boolean" },
   "dry-run": { type: "boolean" },
   "state-type": { type: "string" },
+  "status-type": { type: "string" },
   position: { type: "string" }
 } as const;
 
@@ -311,6 +313,31 @@ const STATE_OPTION_DEFINITIONS = {
   "max-retries": CLI_OPTION_DEFINITIONS["max-retries"],
 } as const;
 
+const PROJECT_STATUS_OPTION_DEFINITIONS = {
+  help: CLI_OPTION_DEFINITIONS.help,
+  json: CLI_OPTION_DEFINITIONS.json,
+  "json-envelope": CLI_OPTION_DEFINITIONS["json-envelope"],
+  jsonl: CLI_OPTION_DEFINITIONS.jsonl,
+  config: CLI_OPTION_DEFINITIONS.config,
+  "config-file": CLI_OPTION_DEFINITIONS["config-file"],
+  credentials: CLI_OPTION_DEFINITIONS.credentials,
+  "credentials-file": CLI_OPTION_DEFINITIONS["credentials-file"],
+  profile: CLI_OPTION_DEFINITIONS.profile,
+  "api-url": CLI_OPTION_DEFINITIONS["api-url"],
+  "dry-run": CLI_OPTION_DEFINITIONS["dry-run"],
+  name: CLI_OPTION_DEFINITIONS.name,
+  "status-type": CLI_OPTION_DEFINITIONS["status-type"],
+  description: CLI_OPTION_DEFINITIONS.description,
+  color: CLI_OPTION_DEFINITIONS.color,
+  position: CLI_OPTION_DEFINITIONS.position,
+  all: CLI_OPTION_DEFINITIONS.all,
+  max: CLI_OPTION_DEFINITIONS.max,
+  "page-size": CLI_OPTION_DEFINITIONS["page-size"],
+  after: CLI_OPTION_DEFINITIONS.after,
+  "no-retry": CLI_OPTION_DEFINITIONS["no-retry"],
+  "max-retries": CLI_OPTION_DEFINITIONS["max-retries"],
+} as const;
+
 const COMMENT_OPTION_DEFINITIONS = {
   help: CLI_OPTION_DEFINITIONS.help,
   json: CLI_OPTION_DEFINITIONS.json,
@@ -446,6 +473,10 @@ Commands:
   linear state get <id> [--json]
   linear state list [--team <id>] [--everything] [--json]
   linear state create --name <name> --team <id> --state-type <type> [--json]
+  linear project-status list [--json]
+  linear project-status get <id> [--json]
+  linear project-status create --name <name> --status-type <type> [--json]
+  linear project-status delete <id> [--json]
   linear comment list --issue <id> [--json]
   linear comment create --issue <id> --body <text> [--json]
   linear comment update <id> --body <text> [--json]
@@ -522,6 +553,7 @@ interface ParsedCliArguments {
   color?: string;
   position?: string;
   stateType?: string;
+  statusType?: string;
   startsAt?: string;
   endsAt?: string;
   body?: string;
@@ -605,6 +637,11 @@ function parseCliArguments(argv: string[]): ParsedCliArguments {
 
   if (command === "state") {
     const commandParse = parseCliOptionSet(subcommandArgv, STATE_OPTION_DEFINITIONS);
+    return mergeParsedCliArguments(topLevel.values, commandParse.values, [command, ...commandParse.positionals]);
+  }
+
+  if (command === "project-status") {
+    const commandParse = parseCliOptionSet(subcommandArgv, PROJECT_STATUS_OPTION_DEFINITIONS);
     return mergeParsedCliArguments(topLevel.values, commandParse.values, [command, ...commandParse.positionals]);
   }
 
@@ -796,6 +833,7 @@ function toParsedCliArguments(values: Record<string, unknown>, positionals: stri
     ...(typeof values.color === "string" ? { color: values.color } : {}),
     ...(typeof values.position === "string" ? { position: values.position } : {}),
     ...(typeof values["state-type"] === "string" ? { stateType: values["state-type"] } : {}),
+    ...(typeof values["status-type"] === "string" ? { statusType: values["status-type"] } : {}),
     ...(typeof values["starts-at"] === "string" ? { startsAt: values["starts-at"] } : {}),
     ...(typeof values["ends-at"] === "string" ? { endsAt: values["ends-at"] } : {}),
     ...(typeof values.body === "string" ? { body: values.body } : {}),
@@ -1111,6 +1149,35 @@ async function main(argv: string[]): Promise<number> {
         ...(args.color === undefined ? {} : { color: args.color }),
         ...(args.position === undefined ? {} : { position: args.position }),
         ...(args.team === undefined ? {} : { team: args.team }),
+        ...(args.all ? { all: true } : {}),
+        ...(args.max === undefined ? {} : { max: args.max }),
+        ...(args.pageSize === undefined ? {} : { pageSize: args.pageSize }),
+        ...(args.after === undefined ? {} : { after: args.after }),
+        env: process.env
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "command failed";
+      process.stderr.write(`Error: ${message}\n`);
+      return ExitCode.GeneralError;
+    }
+  }
+
+  if (args.positionals[0] === "project-status") {
+    try {
+      return await handleProjectStatusCommand(args.positionals.slice(1), {
+        json: args.json,
+        dryRun: args.dryRun,
+        jsonEnvelope: args.jsonEnvelope,
+        jsonl: args.jsonl,
+        ...(args.profile === undefined ? {} : { profile: args.profile }),
+        configFile: args.configFile,
+        credentialsFile: args.credentialsFile,
+        ...(args.apiUrl === undefined ? {} : { apiUrl: args.apiUrl }),
+        ...(args.name === undefined ? {} : { name: args.name }),
+        ...(args.statusType === undefined ? {} : { statusType: args.statusType }),
+        ...(args.description === undefined ? {} : { description: args.description }),
+        ...(args.color === undefined ? {} : { color: args.color }),
+        ...(args.position === undefined ? {} : { position: args.position }),
         ...(args.all ? { all: true } : {}),
         ...(args.max === undefined ? {} : { max: args.max }),
         ...(args.pageSize === undefined ? {} : { pageSize: args.pageSize }),
