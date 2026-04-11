@@ -1,9 +1,18 @@
 #!/usr/bin/env node
 import { parseArgs } from "node:util";
 import { handleAuthCommand } from "../commands/auth.js";
+import { handleCycleCommand } from "../commands/cycle.js";
+import { handleFileCommand } from "../commands/file.js";
 import { handleGqlCommand } from "../commands/gql.js";
 import { handleIssueCommand } from "../commands/issue.js";
+import { handleCommentCommand } from "../commands/comment.js";
+import { handleApiCommand } from "../commands/api.js";
+import { handleAttachmentCommand } from "../commands/attachment.js";
+import { handleLabelCommand } from "../commands/label.js";
+import { handleProjectCommand } from "../commands/project.js";
 import { handleSchemaCommand } from "../commands/schema.js";
+import { handleTeamCommand } from "../commands/team.js";
+import { handleUserCommand } from "../commands/user.js";
 import { curatedCommandMetadata, defaultLinearConfigPaths, ExitCode } from "../index.js";
 
 const CLI_OPTION_DEFINITIONS = {
@@ -36,10 +45,28 @@ const CLI_OPTION_DEFINITIONS = {
   label: { type: "string" },
   state: { type: "string" },
   "input-json": { type: "string" },
+  "input-file": { type: "string" },
+  "input-stdin": { type: "boolean" },
+  id: { type: "string" },
+  fields: { type: "string" },
+  body: { type: "string" },
+  "filter-json": { type: "string" },
+  "order-by": { type: "string" },
+  "order-dir": { type: "string" },
   all: { type: "boolean" },
   max: { type: "string" },
   "page-size": { type: "string" },
-  after: { type: "string" }
+  after: { type: "string" },
+  name: { type: "string" },
+  "starts-at": { type: "string" },
+  "ends-at": { type: "string" },
+  color: { type: "string" },
+  "no-retry": { type: "boolean" },
+  "max-retries": { type: "string" },
+  issue: { type: "string" },
+  url: { type: "string" },
+  output: { type: "string" },
+  "expires-in": { type: "string" }
 } as const;
 
 const AUTH_OPTION_DEFINITIONS = {
@@ -57,7 +84,7 @@ const AUTH_OPTION_DEFINITIONS = {
   oauth: CLI_OPTION_DEFINITIONS.oauth,
   "set-default": CLI_OPTION_DEFINITIONS["set-default"],
   "remove-config": CLI_OPTION_DEFINITIONS["remove-config"],
-  "api-url": CLI_OPTION_DEFINITIONS["api-url"]
+  "api-url": CLI_OPTION_DEFINITIONS["api-url"],
 } as const;
 
 const GQL_OPTION_DEFINITIONS = {
@@ -74,7 +101,9 @@ const GQL_OPTION_DEFINITIONS = {
   stdin: CLI_OPTION_DEFINITIONS.stdin,
   file: CLI_OPTION_DEFINITIONS.file,
   "vars-file": CLI_OPTION_DEFINITIONS["vars-file"],
-  var: CLI_OPTION_DEFINITIONS.var
+  var: CLI_OPTION_DEFINITIONS.var,
+  "no-retry": CLI_OPTION_DEFINITIONS["no-retry"],
+  "max-retries": CLI_OPTION_DEFINITIONS["max-retries"],
 } as const;
 
 const SCHEMA_OPTION_DEFINITIONS = {
@@ -87,7 +116,9 @@ const SCHEMA_OPTION_DEFINITIONS = {
   "credentials-file": CLI_OPTION_DEFINITIONS["credentials-file"],
   profile: CLI_OPTION_DEFINITIONS.profile,
   "api-url": CLI_OPTION_DEFINITIONS["api-url"],
-  "output-dir": CLI_OPTION_DEFINITIONS["output-dir"]
+  "output-dir": CLI_OPTION_DEFINITIONS["output-dir"],
+  "no-retry": CLI_OPTION_DEFINITIONS["no-retry"],
+  "max-retries": CLI_OPTION_DEFINITIONS["max-retries"],
 } as const;
 
 const ISSUE_OPTION_DEFINITIONS = {
@@ -107,7 +138,198 @@ const ISSUE_OPTION_DEFINITIONS = {
   assignee: CLI_OPTION_DEFINITIONS.assignee,
   label: CLI_OPTION_DEFINITIONS.label,
   state: CLI_OPTION_DEFINITIONS.state,
-  "input-json": CLI_OPTION_DEFINITIONS["input-json"]
+  "input-json": CLI_OPTION_DEFINITIONS["input-json"],
+  body: CLI_OPTION_DEFINITIONS.body,
+  "filter-json": CLI_OPTION_DEFINITIONS["filter-json"],
+  "order-by": CLI_OPTION_DEFINITIONS["order-by"],
+  "order-dir": CLI_OPTION_DEFINITIONS["order-dir"],
+  all: CLI_OPTION_DEFINITIONS.all,
+  max: CLI_OPTION_DEFINITIONS.max,
+  "page-size": CLI_OPTION_DEFINITIONS["page-size"],
+  after: CLI_OPTION_DEFINITIONS.after,
+  "no-retry": CLI_OPTION_DEFINITIONS["no-retry"],
+  "max-retries": CLI_OPTION_DEFINITIONS["max-retries"],
+} as const;
+
+const PROJECT_OPTION_DEFINITIONS = {
+  help: CLI_OPTION_DEFINITIONS.help,
+  json: CLI_OPTION_DEFINITIONS.json,
+  "json-envelope": CLI_OPTION_DEFINITIONS["json-envelope"],
+  config: CLI_OPTION_DEFINITIONS.config,
+  "config-file": CLI_OPTION_DEFINITIONS["config-file"],
+  credentials: CLI_OPTION_DEFINITIONS.credentials,
+  "credentials-file": CLI_OPTION_DEFINITIONS["credentials-file"],
+  profile: CLI_OPTION_DEFINITIONS.profile,
+  "api-url": CLI_OPTION_DEFINITIONS["api-url"],
+  name: CLI_OPTION_DEFINITIONS.name,
+  description: CLI_OPTION_DEFINITIONS.description,
+  team: CLI_OPTION_DEFINITIONS.team,
+  state: CLI_OPTION_DEFINITIONS.state,
+  all: CLI_OPTION_DEFINITIONS.all,
+  max: CLI_OPTION_DEFINITIONS.max,
+  "page-size": CLI_OPTION_DEFINITIONS["page-size"],
+  after: CLI_OPTION_DEFINITIONS.after,
+  "no-retry": CLI_OPTION_DEFINITIONS["no-retry"],
+  "max-retries": CLI_OPTION_DEFINITIONS["max-retries"],
+} as const;
+
+const CYCLE_OPTION_DEFINITIONS = {
+  help: CLI_OPTION_DEFINITIONS.help,
+  json: CLI_OPTION_DEFINITIONS.json,
+  "json-envelope": CLI_OPTION_DEFINITIONS["json-envelope"],
+  config: CLI_OPTION_DEFINITIONS.config,
+  "config-file": CLI_OPTION_DEFINITIONS["config-file"],
+  credentials: CLI_OPTION_DEFINITIONS.credentials,
+  "credentials-file": CLI_OPTION_DEFINITIONS["credentials-file"],
+  profile: CLI_OPTION_DEFINITIONS.profile,
+  "api-url": CLI_OPTION_DEFINITIONS["api-url"],
+  name: CLI_OPTION_DEFINITIONS.name,
+  description: CLI_OPTION_DEFINITIONS.description,
+  team: CLI_OPTION_DEFINITIONS.team,
+  "starts-at": CLI_OPTION_DEFINITIONS["starts-at"],
+  "ends-at": CLI_OPTION_DEFINITIONS["ends-at"],
+  all: CLI_OPTION_DEFINITIONS.all,
+  max: CLI_OPTION_DEFINITIONS.max,
+  "page-size": CLI_OPTION_DEFINITIONS["page-size"],
+  after: CLI_OPTION_DEFINITIONS.after,
+  "no-retry": CLI_OPTION_DEFINITIONS["no-retry"],
+  "max-retries": CLI_OPTION_DEFINITIONS["max-retries"],
+} as const;
+
+const TEAM_OPTION_DEFINITIONS = {
+  help: CLI_OPTION_DEFINITIONS.help,
+  json: CLI_OPTION_DEFINITIONS.json,
+  "json-envelope": CLI_OPTION_DEFINITIONS["json-envelope"],
+  config: CLI_OPTION_DEFINITIONS.config,
+  "config-file": CLI_OPTION_DEFINITIONS["config-file"],
+  credentials: CLI_OPTION_DEFINITIONS.credentials,
+  "credentials-file": CLI_OPTION_DEFINITIONS["credentials-file"],
+  profile: CLI_OPTION_DEFINITIONS.profile,
+  "api-url": CLI_OPTION_DEFINITIONS["api-url"],
+  all: CLI_OPTION_DEFINITIONS.all,
+  max: CLI_OPTION_DEFINITIONS.max,
+  "page-size": CLI_OPTION_DEFINITIONS["page-size"],
+  after: CLI_OPTION_DEFINITIONS.after,
+  "no-retry": CLI_OPTION_DEFINITIONS["no-retry"],
+  "max-retries": CLI_OPTION_DEFINITIONS["max-retries"],
+} as const;
+
+const USER_OPTION_DEFINITIONS = {
+  help: CLI_OPTION_DEFINITIONS.help,
+  json: CLI_OPTION_DEFINITIONS.json,
+  "json-envelope": CLI_OPTION_DEFINITIONS["json-envelope"],
+  config: CLI_OPTION_DEFINITIONS.config,
+  "config-file": CLI_OPTION_DEFINITIONS["config-file"],
+  credentials: CLI_OPTION_DEFINITIONS.credentials,
+  "credentials-file": CLI_OPTION_DEFINITIONS["credentials-file"],
+  profile: CLI_OPTION_DEFINITIONS.profile,
+  "api-url": CLI_OPTION_DEFINITIONS["api-url"],
+  all: CLI_OPTION_DEFINITIONS.all,
+  max: CLI_OPTION_DEFINITIONS.max,
+  "page-size": CLI_OPTION_DEFINITIONS["page-size"],
+  after: CLI_OPTION_DEFINITIONS.after,
+  "no-retry": CLI_OPTION_DEFINITIONS["no-retry"],
+  "max-retries": CLI_OPTION_DEFINITIONS["max-retries"],
+} as const;
+
+const LABEL_OPTION_DEFINITIONS = {
+  help: CLI_OPTION_DEFINITIONS.help,
+  json: CLI_OPTION_DEFINITIONS.json,
+  "json-envelope": CLI_OPTION_DEFINITIONS["json-envelope"],
+  config: CLI_OPTION_DEFINITIONS.config,
+  "config-file": CLI_OPTION_DEFINITIONS["config-file"],
+  credentials: CLI_OPTION_DEFINITIONS.credentials,
+  "credentials-file": CLI_OPTION_DEFINITIONS["credentials-file"],
+  profile: CLI_OPTION_DEFINITIONS.profile,
+  "api-url": CLI_OPTION_DEFINITIONS["api-url"],
+  name: CLI_OPTION_DEFINITIONS.name,
+  description: CLI_OPTION_DEFINITIONS.description,
+  color: CLI_OPTION_DEFINITIONS.color,
+  team: CLI_OPTION_DEFINITIONS.team,
+  all: CLI_OPTION_DEFINITIONS.all,
+  max: CLI_OPTION_DEFINITIONS.max,
+  "page-size": CLI_OPTION_DEFINITIONS["page-size"],
+  after: CLI_OPTION_DEFINITIONS.after,
+  "no-retry": CLI_OPTION_DEFINITIONS["no-retry"],
+  "max-retries": CLI_OPTION_DEFINITIONS["max-retries"],
+} as const;
+
+const COMMENT_OPTION_DEFINITIONS = {
+  help: CLI_OPTION_DEFINITIONS.help,
+  json: CLI_OPTION_DEFINITIONS.json,
+  "json-envelope": CLI_OPTION_DEFINITIONS["json-envelope"],
+  config: CLI_OPTION_DEFINITIONS.config,
+  "config-file": CLI_OPTION_DEFINITIONS["config-file"],
+  credentials: CLI_OPTION_DEFINITIONS.credentials,
+  "credentials-file": CLI_OPTION_DEFINITIONS["credentials-file"],
+  profile: CLI_OPTION_DEFINITIONS.profile,
+  "api-url": CLI_OPTION_DEFINITIONS["api-url"],
+  issue: CLI_OPTION_DEFINITIONS.issue,
+  body: CLI_OPTION_DEFINITIONS.body,
+  all: CLI_OPTION_DEFINITIONS.all,
+  max: CLI_OPTION_DEFINITIONS.max,
+  "page-size": CLI_OPTION_DEFINITIONS["page-size"],
+  after: CLI_OPTION_DEFINITIONS.after,
+  "no-retry": CLI_OPTION_DEFINITIONS["no-retry"],
+  "max-retries": CLI_OPTION_DEFINITIONS["max-retries"],
+} as const;
+
+const ATTACHMENT_OPTION_DEFINITIONS = {
+  help: CLI_OPTION_DEFINITIONS.help,
+  json: CLI_OPTION_DEFINITIONS.json,
+  "json-envelope": CLI_OPTION_DEFINITIONS["json-envelope"],
+  config: CLI_OPTION_DEFINITIONS.config,
+  "config-file": CLI_OPTION_DEFINITIONS["config-file"],
+  credentials: CLI_OPTION_DEFINITIONS.credentials,
+  "credentials-file": CLI_OPTION_DEFINITIONS["credentials-file"],
+  profile: CLI_OPTION_DEFINITIONS.profile,
+  "api-url": CLI_OPTION_DEFINITIONS["api-url"],
+  issue: CLI_OPTION_DEFINITIONS.issue,
+  url: CLI_OPTION_DEFINITIONS.url,
+  title: CLI_OPTION_DEFINITIONS.title,
+  all: CLI_OPTION_DEFINITIONS.all,
+  max: CLI_OPTION_DEFINITIONS.max,
+  "page-size": CLI_OPTION_DEFINITIONS["page-size"],
+  after: CLI_OPTION_DEFINITIONS.after,
+  "no-retry": CLI_OPTION_DEFINITIONS["no-retry"],
+  "max-retries": CLI_OPTION_DEFINITIONS["max-retries"],
+} as const;
+
+const FILE_OPTION_DEFINITIONS = {
+  help: CLI_OPTION_DEFINITIONS.help,
+  json: CLI_OPTION_DEFINITIONS.json,
+  "json-envelope": CLI_OPTION_DEFINITIONS["json-envelope"],
+  config: CLI_OPTION_DEFINITIONS.config,
+  "config-file": CLI_OPTION_DEFINITIONS["config-file"],
+  credentials: CLI_OPTION_DEFINITIONS.credentials,
+  "credentials-file": CLI_OPTION_DEFINITIONS["credentials-file"],
+  profile: CLI_OPTION_DEFINITIONS.profile,
+  "api-url": CLI_OPTION_DEFINITIONS["api-url"],
+  issue: CLI_OPTION_DEFINITIONS.issue,
+  output: CLI_OPTION_DEFINITIONS.output,
+  "expires-in": CLI_OPTION_DEFINITIONS["expires-in"],
+  "no-retry": CLI_OPTION_DEFINITIONS["no-retry"],
+  "max-retries": CLI_OPTION_DEFINITIONS["max-retries"],
+} as const;
+
+const API_OPTION_DEFINITIONS = {
+  help: CLI_OPTION_DEFINITIONS.help,
+  json: CLI_OPTION_DEFINITIONS.json,
+  "json-envelope": CLI_OPTION_DEFINITIONS["json-envelope"],
+  config: CLI_OPTION_DEFINITIONS.config,
+  "config-file": CLI_OPTION_DEFINITIONS["config-file"],
+  credentials: CLI_OPTION_DEFINITIONS.credentials,
+  "credentials-file": CLI_OPTION_DEFINITIONS["credentials-file"],
+  profile: CLI_OPTION_DEFINITIONS.profile,
+  "api-url": CLI_OPTION_DEFINITIONS["api-url"],
+  id: CLI_OPTION_DEFINITIONS.id,
+  "input-json": CLI_OPTION_DEFINITIONS["input-json"],
+  "input-file": CLI_OPTION_DEFINITIONS["input-file"],
+  "input-stdin": CLI_OPTION_DEFINITIONS["input-stdin"],
+  fields: CLI_OPTION_DEFINITIONS.fields,
+  raw: CLI_OPTION_DEFINITIONS.raw,
+  "no-retry": CLI_OPTION_DEFINITIONS["no-retry"],
+  "max-retries": CLI_OPTION_DEFINITIONS["max-retries"],
 } as const;
 
 function printTopLevelHelp(): void {
@@ -123,6 +345,41 @@ Layers:
 Commands:
   linear issue get <identifier> [--json]
   linear issue create --title <title> --team <id> [--json]
+  linear issue list [--state <name>] [--assignee <id>] [--team <id>] [--json]
+  linear issue update <identifier> [--title ...] [--state ...] [--json]
+  linear issue close <identifier> [--json]
+  linear issue assign <identifier> <assignee-id> [--json]
+  linear issue comment <identifier> --body <text> [--json]
+  linear project get <id> [--json]
+  linear project list [--json]
+  linear project create --name <name> [--description ...] [--team <id>] [--json]
+  linear project update <id> [--name ...] [--state ...] [--json]
+  linear cycle get <id> [--json]
+  linear cycle list [--team <id>] [--json]
+  linear cycle create --team <id> [--name ...] [--starts-at ...] [--ends-at ...] [--json]
+  linear cycle update <id> [--name ...] [--starts-at ...] [--ends-at ...] [--json]
+  linear team get <id-or-key> [--json]
+  linear team list [--json]
+  linear user get <id> [--json]
+  linear user me [--json]
+  linear user list [--json]
+  linear label get <id> [--json]
+  linear label list [--team <id>] [--json]
+  linear label create --name <name> [--description ...] [--color ...] [--team <id>] [--json]
+  linear comment list --issue <id> [--json]
+  linear comment create --issue <id> --body <text> [--json]
+  linear comment update <id> --body <text> [--json]
+  linear comment delete <id> [--json]
+  linear attachment list --issue <id> [--json]
+  linear attachment create --issue <id> --url <url> --title <title> [--json]
+  linear attachment delete <id> [--json]
+  linear file upload <path> [--issue <id>] [--json]
+  linear file url <attachment-id> [--expires-in <seconds>] [--json]
+  linear file download <url> [--output <path>] [--json]
+  linear api <resource> <operation> [--id <id>] [--input-json <json>] [--fields <f1,f2>] [--json]
+  linear api --help                 (list resources)
+  linear api <resource> --help      (list operations)
+  linear api search <term>          (search commands)
   linear auth login --profile <name> --api-key-env <ENV>
   linear auth logout --profile <name>
   linear auth status [--json]
@@ -170,10 +427,28 @@ interface ParsedCliArguments {
   label?: string;
   state?: string;
   inputJson?: string;
+  inputFile?: string;
+  inputStdin: boolean;
+  id?: string;
+  fields?: string;
+  name?: string;
+  color?: string;
+  startsAt?: string;
+  endsAt?: string;
+  body?: string;
+  issue?: string;
+  url?: string;
+  output?: string;
+  expiresIn?: string;
+  filterJson?: string;
+  orderBy?: string;
+  orderDir?: string;
   all: boolean;
   max?: number;
   pageSize?: number;
   after?: string;
+  noRetry: boolean;
+  maxRetries?: number;
   positionals: string[];
 }
 
@@ -197,6 +472,11 @@ function parseCliArguments(argv: string[]): ParsedCliArguments {
     return mergeParsedCliArguments(topLevel.values, commandParse.values, [command, ...commandParse.positionals]);
   }
 
+  if (command === "api") {
+    const commandParse = parseCliOptionSet(subcommandArgv, API_OPTION_DEFINITIONS);
+    return mergeParsedCliArguments(topLevel.values, commandParse.values, [command, ...commandParse.positionals]);
+  }
+
   if (command === "schema") {
     const commandParse = parseCliOptionSet(subcommandArgv, SCHEMA_OPTION_DEFINITIONS);
     return mergeParsedCliArguments(topLevel.values, commandParse.values, [command, ...commandParse.positionals]);
@@ -204,6 +484,46 @@ function parseCliArguments(argv: string[]): ParsedCliArguments {
 
   if (command === "issue") {
     const commandParse = parseCliOptionSet(subcommandArgv, ISSUE_OPTION_DEFINITIONS);
+    return mergeParsedCliArguments(topLevel.values, commandParse.values, [command, ...commandParse.positionals]);
+  }
+
+  if (command === "project") {
+    const commandParse = parseCliOptionSet(subcommandArgv, PROJECT_OPTION_DEFINITIONS);
+    return mergeParsedCliArguments(topLevel.values, commandParse.values, [command, ...commandParse.positionals]);
+  }
+
+  if (command === "cycle") {
+    const commandParse = parseCliOptionSet(subcommandArgv, CYCLE_OPTION_DEFINITIONS);
+    return mergeParsedCliArguments(topLevel.values, commandParse.values, [command, ...commandParse.positionals]);
+  }
+
+  if (command === "team") {
+    const commandParse = parseCliOptionSet(subcommandArgv, TEAM_OPTION_DEFINITIONS);
+    return mergeParsedCliArguments(topLevel.values, commandParse.values, [command, ...commandParse.positionals]);
+  }
+
+  if (command === "user") {
+    const commandParse = parseCliOptionSet(subcommandArgv, USER_OPTION_DEFINITIONS);
+    return mergeParsedCliArguments(topLevel.values, commandParse.values, [command, ...commandParse.positionals]);
+  }
+
+  if (command === "label") {
+    const commandParse = parseCliOptionSet(subcommandArgv, LABEL_OPTION_DEFINITIONS);
+    return mergeParsedCliArguments(topLevel.values, commandParse.values, [command, ...commandParse.positionals]);
+  }
+
+  if (command === "comment") {
+    const commandParse = parseCliOptionSet(subcommandArgv, COMMENT_OPTION_DEFINITIONS);
+    return mergeParsedCliArguments(topLevel.values, commandParse.values, [command, ...commandParse.positionals]);
+  }
+
+  if (command === "attachment") {
+    const commandParse = parseCliOptionSet(subcommandArgv, ATTACHMENT_OPTION_DEFINITIONS);
+    return mergeParsedCliArguments(topLevel.values, commandParse.values, [command, ...commandParse.positionals]);
+  }
+
+  if (command === "file") {
+    const commandParse = parseCliOptionSet(subcommandArgv, FILE_OPTION_DEFINITIONS);
     return mergeParsedCliArguments(topLevel.values, commandParse.values, [command, ...commandParse.positionals]);
   }
 
@@ -355,10 +675,28 @@ function toParsedCliArguments(values: Record<string, unknown>, positionals: stri
     ...(typeof values.label === "string" ? { label: values.label } : {}),
     ...(typeof values.state === "string" ? { state: values.state } : {}),
     ...(typeof values["input-json"] === "string" ? { inputJson: values["input-json"] } : {}),
+    ...(typeof values["input-file"] === "string" ? { inputFile: values["input-file"] } : {}),
+    inputStdin: values["input-stdin"] === true,
+    ...(typeof values.id === "string" ? { id: values.id } : {}),
+    ...(typeof values.fields === "string" ? { fields: values.fields } : {}),
+    ...(typeof values.name === "string" ? { name: values.name } : {}),
+    ...(typeof values.color === "string" ? { color: values.color } : {}),
+    ...(typeof values["starts-at"] === "string" ? { startsAt: values["starts-at"] } : {}),
+    ...(typeof values["ends-at"] === "string" ? { endsAt: values["ends-at"] } : {}),
+    ...(typeof values.body === "string" ? { body: values.body } : {}),
+    ...(typeof values.issue === "string" ? { issue: values.issue } : {}),
+    ...(typeof values.url === "string" ? { url: values.url } : {}),
+    ...(typeof values.output === "string" ? { output: values.output } : {}),
+    ...(typeof values["expires-in"] === "string" ? { expiresIn: values["expires-in"] } : {}),
+    ...(typeof values["filter-json"] === "string" ? { filterJson: values["filter-json"] } : {}),
+    ...(typeof values["order-by"] === "string" ? { orderBy: values["order-by"] } : {}),
+    ...(typeof values["order-dir"] === "string" ? { orderDir: values["order-dir"] } : {}),
     all: values.all === true,
     ...(typeof values.max === "string" ? { max: parsePositiveInt(values.max, "max") } : {}),
     ...(typeof values["page-size"] === "string" ? { pageSize: parsePositiveInt(values["page-size"], "page-size") } : {}),
     ...(typeof values.after === "string" ? { after: values.after } : {}),
+    noRetry: values["no-retry"] === true,
+    ...(typeof values["max-retries"] === "string" ? { maxRetries: parsePositiveInt(values["max-retries"], "max-retries") } : {}),
     positionals
   };
 }
@@ -382,6 +720,31 @@ async function main(argv: string[]): Promise<number> {
   if (args.metadata === "curated" && args.json) {
     printCuratedMetadata();
     return ExitCode.Success;
+  }
+
+  if (args.positionals[0] === "api") {
+    try {
+      return await handleApiCommand(args.positionals.slice(1), {
+        json: args.json,
+        jsonEnvelope: args.jsonEnvelope,
+        raw: args.raw,
+        ...(args.profile === undefined ? {} : { profile: args.profile }),
+        configFile: args.configFile,
+        credentialsFile: args.credentialsFile,
+        ...(args.apiUrl === undefined ? {} : { apiUrl: args.apiUrl }),
+        ...(args.id === undefined ? {} : { id: args.id }),
+        ...(args.inputJson === undefined ? {} : { inputJson: args.inputJson }),
+        ...(args.inputFile === undefined ? {} : { inputFile: args.inputFile }),
+        inputStdin: args.inputStdin,
+        ...(args.fields === undefined ? {} : { fields: args.fields }),
+        env: process.env,
+        stdinStream: process.stdin
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "command failed";
+      process.stderr.write(`Error: ${message}\n`);
+      return ExitCode.GeneralError;
+    }
   }
 
   if (args.positionals[0] === "auth") {
@@ -449,6 +812,207 @@ async function main(argv: string[]): Promise<number> {
         ...(args.label === undefined ? {} : { label: args.label }),
         ...(args.state === undefined ? {} : { state: args.state }),
         ...(args.inputJson === undefined ? {} : { inputJson: args.inputJson }),
+        ...(args.body === undefined ? {} : { body: args.body }),
+        ...(args.filterJson === undefined ? {} : { filterJson: args.filterJson }),
+        ...(args.orderBy === undefined ? {} : { orderBy: args.orderBy }),
+        ...(args.orderDir === undefined ? {} : { orderDir: args.orderDir }),
+        ...(args.all ? { all: true } : {}),
+        ...(args.max === undefined ? {} : { max: args.max }),
+        ...(args.pageSize === undefined ? {} : { pageSize: args.pageSize }),
+        ...(args.after === undefined ? {} : { after: args.after }),
+        env: process.env
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "command failed";
+      process.stderr.write(`Error: ${message}\n`);
+      return ExitCode.GeneralError;
+    }
+  }
+
+  if (args.positionals[0] === "project") {
+    try {
+      return await handleProjectCommand(args.positionals.slice(1), {
+        json: args.json,
+        jsonEnvelope: args.jsonEnvelope,
+        ...(args.profile === undefined ? {} : { profile: args.profile }),
+        configFile: args.configFile,
+        credentialsFile: args.credentialsFile,
+        ...(args.apiUrl === undefined ? {} : { apiUrl: args.apiUrl }),
+        ...(args.name === undefined ? {} : { name: args.name }),
+        ...(args.description === undefined ? {} : { description: args.description }),
+        ...(args.team === undefined ? {} : { team: args.team }),
+        ...(args.state === undefined ? {} : { state: args.state }),
+        all: args.all,
+        ...(args.max === undefined ? {} : { max: args.max }),
+        ...(args.pageSize === undefined ? {} : { pageSize: args.pageSize }),
+        ...(args.after === undefined ? {} : { after: args.after }),
+        env: process.env
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "command failed";
+      process.stderr.write(`Error: ${message}\n`);
+      return ExitCode.GeneralError;
+    }
+  }
+
+  if (args.positionals[0] === "cycle") {
+    try {
+      return await handleCycleCommand(args.positionals.slice(1), {
+        json: args.json,
+        jsonEnvelope: args.jsonEnvelope,
+        ...(args.profile === undefined ? {} : { profile: args.profile }),
+        configFile: args.configFile,
+        credentialsFile: args.credentialsFile,
+        ...(args.apiUrl === undefined ? {} : { apiUrl: args.apiUrl }),
+        ...(args.name === undefined ? {} : { name: args.name }),
+        ...(args.description === undefined ? {} : { description: args.description }),
+        ...(args.team === undefined ? {} : { team: args.team }),
+        ...(args.startsAt === undefined ? {} : { startsAt: args.startsAt }),
+        ...(args.endsAt === undefined ? {} : { endsAt: args.endsAt }),
+        all: args.all,
+        ...(args.max === undefined ? {} : { max: args.max }),
+        ...(args.pageSize === undefined ? {} : { pageSize: args.pageSize }),
+        ...(args.after === undefined ? {} : { after: args.after }),
+        env: process.env
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "command failed";
+      process.stderr.write(`Error: ${message}\n`);
+      return ExitCode.GeneralError;
+    }
+  }
+
+  if (args.positionals[0] === "team") {
+    try {
+      return await handleTeamCommand(args.positionals.slice(1), {
+        json: args.json,
+        jsonEnvelope: args.jsonEnvelope,
+        ...(args.profile === undefined ? {} : { profile: args.profile }),
+        configFile: args.configFile,
+        credentialsFile: args.credentialsFile,
+        ...(args.apiUrl === undefined ? {} : { apiUrl: args.apiUrl }),
+        ...(args.all ? { all: true } : {}),
+        ...(args.max === undefined ? {} : { max: args.max }),
+        ...(args.pageSize === undefined ? {} : { pageSize: args.pageSize }),
+        ...(args.after === undefined ? {} : { after: args.after }),
+        env: process.env
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "command failed";
+      process.stderr.write(`Error: ${message}\n`);
+      return ExitCode.GeneralError;
+    }
+  }
+
+  if (args.positionals[0] === "user") {
+    try {
+      return await handleUserCommand(args.positionals.slice(1), {
+        json: args.json,
+        jsonEnvelope: args.jsonEnvelope,
+        ...(args.profile === undefined ? {} : { profile: args.profile }),
+        configFile: args.configFile,
+        credentialsFile: args.credentialsFile,
+        ...(args.apiUrl === undefined ? {} : { apiUrl: args.apiUrl }),
+        ...(args.all ? { all: true } : {}),
+        ...(args.max === undefined ? {} : { max: args.max }),
+        ...(args.pageSize === undefined ? {} : { pageSize: args.pageSize }),
+        ...(args.after === undefined ? {} : { after: args.after }),
+        env: process.env
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "command failed";
+      process.stderr.write(`Error: ${message}\n`);
+      return ExitCode.GeneralError;
+    }
+  }
+
+  if (args.positionals[0] === "label") {
+    try {
+      return await handleLabelCommand(args.positionals.slice(1), {
+        json: args.json,
+        jsonEnvelope: args.jsonEnvelope,
+        ...(args.profile === undefined ? {} : { profile: args.profile }),
+        configFile: args.configFile,
+        credentialsFile: args.credentialsFile,
+        ...(args.apiUrl === undefined ? {} : { apiUrl: args.apiUrl }),
+        ...(args.name === undefined ? {} : { name: args.name }),
+        ...(args.description === undefined ? {} : { description: args.description }),
+        ...(args.color === undefined ? {} : { color: args.color }),
+        ...(args.team === undefined ? {} : { team: args.team }),
+        ...(args.all ? { all: true } : {}),
+        ...(args.max === undefined ? {} : { max: args.max }),
+        ...(args.pageSize === undefined ? {} : { pageSize: args.pageSize }),
+        ...(args.after === undefined ? {} : { after: args.after }),
+        env: process.env
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "command failed";
+      process.stderr.write(`Error: ${message}\n`);
+      return ExitCode.GeneralError;
+    }
+  }
+
+  if (args.positionals[0] === "comment") {
+    try {
+      return await handleCommentCommand(args.positionals.slice(1), {
+        json: args.json,
+        jsonEnvelope: args.jsonEnvelope,
+        ...(args.profile === undefined ? {} : { profile: args.profile }),
+        configFile: args.configFile,
+        credentialsFile: args.credentialsFile,
+        ...(args.apiUrl === undefined ? {} : { apiUrl: args.apiUrl }),
+        ...(args.issue === undefined ? {} : { issue: args.issue }),
+        ...(args.body === undefined ? {} : { body: args.body }),
+        ...(args.all ? { all: true } : {}),
+        ...(args.max === undefined ? {} : { max: args.max }),
+        ...(args.pageSize === undefined ? {} : { pageSize: args.pageSize }),
+        ...(args.after === undefined ? {} : { after: args.after }),
+        env: process.env
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "command failed";
+      process.stderr.write(`Error: ${message}\n`);
+      return ExitCode.GeneralError;
+    }
+  }
+
+  if (args.positionals[0] === "attachment") {
+    try {
+      return await handleAttachmentCommand(args.positionals.slice(1), {
+        json: args.json,
+        jsonEnvelope: args.jsonEnvelope,
+        ...(args.profile === undefined ? {} : { profile: args.profile }),
+        configFile: args.configFile,
+        credentialsFile: args.credentialsFile,
+        ...(args.apiUrl === undefined ? {} : { apiUrl: args.apiUrl }),
+        ...(args.issue === undefined ? {} : { issue: args.issue }),
+        ...(args.url === undefined ? {} : { url: args.url }),
+        ...(args.title === undefined ? {} : { title: args.title }),
+        ...(args.all ? { all: true } : {}),
+        ...(args.max === undefined ? {} : { max: args.max }),
+        ...(args.pageSize === undefined ? {} : { pageSize: args.pageSize }),
+        ...(args.after === undefined ? {} : { after: args.after }),
+        env: process.env
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "command failed";
+      process.stderr.write(`Error: ${message}\n`);
+      return ExitCode.GeneralError;
+    }
+  }
+
+  if (args.positionals[0] === "file") {
+    try {
+      return await handleFileCommand(args.positionals.slice(1), {
+        json: args.json,
+        jsonEnvelope: args.jsonEnvelope,
+        ...(args.profile === undefined ? {} : { profile: args.profile }),
+        configFile: args.configFile,
+        credentialsFile: args.credentialsFile,
+        ...(args.apiUrl === undefined ? {} : { apiUrl: args.apiUrl }),
+        ...(args.issue === undefined ? {} : { issue: args.issue }),
+        ...(args.output === undefined ? {} : { output: args.output }),
+        ...(args.expiresIn === undefined ? {} : { expiresIn: args.expiresIn }),
         env: process.env
       });
     } catch (error) {

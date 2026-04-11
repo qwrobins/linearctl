@@ -371,3 +371,242 @@ describe("handleIssueCommand — validation", () => {
     }
   });
 });
+
+describe("handleIssueCommand — issue list", () => {
+  it("returns array of issues in JSON mode", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-issue-"));
+    const paths = await writeProfileFiles(directory);
+    const fetchImpl = makeFetch({
+      data: {
+        issues: {
+          nodes: [makeRawIssue(), makeRawIssue({ identifier: "INF-3001", title: "Second issue" })],
+          pageInfo: { hasNextPage: false, endCursor: null }
+        }
+      }
+    });
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleIssueCommand(["list"], {
+        ...baseOptions(paths),
+        fetchImpl
+      });
+
+      expect(exitCode).toBe(0);
+      const parsed = JSON.parse(output.stdout.join(""));
+      expect(Array.isArray(parsed)).toBe(true);
+      expect(parsed).toHaveLength(2);
+      expect(parsed[0].identifier).toBe("INF-2975");
+      expect(parsed[1].identifier).toBe("INF-3001");
+    } finally {
+      output.restore();
+    }
+  });
+
+  it("caps results with --max", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-issue-"));
+    const paths = await writeProfileFiles(directory);
+    const fetchImpl = makeFetch({
+      data: {
+        issues: {
+          nodes: [makeRawIssue(), makeRawIssue({ identifier: "INF-3001", title: "Second issue" })],
+          pageInfo: { hasNextPage: true, endCursor: "cursor-1" }
+        }
+      }
+    });
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleIssueCommand(["list"], {
+        ...baseOptions(paths),
+        max: 1,
+        fetchImpl
+      });
+
+      expect(exitCode).toBe(0);
+      const parsed = JSON.parse(output.stdout.join(""));
+      expect(Array.isArray(parsed)).toBe(true);
+      expect(parsed).toHaveLength(1);
+    } finally {
+      output.restore();
+    }
+  });
+});
+
+describe("handleIssueCommand — issue update", () => {
+  it("returns updated issue", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-issue-"));
+    const paths = await writeProfileFiles(directory);
+    const updatedIssue = makeRawIssue({ title: "Updated title" });
+    const fetchImpl = makeFetch({
+      data: { issueUpdate: { success: true, issue: updatedIssue } }
+    });
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleIssueCommand(["update", "INF-2975"], {
+        ...baseOptions(paths),
+        title: "Updated title",
+        fetchImpl
+      });
+
+      expect(exitCode).toBe(0);
+      const parsed = JSON.parse(output.stdout.join(""));
+      expect(parsed.title).toBe("Updated title");
+      expect(parsed.identifier).toBe("INF-2975");
+    } finally {
+      output.restore();
+    }
+  });
+
+  it("rejects update with no fields", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-issue-"));
+    const paths = await writeProfileFiles(directory);
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleIssueCommand(["update", "INF-2975"], {
+        ...baseOptions(paths)
+      });
+
+      expect(exitCode).toBe(5);
+      expect(output.stderr.join("")).toContain("at least one field");
+    } finally {
+      output.restore();
+    }
+  });
+});
+
+describe("handleIssueCommand — issue close", () => {
+  it("archives the issue", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-issue-"));
+    const paths = await writeProfileFiles(directory);
+    const fetchImpl = makeFetch({
+      data: { issueArchive: { success: true } }
+    });
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleIssueCommand(["close", "INF-2975"], {
+        ...baseOptions(paths),
+        fetchImpl
+      });
+
+      expect(exitCode).toBe(0);
+      const parsed = JSON.parse(output.stdout.join(""));
+      expect(parsed.archived).toBe(true);
+      expect(parsed.identifier).toBe("INF-2975");
+    } finally {
+      output.restore();
+    }
+  });
+});
+
+describe("handleIssueCommand — issue assign", () => {
+  it("updates assignee", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-issue-"));
+    const paths = await writeProfileFiles(directory);
+    const assignedIssue = makeRawIssue({
+      assignee: { id: "user-99", name: "Bob", email: "bob@example.com" }
+    });
+    const fetchImpl = makeFetch({
+      data: { issueUpdate: { success: true, issue: assignedIssue } }
+    });
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleIssueCommand(["assign", "INF-2975", "user-99"], {
+        ...baseOptions(paths),
+        fetchImpl
+      });
+
+      expect(exitCode).toBe(0);
+      const parsed = JSON.parse(output.stdout.join(""));
+      expect(parsed.assignee.id).toBe("user-99");
+      expect(parsed.assignee.name).toBe("Bob");
+    } finally {
+      output.restore();
+    }
+  });
+
+  it("rejects assign without assignee-id", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-issue-"));
+    const paths = await writeProfileFiles(directory);
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleIssueCommand(["assign", "INF-2975"], {
+        ...baseOptions(paths)
+      });
+
+      expect(exitCode).toBe(5);
+      expect(output.stderr.join("")).toContain("usage: linear issue assign");
+    } finally {
+      output.restore();
+    }
+  });
+});
+
+describe("handleIssueCommand — issue comment", () => {
+  it("creates comment with body", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-issue-"));
+    const paths = await writeProfileFiles(directory);
+    // First call returns issue (for ID resolution), second call creates comment
+    let callCount = 0;
+    const fetchImpl = vi.fn(async () => {
+      callCount++;
+      if (callCount === 1) {
+        return new Response(JSON.stringify({
+          data: { issue: makeRawIssue() }
+        }), { status: 200 });
+      }
+      return new Response(JSON.stringify({
+        data: {
+          commentCreate: {
+            success: true,
+            comment: {
+              id: "comment-1",
+              body: "This is a comment",
+              createdAt: "2026-04-10T10:00:00Z",
+              user: { id: "user-1", name: "Quentin", email: "quentin@example.com" }
+            }
+          }
+        }
+      }), { status: 200 });
+    }) as unknown as FetchLike;
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleIssueCommand(["comment", "INF-2975"], {
+        ...baseOptions(paths),
+        body: "This is a comment",
+        fetchImpl
+      });
+
+      expect(exitCode).toBe(0);
+      const parsed = JSON.parse(output.stdout.join(""));
+      expect(parsed.id).toBe("comment-1");
+      expect(parsed.body).toBe("This is a comment");
+      expect(parsed.user.name).toBe("Quentin");
+    } finally {
+      output.restore();
+    }
+  });
+
+  it("rejects comment without --body", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-issue-"));
+    const paths = await writeProfileFiles(directory);
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleIssueCommand(["comment", "INF-2975"], {
+        ...baseOptions(paths)
+      });
+
+      expect(exitCode).toBe(5);
+      expect(output.stderr.join("")).toContain("--body is required");
+    } finally {
+      output.restore();
+    }
+  });
+});
