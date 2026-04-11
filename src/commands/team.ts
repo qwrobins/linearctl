@@ -8,10 +8,12 @@ import type { FetchLike, GraphQLErrorPayload } from "../core/transport/graphql.j
 import { resolveStoredProfile } from "../core/auth/runtime.js";
 import { paginateGraphQL, validatePaginationOptions } from "../core/pagination/pagination.js";
 import type { PaginationOptions } from "../core/pagination/pagination.js";
+import { streamPaginateGraphQL } from "../core/pagination/streaming.js";
 
 export interface TeamCommandOptions {
   json: boolean;
   jsonEnvelope: boolean;
+  jsonl?: boolean;
   profile?: string;
   configFile: string;
   credentialsFile: string;
@@ -208,35 +210,47 @@ async function handleTeamList(options: TeamCommandOptions): Promise<number> {
       env: options.env
     });
 
-    const apiUrl = options.apiUrl === undefined
-      ? profile.metadata.baseUrl === undefined
-        ? undefined
-        : profile.metadata.baseUrl
-      : options.apiUrl;
-
-    const result = await paginateGraphQL<RawTeam>({
+    const commonPaginateInput = {
       query: TEAM_LIST_QUERY,
-      options: paginationOptions,
       credentials: profile.credentials,
-      ...(apiUrl === undefined ? {} : { apiUrl }),
+      ...(options.apiUrl === undefined
+        ? profile.metadata.baseUrl === undefined
+          ? {}
+          : { apiUrl: profile.metadata.baseUrl }
+        : { apiUrl: options.apiUrl }),
       ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl }),
-      extractConnection: (data) => {
+      extractConnection: (data: unknown) => {
         const d = data as { teams: { nodes: RawTeam[]; pageInfo: PageInfo } };
         return d.teams;
       }
-    });
+    };
 
-    const teams = result.items.map(normalizeTeam);
-
-    if (options.jsonEnvelope) {
-      const envelope = successEnvelope(teams, { sourceLayer: "curated", profile: profile.name }, result.pageInfo);
-      process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
-    } else if (options.json) {
-      process.stdout.write(`${JSON.stringify(teams, null, 2)}\n`);
+    if (options.jsonl === true) {
+      await streamPaginateGraphQL<RawTeam>({
+        ...commonPaginateInput,
+        options: { ...paginationOptions, all: paginationOptions.all ?? true },
+        onItem: (raw) => {
+          process.stdout.write(`${JSON.stringify(normalizeTeam(raw))}\n`);
+        }
+      });
     } else {
-      for (const team of teams) {
-        printHumanTeam(team);
-        process.stdout.write("\n");
+      const { items, pageInfo } = await paginateGraphQL<RawTeam>({
+        ...commonPaginateInput,
+        options: paginationOptions
+      });
+
+      const teams = items.map(normalizeTeam);
+
+      if (options.jsonEnvelope) {
+        const envelope = successEnvelope(teams, { sourceLayer: "curated", profile: profile.name }, pageInfo);
+        process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
+      } else if (options.json) {
+        process.stdout.write(`${JSON.stringify(teams, null, 2)}\n`);
+      } else {
+        for (const team of teams) {
+          printHumanTeam(team);
+          process.stdout.write("\n");
+        }
       }
     }
 

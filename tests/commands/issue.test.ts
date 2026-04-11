@@ -213,7 +213,7 @@ describe("handleIssueCommand — issue create", () => {
       const exitCode = await handleIssueCommand(["create"], {
         ...baseOptions(paths),
         title: "New feature",
-        team: "team-1",
+        team: "a0000000-0000-0000-0000-000000000001",
         fetchImpl
       });
 
@@ -278,7 +278,7 @@ describe("handleIssueCommand — issue create", () => {
       const exitCode = await handleIssueCommand(["create"], {
         ...baseOptions(paths),
         title: "Explicit title",
-        team: "team-1",
+        team: "a0000000-0000-0000-0000-000000000001",
         inputJson: JSON.stringify({
           title: "JSON title",
           teamId: "team-json",
@@ -290,7 +290,7 @@ describe("handleIssueCommand — issue create", () => {
       expect(exitCode).toBe(0);
       const fetchBody = JSON.parse(String(fetchSpy.mock.calls[0]?.[1]?.body));
       expect(fetchBody.variables.input.title).toBe("Explicit title");
-      expect(fetchBody.variables.input.teamId).toBe("team-1");
+      expect(fetchBody.variables.input.teamId).toBe("a0000000-0000-0000-0000-000000000001");
       expect(fetchBody.variables.input.description).toBe("From JSON");
     } finally {
       output.restore();
@@ -313,12 +313,12 @@ describe("handleIssueCommand — issue create", () => {
       const exitCode = await handleIssueCommand(["create"], {
         ...baseOptions(paths),
         title: "Bug fix",
-        team: "team-1",
+        team: "a0000000-0000-0000-0000-000000000001",
         description: "Fix the thing",
         priority: "2",
-        assignee: "user-1",
-        label: "label-1",
-        state: "state-1",
+        assignee: "b0000000-0000-0000-0000-000000000001",
+        label: "c0000000-0000-0000-0000-000000000001",
+        state: "d0000000-0000-0000-0000-000000000001",
         fetchImpl
       });
 
@@ -327,9 +327,9 @@ describe("handleIssueCommand — issue create", () => {
       const input = fetchBody.variables.input;
       expect(input.description).toBe("Fix the thing");
       expect(input.priority).toBe(2);
-      expect(input.assigneeId).toBe("user-1");
-      expect(input.labelIds).toEqual(["label-1"]);
-      expect(input.stateId).toBe("state-1");
+      expect(input.assigneeId).toBe("b0000000-0000-0000-0000-000000000001");
+      expect(input.labelIds).toEqual(["c0000000-0000-0000-0000-000000000001"]);
+      expect(input.stateId).toBe("d0000000-0000-0000-0000-000000000001");
     } finally {
       output.restore();
     }
@@ -431,6 +431,41 @@ describe("handleIssueCommand — issue list", () => {
       output.restore();
     }
   });
+
+  it("outputs one JSON line per issue with --jsonl", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-issue-"));
+    const paths = await writeProfileFiles(directory);
+    const fetchImpl = makeFetch({
+      data: {
+        issues: {
+          nodes: [makeRawIssue(), makeRawIssue({ identifier: "INF-3001", title: "Second issue" })],
+          pageInfo: { hasNextPage: false, endCursor: null }
+        }
+      }
+    });
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleIssueCommand(["list"], {
+        ...baseOptions(paths),
+        json: false,
+        jsonl: true,
+        fetchImpl
+      });
+
+      expect(exitCode).toBe(0);
+      const lines = output.stdout.join("").trim().split("\n");
+      expect(lines).toHaveLength(2);
+      const first = JSON.parse(lines[0]!);
+      const second = JSON.parse(lines[1]!);
+      expect(first.identifier).toBe("INF-2975");
+      expect(second.identifier).toBe("INF-3001");
+      // Verify each line is valid standalone JSON (not pretty-printed)
+      expect(lines[0]).not.toContain("\n");
+    } finally {
+      output.restore();
+    }
+  });
 });
 
 describe("handleIssueCommand — issue update", () => {
@@ -515,7 +550,7 @@ describe("handleIssueCommand — issue assign", () => {
     const output = captureOutput();
 
     try {
-      const exitCode = await handleIssueCommand(["assign", "INF-2975", "user-99"], {
+      const exitCode = await handleIssueCommand(["assign", "INF-2975", "b0000000-0000-0000-0000-000000000099"], {
         ...baseOptions(paths),
         fetchImpl
       });
@@ -605,6 +640,162 @@ describe("handleIssueCommand — issue comment", () => {
 
       expect(exitCode).toBe(5);
       expect(output.stderr.join("")).toContain("--body is required");
+    } finally {
+      output.restore();
+    }
+  });
+});
+
+describe("handleIssueCommand — issue bulk-update", () => {
+  it("applies update to multiple issues", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-issue-"));
+    const paths = await writeProfileFiles(directory);
+    let callCount = 0;
+    const fetchImpl = vi.fn(async () => {
+      callCount++;
+      const issue = makeRawIssue({
+        identifier: `INF-${2974 + callCount}`,
+        title: `Issue ${callCount}`,
+        priority: 1
+      });
+      return new Response(JSON.stringify({
+        data: { issueUpdate: { success: true, issue } }
+      }), { status: 200 });
+    }) as unknown as FetchLike;
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleIssueCommand(["bulk-update"], {
+        ...baseOptions(paths),
+        ids: "INF-2975,INF-2976",
+        priority: "1",
+        fetchImpl
+      });
+
+      expect(exitCode).toBe(0);
+      const parsed = JSON.parse(output.stdout.join(""));
+      expect(parsed.succeeded).toHaveLength(2);
+      expect(parsed.failed).toHaveLength(0);
+    } finally {
+      output.restore();
+    }
+  });
+
+  it("reports partial success when some fail", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-issue-"));
+    const paths = await writeProfileFiles(directory);
+    let callCount = 0;
+    const fetchImpl = vi.fn(async () => {
+      callCount++;
+      if (callCount === 1) {
+        const issue = makeRawIssue({ identifier: "INF-2975", priority: 1 });
+        return new Response(JSON.stringify({
+          data: { issueUpdate: { success: true, issue } }
+        }), { status: 200 });
+      }
+      return new Response(JSON.stringify({
+        data: { issueUpdate: { success: false, issue: null } },
+        errors: [{ message: "Issue not found" }]
+      }), { status: 200 });
+    }) as unknown as FetchLike;
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleIssueCommand(["bulk-update"], {
+        ...baseOptions(paths),
+        ids: "INF-2975,NONEXISTENT-1",
+        priority: "1",
+        fetchImpl
+      });
+
+      expect(exitCode).toBe(0);
+      const parsed = JSON.parse(output.stdout.join(""));
+      expect(parsed.succeeded).toHaveLength(1);
+      expect(parsed.succeeded[0].identifier).toBe("INF-2975");
+      expect(parsed.failed).toHaveLength(1);
+      expect(parsed.failed[0].identifier).toBe("NONEXISTENT-1");
+    } finally {
+      output.restore();
+    }
+  });
+
+  it("returns exit code 5 when --ids is missing", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-issue-"));
+    const paths = await writeProfileFiles(directory);
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleIssueCommand(["bulk-update"], {
+        ...baseOptions(paths),
+        priority: "1"
+      });
+
+      expect(exitCode).toBe(5);
+      expect(output.stderr.join("")).toContain("--ids is required");
+    } finally {
+      output.restore();
+    }
+  });
+});
+
+describe("handleIssueCommand — issue bulk-close", () => {
+  it("archives multiple issues", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-issue-"));
+    const paths = await writeProfileFiles(directory);
+    const fetchImpl = vi.fn(async () =>
+      new Response(JSON.stringify({
+        data: { issueArchive: { success: true } }
+      }), { status: 200 })
+    ) as unknown as FetchLike;
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleIssueCommand(["bulk-close"], {
+        ...baseOptions(paths),
+        ids: "INF-2975,INF-2976",
+        fetchImpl
+      });
+
+      expect(exitCode).toBe(0);
+      const parsed = JSON.parse(output.stdout.join(""));
+      expect(parsed.succeeded).toHaveLength(2);
+      expect(parsed.succeeded[0].archived).toBe(true);
+      expect(parsed.succeeded[1].archived).toBe(true);
+    } finally {
+      output.restore();
+    }
+  });
+});
+
+describe("handleIssueCommand — issue bulk-assign", () => {
+  it("assigns multiple issues", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-issue-"));
+    const paths = await writeProfileFiles(directory);
+    let callCount = 0;
+    const fetchImpl = vi.fn(async () => {
+      callCount++;
+      const issue = makeRawIssue({
+        identifier: `INF-${2974 + callCount}`,
+        assignee: { id: "user-99", name: "Bob", email: "bob@example.com" }
+      });
+      return new Response(JSON.stringify({
+        data: { issueUpdate: { success: true, issue } }
+      }), { status: 200 });
+    }) as unknown as FetchLike;
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleIssueCommand(["bulk-assign"], {
+        ...baseOptions(paths),
+        ids: "INF-2975,INF-2976",
+        assignee: "b0000000-0000-0000-0000-000000000099",
+        fetchImpl
+      });
+
+      expect(exitCode).toBe(0);
+      const parsed = JSON.parse(output.stdout.join(""));
+      expect(parsed.succeeded).toHaveLength(2);
+      expect(parsed.succeeded[0].assignee.id).toBe("user-99");
     } finally {
       output.restore();
     }

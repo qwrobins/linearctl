@@ -152,7 +152,7 @@ describe("handleCycleCommand — cycle create", () => {
     try {
       const exitCode = await handleCycleCommand(["create"], {
         ...baseOptions(paths),
-        team: "team-1",
+        team: "a0000000-0000-0000-0000-000000000001",
         fetchImpl
       });
 

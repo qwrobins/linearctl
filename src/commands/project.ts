@@ -7,16 +7,22 @@ import { executeGraphQL } from "../core/transport/graphql.js";
 import type { FetchLike, GraphQLErrorPayload } from "../core/transport/graphql.js";
 import { resolveStoredProfile } from "../core/auth/runtime.js";
 import { paginateGraphQL, validatePaginationOptions, type PaginationOptions } from "../core/pagination/pagination.js";
+import { streamPaginateGraphQL } from "../core/pagination/streaming.js";
+import { emitDryRunResult } from "../core/output/dry-run.js";
+import { resolveTeamId, looksLikeId } from "../core/resolution/resolve.js";
+import type { ResolverOptions } from "../core/resolution/resolve.js";
 
 export interface ProjectCommandOptions {
   json: boolean;
   jsonEnvelope: boolean;
+  jsonl?: boolean;
   profile?: string;
   configFile: string;
   credentialsFile: string;
   apiUrl?: string;
   env: Record<string, string | undefined>;
   fetchImpl?: FetchLike;
+  dryRun?: boolean;
   // project flags
   name?: string;
   description?: string;
@@ -252,9 +258,8 @@ async function handleProjectList(options: ProjectCommandOptions): Promise<number
       env: options.env
     });
 
-    const { items, pageInfo } = await paginateGraphQL<RawProject>({
+    const commonPaginateInput = {
       query: PROJECT_LIST_QUERY,
-      options: paginationOptions,
       credentials: profile.credentials,
       ...(options.apiUrl === undefined
         ? profile.metadata.baseUrl === undefined
@@ -266,19 +271,34 @@ async function handleProjectList(options: ProjectCommandOptions): Promise<number
         const d = data as { projects: { nodes: RawProject[]; pageInfo: PageInfo } };
         return d.projects;
       }
-    });
+    };
 
-    const projects = items.map(normalizeProject);
-
-    if (options.jsonEnvelope) {
-      const envelope = successEnvelope(projects, { sourceLayer: "curated", profile: profile.name }, pageInfo);
-      process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
-    } else if (options.json) {
-      process.stdout.write(`${JSON.stringify(projects, null, 2)}\n`);
+    if (options.jsonl === true) {
+      await streamPaginateGraphQL<RawProject>({
+        ...commonPaginateInput,
+        options: { ...paginationOptions, all: paginationOptions.all ?? true },
+        onItem: (raw) => {
+          process.stdout.write(`${JSON.stringify(normalizeProject(raw))}\n`);
+        }
+      });
     } else {
-      for (const project of projects) {
-        printHumanProject(project);
-        process.stdout.write("\n");
+      const { items, pageInfo } = await paginateGraphQL<RawProject>({
+        ...commonPaginateInput,
+        options: paginationOptions
+      });
+
+      const projects = items.map(normalizeProject);
+
+      if (options.jsonEnvelope) {
+        const envelope = successEnvelope(projects, { sourceLayer: "curated", profile: profile.name }, pageInfo);
+        process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
+      } else if (options.json) {
+        process.stdout.write(`${JSON.stringify(projects, null, 2)}\n`);
+      } else {
+        for (const project of projects) {
+          printHumanProject(project);
+          process.stdout.write("\n");
+        }
       }
     }
 
@@ -312,10 +332,6 @@ async function handleProjectCreate(options: ProjectCommandOptions): Promise<numb
   if (options.description !== undefined) {
     input.description = options.description;
   }
-  if (options.team !== undefined) {
-    input.teamIds = [options.team];
-  }
-
   try {
     const profile = await resolveStoredProfile({
       paths: {
@@ -325,6 +341,23 @@ async function handleProjectCreate(options: ProjectCommandOptions): Promise<numb
       ...(options.profile === undefined ? {} : { explicitProfile: options.profile }),
       env: options.env
     });
+
+    if (options.team !== undefined) {
+      const resolverOpts: ResolverOptions = {
+        credentials: profile.credentials,
+        ...(options.apiUrl === undefined
+          ? profile.metadata.baseUrl === undefined
+            ? {}
+            : { apiUrl: profile.metadata.baseUrl }
+          : { apiUrl: options.apiUrl }),
+        ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl })
+      };
+      input.teamIds = [looksLikeId(options.team) ? options.team : await resolveTeamId(options.team, resolverOpts)];
+    }
+
+    if (options.dryRun === true) {
+      return emitDryRunResult("create", "project", input, options);
+    }
 
     const response = await executeGraphQL<{
       projectCreate: { success: boolean; project: RawProject | null };
@@ -407,6 +440,10 @@ async function handleProjectUpdate(
 
   if (Object.keys(input).length === 0) {
     return emitValidationError("project update requires at least one of --name, --description, --state.", options);
+  }
+
+  if (options.dryRun === true) {
+    return emitDryRunResult("update", "project", { id, ...input }, options);
   }
 
   try {

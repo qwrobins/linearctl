@@ -10,11 +10,14 @@ import type { FetchLike } from "../core/transport/graphql.js";
 import { INTROSPECTION_QUERY } from "../core/schema/introspection-query.js";
 import {
   loadBundledSchemaMetadata,
+  loadSchemaFile,
   schemaVersionOutput,
   writeSchemaMetadata,
   writeSchemaIntrospection
 } from "../core/schema/schema-meta.js";
 import type { SchemaMetadata } from "../core/schema/schema-meta.js";
+import { diffSchemas, formatDiffSummary } from "../core/schema/schema-diff.js";
+import type { SchemaDiff } from "../core/schema/schema-diff.js";
 
 export interface SchemaCommandOptions {
   json: boolean;
@@ -214,7 +217,25 @@ async function handleSchemaCheck(positionals: string[], options: SchemaCommandOp
     const liveVersion = extractSchemaVersion(schema);
     const drifted = bundledVersion === null || bundledVersion !== liveVersion;
 
-    const output = { bundledVersion, liveVersion, drifted };
+    // Compute structural diff when drift is detected
+    let diff: SchemaDiff | null = null;
+    if (drifted) {
+      const bundledSchemaPath = join(defaultSchemaOutputDir(), "schema.json");
+      try {
+        const bundledSchema = await loadSchemaFile(bundledSchemaPath);
+        diff = diffSchemas(bundledSchema, response.body.data);
+      } catch {
+        // No bundled schema file — diff against empty schema
+        diff = diffSchemas({}, response.body.data);
+      }
+    }
+
+    const output = {
+      bundledVersion,
+      liveVersion,
+      drifted,
+      ...(diff !== null ? { diff } : {}),
+    };
 
     if (options.jsonEnvelope) {
       const envelope = successEnvelope(output, { sourceLayer: "curated" });
@@ -229,6 +250,9 @@ async function handleSchemaCheck(positionals: string[], options: SchemaCommandOp
 
     if (drifted) {
       process.stdout.write(`Schema drift detected. Bundled: ${bundledVersion ?? "(none)"}, Live: ${liveVersion ?? "(unknown)"}\n`);
+      if (diff !== null) {
+        process.stdout.write(`${formatDiffSummary(diff)}\n`);
+      }
     } else {
       process.stdout.write("Schema is up to date.\n");
     }

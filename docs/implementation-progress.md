@@ -112,15 +112,24 @@ Completed:
   - anti-pattern documentation
   - error handling playbooks
 
-## Remaining post-MVP work
+- Post-MVP features (all complete):
+  - OAuth browser callback flow with PKCE, loopback listener on 127.0.0.1:8765, token exchange, auto-refresh
+  - `--oauth-client-id`, `--callback-port`, `--no-browser` CLI flags
+  - Auto-refresh of expired OAuth tokens in profile resolution (5-minute window)
+  - JSONL streaming output (`--jsonl`) for all list commands via `streamPaginateGraphQL`
+  - Bulk operations: `issue bulk-update`, `issue bulk-close`, `issue bulk-assign` with partial success reporting
+  - Schema regeneration tooling: `bun run regenerate:schema` with schema diff, CI exit codes
+  - Schema diff utility comparing introspection results (added/removed types and fields, breaking change detection)
+  - `linear schema check` now shows structural diff details when drift detected
+  - Multi-organization selector: `linear auth whoami`, `linear workspace list`, workspace metadata stored on login
+  - Profile resolution hints listing available profiles with workspace context on ambiguity
+  - Name/identifier resolution: team name/key, user email/"me", label name, state name → ID
+  - Resolution applied to issue create/update/assign/list, project create, cycle create/list, label create/list
+  - `--dry-run` for all destructive/mutating commands (18 operations across 7 resource handlers)
 
-- OAuth browser callback flow (PKCE, loopback listener, token refresh)
-- JSONL streaming for large paginated outputs
-- Bulk-operation commands
-- Schema regeneration tooling for CI
-- Multi-organization selector UX
-- Name/identifier resolution (team name → ID, etc.)
-- `--dry-run` for destructive commands
+## All development complete
+
+All MVP and post-MVP features are implemented. 330 tests across 35 test files, all passing.
 
 ## Verification Baseline
 

@@ -8,16 +8,20 @@ import type { FetchLike, GraphQLErrorPayload } from "../core/transport/graphql.j
 import { resolveStoredProfile } from "../core/auth/runtime.js";
 import { paginateGraphQL, validatePaginationOptions } from "../core/pagination/pagination.js";
 import type { PaginationOptions } from "../core/pagination/pagination.js";
+import { streamPaginateGraphQL } from "../core/pagination/streaming.js";
+import { emitDryRunResult } from "../core/output/dry-run.js";
 
 export interface CommentCommandOptions {
   json: boolean;
   jsonEnvelope: boolean;
+  jsonl?: boolean;
   profile?: string;
   configFile: string;
   credentialsFile: string;
   apiUrl?: string;
   env: Record<string, string | undefined>;
   fetchImpl?: FetchLike;
+  dryRun?: boolean;
   issue?: string;
   body?: string;
   all?: boolean;
@@ -154,10 +158,9 @@ async function handleCommentList(options: CommentCommandOptions): Promise<number
       env: options.env
     });
 
-    const result = await paginateGraphQL<RawComment>({
+    const commonPaginateInput = {
       query: COMMENT_LIST_QUERY,
       variables: { issueId: options.issue },
-      options: paginationOptions,
       credentials: profile.credentials,
       ...(options.apiUrl === undefined
         ? profile.metadata.baseUrl === undefined
@@ -169,24 +172,44 @@ async function handleCommentList(options: CommentCommandOptions): Promise<number
         const d = data as { comments: { nodes: RawComment[]; pageInfo: PageInfo } };
         return d.comments;
       }
-    });
+    };
 
-    const comments = result.items.map(normalizeCommentFull);
+    if (options.jsonl === true) {
+      const streamOptions: PaginationOptions = {
+        ...paginationOptions,
+        all: paginationOptions.all ?? true
+      };
 
-    if (options.jsonEnvelope) {
-      const envelope = successEnvelope(comments, {
-        sourceLayer: "curated",
-        profile: profile.name
-      }, result.pageInfo);
-      process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
-    } else if (options.json) {
-      process.stdout.write(`${JSON.stringify(comments, null, 2)}\n`);
+      await streamPaginateGraphQL<RawComment>({
+        ...commonPaginateInput,
+        options: streamOptions,
+        onItem: (raw) => {
+          process.stdout.write(`${JSON.stringify(normalizeCommentFull(raw))}\n`);
+        }
+      });
     } else {
-      for (const comment of comments) {
-        printHumanComment(comment);
-      }
-      if (comments.length === 0) {
-        process.stdout.write("No items found.\n");
+      const result = await paginateGraphQL<RawComment>({
+        ...commonPaginateInput,
+        options: paginationOptions
+      });
+
+      const comments = result.items.map(normalizeCommentFull);
+
+      if (options.jsonEnvelope) {
+        const envelope = successEnvelope(comments, {
+          sourceLayer: "curated",
+          profile: profile.name
+        }, result.pageInfo);
+        process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
+      } else if (options.json) {
+        process.stdout.write(`${JSON.stringify(comments, null, 2)}\n`);
+      } else {
+        for (const comment of comments) {
+          printHumanComment(comment);
+        }
+        if (comments.length === 0) {
+          process.stdout.write("No items found.\n");
+        }
       }
     }
 
@@ -215,6 +238,10 @@ async function handleCommentCreate(options: CommentCommandOptions): Promise<numb
 
   if (options.body === undefined || options.body.trim() === "") {
     return emitValidationError("--body is required for comment create.", options);
+  }
+
+  if (options.dryRun === true) {
+    return emitDryRunResult("create", "comment", { issueId: options.issue, body: options.body }, options);
   }
 
   try {
@@ -295,6 +322,10 @@ async function handleCommentUpdate(commentId: string, options: CommentCommandOpt
     return emitValidationError("--body is required for comment update.", options);
   }
 
+  if (options.dryRun === true) {
+    return emitDryRunResult("update", "comment", { id: commentId, body: options.body }, options);
+  }
+
   try {
     const profile = await resolveStoredProfile({
       paths: {
@@ -369,6 +400,10 @@ async function handleCommentUpdate(commentId: string, options: CommentCommandOpt
 }
 
 async function handleCommentDelete(commentId: string, options: CommentCommandOptions): Promise<number> {
+  if (options.dryRun === true) {
+    return emitDryRunResult("delete", "comment", { id: commentId }, options);
+  }
+
   try {
     const profile = await resolveStoredProfile({
       paths: {

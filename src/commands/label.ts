@@ -8,16 +8,22 @@ import type { FetchLike, GraphQLErrorPayload } from "../core/transport/graphql.j
 import { resolveStoredProfile } from "../core/auth/runtime.js";
 import { paginateGraphQL, validatePaginationOptions } from "../core/pagination/pagination.js";
 import type { PaginationOptions } from "../core/pagination/pagination.js";
+import { streamPaginateGraphQL } from "../core/pagination/streaming.js";
+import { emitDryRunResult } from "../core/output/dry-run.js";
+import { resolveTeamId, looksLikeId } from "../core/resolution/resolve.js";
+import type { ResolverOptions } from "../core/resolution/resolve.js";
 
 export interface LabelCommandOptions {
   json: boolean;
   jsonEnvelope: boolean;
+  jsonl?: boolean;
   profile?: string;
   configFile: string;
   credentialsFile: string;
   apiUrl?: string;
   env: Record<string, string | undefined>;
   fetchImpl?: FetchLike;
+  dryRun?: boolean;
   // label create flags
   name?: string;
   description?: string;
@@ -236,33 +242,53 @@ async function handleLabelList(options: LabelCommandOptions): Promise<number> {
 
     const variables: Record<string, unknown> = {};
     if (options.team !== undefined) {
-      variables.filter = { team: { id: { eq: options.team } } };
+      const resolverOpts: ResolverOptions = {
+        credentials: profile.credentials,
+        ...(apiUrl === undefined ? {} : { apiUrl }),
+        ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl })
+      };
+      const teamIdResolved = looksLikeId(options.team) ? options.team : await resolveTeamId(options.team, resolverOpts);
+      variables.filter = { team: { id: { eq: teamIdResolved } } };
     }
 
-    const result = await paginateGraphQL<RawLabel>({
+    const commonPaginateInput = {
       query: LABEL_LIST_QUERY,
       variables,
-      options: paginationOptions,
       credentials: profile.credentials,
       ...(apiUrl === undefined ? {} : { apiUrl }),
       ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl }),
-      extractConnection: (data) => {
+      extractConnection: (data: unknown) => {
         const d = data as { issueLabels: { nodes: RawLabel[]; pageInfo: PageInfo } };
         return d.issueLabels;
       }
-    });
+    };
 
-    const labels = result.items.map(normalizeLabel);
-
-    if (options.jsonEnvelope) {
-      const envelope = successEnvelope(labels, { sourceLayer: "curated", profile: profile.name }, result.pageInfo);
-      process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
-    } else if (options.json) {
-      process.stdout.write(`${JSON.stringify(labels, null, 2)}\n`);
+    if (options.jsonl === true) {
+      await streamPaginateGraphQL<RawLabel>({
+        ...commonPaginateInput,
+        options: { ...paginationOptions, all: paginationOptions.all ?? true },
+        onItem: (raw) => {
+          process.stdout.write(`${JSON.stringify(normalizeLabel(raw))}\n`);
+        }
+      });
     } else {
-      for (const label of labels) {
-        printHumanLabel(label);
-        process.stdout.write("\n");
+      const { items, pageInfo } = await paginateGraphQL<RawLabel>({
+        ...commonPaginateInput,
+        options: paginationOptions
+      });
+
+      const labels = items.map(normalizeLabel);
+
+      if (options.jsonEnvelope) {
+        const envelope = successEnvelope(labels, { sourceLayer: "curated", profile: profile.name }, pageInfo);
+        process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
+      } else if (options.json) {
+        process.stdout.write(`${JSON.stringify(labels, null, 2)}\n`);
+      } else {
+        for (const label of labels) {
+          printHumanLabel(label);
+          process.stdout.write("\n");
+        }
       }
     }
 
@@ -299,10 +325,6 @@ async function handleLabelCreate(options: LabelCommandOptions): Promise<number> 
   if (options.color !== undefined) {
     input.color = options.color;
   }
-  if (options.team !== undefined) {
-    input.teamId = options.team;
-  }
-
   try {
     const profile = await resolveStoredProfile({
       paths: {
@@ -312,6 +334,23 @@ async function handleLabelCreate(options: LabelCommandOptions): Promise<number> 
       ...(options.profile === undefined ? {} : { explicitProfile: options.profile }),
       env: options.env
     });
+
+    if (options.team !== undefined) {
+      const resolverOpts: ResolverOptions = {
+        credentials: profile.credentials,
+        ...(options.apiUrl === undefined
+          ? profile.metadata.baseUrl === undefined
+            ? {}
+            : { apiUrl: profile.metadata.baseUrl }
+          : { apiUrl: options.apiUrl }),
+        ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl })
+      };
+      input.teamId = looksLikeId(options.team) ? options.team : await resolveTeamId(options.team, resolverOpts);
+    }
+
+    if (options.dryRun === true) {
+      return emitDryRunResult("create", "label", input, options);
+    }
 
     const response = await executeGraphQL<{
       issueLabelCreate: { success: boolean; issueLabel: RawLabel | null };

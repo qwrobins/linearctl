@@ -39,10 +39,16 @@ export function resolveProfile(input: ResolveProfileInput): ResolvedProfile {
   ]);
 
   if (candidate === undefined) {
-    throw new ProfileResolutionError(
-      "profile-not-resolved",
-      "No Linear profile was resolved. Pass --profile, set LINEAR_PROFILE, or configure a default profile."
-    );
+    const availableProfiles = Object.keys(input.credentials.profiles).sort();
+    let message = "No Linear profile was resolved. Pass --profile, set LINEAR_PROFILE, or configure a default profile.";
+    if (availableProfiles.length > 0) {
+      const profileHints = availableProfiles.map((name) => {
+        const workspace = input.config.profiles[name]?.workspace;
+        return workspace !== undefined ? `${name} (${workspace})` : name;
+      });
+      message = `No default profile set. Available profiles: ${profileHints.join(", ")}. Use --profile <name> or run linear auth switch <name>.`;
+    }
+    throw new ProfileResolutionError("profile-not-resolved", message);
   }
 
   const credentials = input.credentials.profiles[candidate.name];
