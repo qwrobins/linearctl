@@ -4,7 +4,7 @@
 
 The CLI uses named profiles to manage credentials for one or more Linear workspaces. Each profile stores an API key or OAuth token set. You must create a profile before running any data command.
 
-Profiles are stored in the credentials file (`~/.config/linear-cli/credentials`). Profile metadata (workspace name, default selection) is stored in the config file (`~/.config/linear-cli/config`).
+Profiles are stored in the credentials file (`~/.config/linear/credentials`). Profile metadata (workspace name, default selection) is stored in the config file (`~/.config/linear/config`). See [File layout](#file-layout) below for the full INI structure.
 
 ## API key auth
 
@@ -92,6 +92,43 @@ linear auth logout --profile work
 # Also remove config metadata
 linear auth logout --profile work --remove-config
 ```
+
+## File layout
+
+The CLI stores configuration in two AWS CLI-style INI files:
+
+**`~/.config/linear/config`** — non-secret profile metadata:
+
+```ini
+[default]
+profile = work
+
+[profile work]
+workspace = Acme Corp
+workspace_id = 22222222-2222-2222-2222-222222222222
+user_email = quentin@example.com
+
+[profile personal]
+workspace = Side Project
+```
+
+**`~/.config/linear/credentials`** — secrets (created with `0600` permissions):
+
+```ini
+[work]
+type = api_key
+api_key = lin_api_xxx
+
+[personal]
+type = oauth
+access_token = lin_access_xxx
+refresh_token = lin_refresh_xxx
+expires_at = 2026-04-12T18:45:00Z
+scopes = read write
+oauth_client_id = abc123
+```
+
+Profile names must match across both files. The `[default]` section in config stores only the active profile name. Unknown keys are allowed and preserved.
 
 ## Config file overrides
 
