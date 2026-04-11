@@ -301,6 +301,14 @@ function mergeStringArrays(left: unknown, right: unknown): string[] | undefined 
   return merged.length > 0 ? merged : undefined;
 }
 
+function parsePositiveInt(value: string, flagName: string): number {
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    throw new Error(`--${flagName} must be a positive integer`);
+  }
+  return parsed;
+}
+
 function toParsedCliArguments(values: Record<string, unknown>, positionals: string[]): ParsedCliArguments {
   let help = false;
   let json = false;
@@ -353,8 +361,8 @@ function toParsedCliArguments(values: Record<string, unknown>, positionals: stri
     ...(typeof values.state === "string" ? { state: values.state } : {}),
     ...(typeof values["input-json"] === "string" ? { inputJson: values["input-json"] } : {}),
     all: values.all === true,
-    ...(typeof values.max === "string" ? { max: Number(values.max) } : {}),
-    ...(typeof values["page-size"] === "string" ? { pageSize: Number(values["page-size"]) } : {}),
+    ...(typeof values.max === "string" ? { max: parsePositiveInt(values.max, "max") } : {}),
+    ...(typeof values["page-size"] === "string" ? { pageSize: parsePositiveInt(values["page-size"], "page-size") } : {}),
     ...(typeof values.after === "string" ? { after: values.after } : {}),
     positionals
   };

@@ -75,9 +75,17 @@ export async function paginateGraphQL<TNode>(
   let lastPageInfo: PageInfo = { hasNextPage: false };
 
   while (true) {
+    const first = limit === undefined
+      ? paginationVars.first
+      : Math.min(paginationVars.first, limit - items.length);
+
+    if (first <= 0) {
+      break;
+    }
+
     const variables: Record<string, unknown> = {
       ...baseVariables,
-      first: paginationVars.first,
+      first,
       ...(cursor === undefined ? {} : { after: cursor })
     };
 
