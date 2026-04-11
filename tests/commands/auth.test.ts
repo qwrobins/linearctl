@@ -29,6 +29,7 @@ function successfulViewerFetch() {
 function baseOptions(directory: string, overrides = {}) {
   return {
     json: true,
+    jsonEnvelope: false,
     configFile: join(directory, "config"),
     credentialsFile: join(directory, "credentials"),
     apiKeyStdin: false,
@@ -174,6 +175,44 @@ describe("handleAuthCommand", () => {
 
     expect(await readFile(credentialsFile, "utf8")).toBe("\n");
     await expect(loadLinearConfigFile(configFile)).resolves.toEqual({ profiles: {} });
+  });
+
+  it("returns a JSON envelope for auth status", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-auth-"));
+    const configFile = join(directory, "config");
+    const credentialsFile = join(directory, "credentials");
+    await writeFile(
+      configFile,
+      ["[default]", "profile = work", "", "[profile work]", "workspace = main", ""].join("\n")
+    );
+    await writeFile(
+      credentialsFile,
+      ["[work]", "type = api_key", "api_key = lin_api_work", ""].join("\n"),
+      { mode: 0o600 }
+    );
+
+    const stdoutChunks: string[] = [];
+    const spy = vi.spyOn(process.stdout, "write").mockImplementation(((chunk: string | Uint8Array) => {
+      stdoutChunks.push(String(chunk));
+      return true;
+    }) as typeof process.stdout.write);
+
+    try {
+      await expect(
+        handleAuthCommand(
+          ["status"],
+          baseOptions(directory, { json: false, jsonEnvelope: true })
+        )
+      ).resolves.toBe(0);
+
+      const parsed = JSON.parse(stdoutChunks.join(""));
+      expect(parsed.ok).toBe(true);
+      expect(parsed.data.defaultProfile).toBe("work");
+      expect(parsed.data.profiles).toHaveLength(1);
+      expect(parsed.meta.sourceLayer).toBe("curated");
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it("rejects auth switch when only config metadata exists", async () => {

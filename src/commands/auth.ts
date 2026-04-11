@@ -1,5 +1,6 @@
 import { constants } from "node:fs";
 import { access } from "node:fs/promises";
+import { isTtyInput, readAllStdin } from "../core/io/stdin.js";
 import type { CredentialsStore, ProfileCredentials } from "../core/auth/credentials.js";
 import {
   loadCredentialsFile,
@@ -18,11 +19,13 @@ import {
   writeLinearConfigFile
 } from "../core/config/config-file.js";
 import { ExitCode } from "../core/errors/exit-codes.js";
+import { successEnvelope } from "../core/output/envelope.js";
 import { GraphQLTransportError, requestGraphQL } from "../core/transport/graphql.js";
 import type { FetchLike } from "../core/transport/graphql.js";
 
 export interface AuthCommandOptions {
   json: boolean;
+  jsonEnvelope: boolean;
   configFile: string;
   credentialsFile: string;
   profile?: string;
@@ -96,17 +99,6 @@ async function fileExists(filePath: string): Promise<boolean> {
   }
 }
 
-async function readAllStdin(stdin: NodeJS.ReadableStream): Promise<string> {
-  stdin.setEncoding("utf8");
-  let contents = "";
-
-  for await (const chunk of stdin) {
-    contents += chunk;
-  }
-
-  return contents;
-}
-
 function requireProfile(options: AuthCommandOptions, command: string): string | undefined {
   const profileName = options.profile?.trim();
 
@@ -157,10 +149,6 @@ async function readApiKey(options: AuthCommandOptions): Promise<string | undefin
 
   process.stderr.write("Error: API key login requires --api-key-env <ENV> or --api-key-stdin.\n");
   return undefined;
-}
-
-function isTtyInput(stdin: NodeJS.ReadableStream): boolean {
-  return "isTTY" in stdin && stdin.isTTY === true;
 }
 
 async function validateApiKey(
@@ -338,7 +326,10 @@ async function handleLogin(options: AuthCommandOptions, extraPositionals: string
     ...(updatedConfig.defaultProfile === undefined ? {} : { defaultProfile: updatedConfig.defaultProfile })
   };
 
-  if (options.json) {
+  if (options.jsonEnvelope) {
+    const envelope = successEnvelope(result, { sourceLayer: "curated", profile: profileName });
+    process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
+  } else if (options.json) {
     process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
   } else {
     process.stdout.write(`Logged in to Linear as profile "${profileName}" using API key authentication.\n`);
@@ -390,7 +381,10 @@ async function handleLogout(options: AuthCommandOptions, extraPositionals: strin
     defaultProfileCleared
   };
 
-  if (options.json) {
+  if (options.jsonEnvelope) {
+    const envelope = successEnvelope(result, { sourceLayer: "curated", profile: profileName });
+    process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
+  } else if (options.json) {
     process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
   } else {
     process.stdout.write(`Logged out profile "${profileName}".\n`);
@@ -429,7 +423,10 @@ export async function handleAuthCommand(
     ]);
     const status = buildAuthStatus(config, credentials);
 
-    if (options.json) {
+    if (options.jsonEnvelope) {
+      const envelope = successEnvelope(status, { sourceLayer: "curated" });
+      process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
+    } else if (options.json) {
       process.stdout.write(`${JSON.stringify(status, null, 2)}\n`);
     } else {
       printAuthStatus(status);
@@ -459,8 +456,13 @@ export async function handleAuthCommand(
 
     await writeLinearConfigFile(options.configFile, setDefaultProfile(config, profileName));
 
-    if (options.json) {
-      process.stdout.write(`${JSON.stringify({ defaultProfile: profileName }, null, 2)}\n`);
+    const switchResult = { defaultProfile: profileName };
+
+    if (options.jsonEnvelope) {
+      const envelope = successEnvelope(switchResult, { sourceLayer: "curated", profile: profileName });
+      process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
+    } else if (options.json) {
+      process.stdout.write(`${JSON.stringify(switchResult, null, 2)}\n`);
     } else {
       process.stdout.write(`Default Linear profile set to "${profileName}".\n`);
     }
