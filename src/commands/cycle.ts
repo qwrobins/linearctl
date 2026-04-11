@@ -241,8 +241,7 @@ async function handleCycleList(options: CycleCommandOptions): Promise<number> {
 
   const validationError = validatePaginationOptions(paginationOptions);
   if (validationError !== undefined) {
-    process.stderr.write(`Error: ${validationError}\n`);
-    return ExitCode.ValidationError;
+    return emitValidationError(validationError, options);
   }
 
   const filter = options.team !== undefined ? { team: { id: { eq: options.team } } } : undefined;

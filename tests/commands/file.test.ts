@@ -180,7 +180,7 @@ describe("handleFileCommand — file upload", () => {
         title: "doc.pdf",
         url: "https://uploads.linear.app/asset-pdf.pdf"
       });
-      expect(parsed.issue).toEqual({ id: "INF-100", identifier: "INF-100" });
+      expect(parsed.issue).toEqual({ id: "INF-100" });
     } finally {
       output.restore();
     }

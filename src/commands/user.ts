@@ -284,8 +284,7 @@ async function handleUserList(options: UserCommandOptions): Promise<number> {
 
   const validationError = validatePaginationOptions(paginationOptions);
   if (validationError !== undefined) {
-    process.stderr.write(`Error: ${validationError}\n`);
-    return ExitCode.ValidationError;
+    return emitValidationError(validationError, options);
   }
 
   try {

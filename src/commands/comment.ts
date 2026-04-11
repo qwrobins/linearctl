@@ -141,8 +141,7 @@ async function handleCommentList(options: CommentCommandOptions): Promise<number
 
   const validationError = validatePaginationOptions(paginationOptions);
   if (validationError !== undefined) {
-    process.stderr.write(`Error: ${validationError}\n`);
-    return ExitCode.ValidationError;
+    return emitValidationError(validationError, options);
   }
 
   try {
@@ -214,7 +213,7 @@ async function handleCommentCreate(options: CommentCommandOptions): Promise<numb
     return emitValidationError("--issue is required for comment create.", options);
   }
 
-  if (options.body === undefined) {
+  if (options.body === undefined || options.body === "") {
     return emitValidationError("--body is required for comment create.", options);
   }
 
@@ -292,7 +291,7 @@ async function handleCommentCreate(options: CommentCommandOptions): Promise<numb
 }
 
 async function handleCommentUpdate(commentId: string, options: CommentCommandOptions): Promise<number> {
-  if (options.body === undefined) {
+  if (options.body === undefined || options.body === "") {
     return emitValidationError("--body is required for comment update.", options);
   }
 

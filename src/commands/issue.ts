@@ -413,8 +413,11 @@ async function handleIssueList(options: IssueCommandOptions): Promise<number> {
 
   const validationError = validatePaginationOptions(paginationOptions);
   if (validationError !== undefined) {
-    process.stderr.write(`Error: ${validationError}\n`);
-    return ExitCode.ValidationError;
+    return emitValidationError(validationError, options);
+  }
+
+  if (options.orderDir !== undefined) {
+    return emitValidationError("--order-dir is not supported. Linear's orderBy controls both field and direction.", options);
   }
 
   let filter: Record<string, unknown> | undefined;

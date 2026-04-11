@@ -3,6 +3,7 @@ import { basename, resolve } from "node:path";
 import { failureEnvelope, successEnvelope } from "../core/output/envelope.js";
 import { mapCommandFailure } from "../core/errors/command-failure.js";
 import { ExitCode } from "../core/errors/exit-codes.js";
+import { emitValidationError } from "../core/output/validation-error.js";
 import { executeGraphQL, authorizationHeader } from "../core/transport/graphql.js";
 import type { FetchLike, GraphQLErrorPayload } from "../core/transport/graphql.js";
 import { resolveStoredProfile } from "../core/auth/runtime.js";
@@ -255,7 +256,7 @@ async function handleFileUpload(
 
       const att = attachResponse.body.data.attachmentCreate.attachment;
       result.attachment = { id: att.id, title: att.title, url: att.url };
-      result.issue = { id: options.issue, identifier: options.issue };
+      result.issue = { id: options.issue };
     }
 
     if (options.jsonEnvelope) {
@@ -298,8 +299,7 @@ async function handleFileUrl(
   if (options.expiresIn !== undefined) {
     const parsed = Number(options.expiresIn);
     if (!Number.isInteger(parsed) || parsed < 1 || parsed > 3600) {
-      process.stderr.write("Error: --expires-in must be an integer between 1 and 3600.\n");
-      return ExitCode.ValidationError;
+      return emitValidationError("--expires-in must be an integer between 1 and 3600.", options);
     }
     expiresIn = parsed;
   }
@@ -397,13 +397,14 @@ async function handleFileDownload(
 ): Promise<number> {
   try {
     const parsed = new URL(downloadUrl);
+    if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
+      return emitValidationError("file download only supports HTTP/HTTPS URLs.", options);
+    }
     if (parsed.hostname !== "uploads.linear.app") {
-      process.stderr.write("Error: file download only supports uploads.linear.app URLs.\n");
-      return ExitCode.ValidationError;
+      return emitValidationError("file download only supports uploads.linear.app URLs.", options);
     }
   } catch {
-    process.stderr.write("Error: invalid URL.\n");
-    return ExitCode.ValidationError;
+    return emitValidationError("invalid URL.", options);
   }
 
   try {
@@ -486,12 +487,10 @@ export async function handleFileCommand(
   if (subcommand === "upload") {
     const filePath = rest[0];
     if (filePath === undefined || filePath === "") {
-      process.stderr.write("Error: usage: linear file upload <path>\n");
-      return ExitCode.ValidationError;
+      return emitValidationError("usage: linear file upload <path>", options);
     }
     if (rest.length > 1) {
-      process.stderr.write("Error: file upload accepts exactly one path.\n");
-      return ExitCode.ValidationError;
+      return emitValidationError("file upload accepts exactly one path.", options);
     }
     return handleFileUpload(filePath, options);
   }
@@ -499,12 +498,10 @@ export async function handleFileCommand(
   if (subcommand === "url") {
     const attachmentId = rest[0];
     if (attachmentId === undefined || attachmentId === "") {
-      process.stderr.write("Error: usage: linear file url <attachment-id>\n");
-      return ExitCode.ValidationError;
+      return emitValidationError("usage: linear file url <attachment-id>", options);
     }
     if (rest.length > 1) {
-      process.stderr.write("Error: file url accepts exactly one attachment ID.\n");
-      return ExitCode.ValidationError;
+      return emitValidationError("file url accepts exactly one attachment ID.", options);
     }
     return handleFileUrl(attachmentId, options);
   }
@@ -512,16 +509,13 @@ export async function handleFileCommand(
   if (subcommand === "download") {
     const downloadUrl = rest[0];
     if (downloadUrl === undefined || downloadUrl === "") {
-      process.stderr.write("Error: usage: linear file download <url>\n");
-      return ExitCode.ValidationError;
+      return emitValidationError("usage: linear file download <url>", options);
     }
     if (rest.length > 1) {
-      process.stderr.write("Error: file download accepts exactly one URL.\n");
-      return ExitCode.ValidationError;
+      return emitValidationError("file download accepts exactly one URL.", options);
     }
     return handleFileDownload(downloadUrl, options);
   }
 
-  process.stderr.write("Error: unknown file subcommand. Use: upload, url, download\n");
-  return ExitCode.ValidationError;
+  return emitValidationError("unknown file subcommand. Use: upload, url, download", options);
 }

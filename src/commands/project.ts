@@ -239,8 +239,7 @@ async function handleProjectList(options: ProjectCommandOptions): Promise<number
 
   const validationError = validatePaginationOptions(paginationOptions);
   if (validationError !== undefined) {
-    process.stderr.write(`Error: ${validationError}\n`);
-    return ExitCode.ValidationError;
+    return emitValidationError(validationError, options);
   }
 
   try {
