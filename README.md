@@ -33,9 +33,17 @@ The compiled binary has no runtime dependencies. Building from source requires [
 
 ## Quick start
 
-Install the skills so your agent can set everything up for you:
+Point your agent at the install guide and it will handle everything:
+
+> Install and set up linearctl using https://raw.githubusercontent.com/qwrobins/linearctl/main/INSTALL.md
+
+Or do it step by step:
 
 ```bash
+# Install
+curl -fsSL https://raw.githubusercontent.com/qwrobins/linearctl/main/install.sh | sh
+
+# Install agent skills
 linearctl skills install
 ```
 
