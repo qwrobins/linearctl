@@ -1,4 +1,4 @@
-# linear-agent
+# linear-agent-cli
 
 Agent-first CLI for the Linear API. Built to be used by LLM coding agents like Claude Code and Codex, but works just as well for humans at the terminal.
 
