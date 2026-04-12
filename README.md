@@ -33,24 +33,53 @@ The compiled binary has no runtime dependencies. Building from source requires [
 
 ## Quick start
 
+### Option A: API key
+
+Create an API key at https://linear.app/settings/api, then:
+
 ```bash
-# Authenticate with an API key (create one at https://linear.app/settings/api)
 export LINEAR_API_KEY=lin_api_...
 linearctl auth login --profile work --api-key-env LINEAR_API_KEY --set-default
-
-# Set a default team so list commands are scoped automatically
-linearctl team list --json
-linearctl team get <team-key> --set-default
-
-# Verify setup
-linearctl auth whoami --json
-
-# Use it
-linearctl issue list --json
-linearctl issue create --title "Fix pagination bug" --priority 2 --json
 ```
 
-LLM agents can bootstrap this setup for you — install the agent skills with `linearctl skills install` and the [linearctl skill](skills/linearctl/SKILL.md) includes first-time setup instructions for agents.
+### Option B: OAuth (browser-based)
+
+Create an OAuth app at https://linear.app/settings/api/applications, then:
+
+```bash
+linearctl auth login --profile work --oauth --oauth-client-id <id> --set-default
+```
+
+### First steps
+
+Credentials are stored in `~/.config/linear/credentials` (permissions `0600`). Profile metadata is in `~/.config/linear/config`. See [auth and profiles](docs/auth-and-profiles.md) for the full file layout.
+
+```bash
+# Set a default team so list commands are scoped automatically
+linearctl team list
+linearctl team get <team-key> --set-default
+
+# Verify
+linearctl auth whoami
+
+# Use it
+linearctl issue list
+linearctl issue list --state "In Progress"
+linearctl issue create --title "Fix pagination bug" --priority 2
+linearctl issue get INF-42
+```
+
+Add `--json` to any command for machine-readable output (see [output modes](docs/output-modes.md)).
+
+### For LLM agents
+
+Install the bundled skills so your agent knows how to use the CLI:
+
+```bash
+linearctl skills install
+```
+
+This auto-detects Claude Code and Codex and writes skills to the right directories. The [linearctl skill](skills/linearctl/SKILL.md) includes routing rules, command reference, and first-time setup instructions.
 
 ## Commands
 
