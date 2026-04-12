@@ -39,7 +39,7 @@ jobs:
           VERSION: ${{ steps.version.outputs.current }}
         run: |
           tag="v${VERSION}"
-          if git rev-parse "$tag" >/dev/null 2>&1; then
+          if git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null 2>&1; then
             echo "Tag $tag already exists, skipping"
             exit 0
           fi
