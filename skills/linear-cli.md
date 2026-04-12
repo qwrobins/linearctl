@@ -96,6 +96,10 @@ Raw GraphQL should not be used merely because it is possible. It is the fallback
 - `linear-agent state get <id> --json`
 - `linear-agent state create --name <name> --team <id> --state-type <type> --json` (types: backlog, unstarted, started, completed, canceled)
 
+### Skills
+- `linear-agent skills install [--location project|user] --json` — write embedded skill files to disk
+- `linear-agent skills list --json` — list available embedded skills
+
 ### Schema
 - `linear-agent schema version --json`
 - `linear-agent schema pull --json`

@@ -16,6 +16,7 @@ import { handleUserCommand } from "../commands/user.js";
 import { handleProjectStatusCommand } from "../commands/project-status.js";
 import { handleStateCommand } from "../commands/state.js";
 import { handleWorkspaceCommand } from "../commands/workspace.js";
+import { handleSkillsCommand } from "../commands/skills.js";
 import { curatedCommandMetadata, defaultLinearConfigPaths, ExitCode } from "../index.js";
 
 const CLI_OPTION_DEFINITIONS = {
@@ -79,7 +80,8 @@ const CLI_OPTION_DEFINITIONS = {
   "dry-run": { type: "boolean" },
   "state-type": { type: "string" },
   "status-type": { type: "string" },
-  position: { type: "string" }
+  position: { type: "string" },
+  location: { type: "string" }
 } as const;
 
 const AUTH_OPTION_DEFINITIONS = {
@@ -411,6 +413,13 @@ const WORKSPACE_OPTION_DEFINITIONS = {
   "credentials-file": CLI_OPTION_DEFINITIONS["credentials-file"],
 } as const;
 
+const SKILLS_OPTION_DEFINITIONS = {
+  help: CLI_OPTION_DEFINITIONS.help,
+  json: CLI_OPTION_DEFINITIONS.json,
+  "json-envelope": CLI_OPTION_DEFINITIONS["json-envelope"],
+  location: CLI_OPTION_DEFINITIONS.location,
+} as const;
+
 const API_OPTION_DEFINITIONS = {
   help: CLI_OPTION_DEFINITIONS.help,
   json: CLI_OPTION_DEFINITIONS.json,
@@ -500,6 +509,8 @@ Commands:
   linear-agent gql introspect --json
   linear-agent gql query '{ viewer { id } }' --json
   linear-agent gql mutation --file m.graphql --vars-file v.json --json
+  linear-agent skills install [--location project|user] [--json]
+  linear-agent skills list [--json]
   linear-agent schema version [--json]
   linear-agent schema pull [--json] [--output-dir <path>]  (default: project src/generated/manifest)
   linear-agent schema check [--json]
@@ -570,6 +581,7 @@ interface ParsedCliArguments {
   after?: string;
   dryRun: boolean;
   everything: boolean;
+  location?: string;
   noRetry: boolean;
   maxRetries?: number;
   positionals: string[];
@@ -662,6 +674,11 @@ function parseCliArguments(argv: string[]): ParsedCliArguments {
 
   if (command === "workspace") {
     const commandParse = parseCliOptionSet(subcommandArgv, WORKSPACE_OPTION_DEFINITIONS);
+    return mergeParsedCliArguments(topLevel.values, commandParse.values, [command, ...commandParse.positionals]);
+  }
+
+  if (command === "skills") {
+    const commandParse = parseCliOptionSet(subcommandArgv, SKILLS_OPTION_DEFINITIONS);
     return mergeParsedCliArguments(topLevel.values, commandParse.values, [command, ...commandParse.positionals]);
   }
 
@@ -850,6 +867,7 @@ function toParsedCliArguments(values: Record<string, unknown>, positionals: stri
     ...(typeof values.after === "string" ? { after: values.after } : {}),
     dryRun: values["dry-run"] === true,
     everything: values.everything === true,
+    ...(typeof values.location === "string" ? { location: values.location } : {}),
     noRetry: values["no-retry"] === true,
     ...(typeof values["max-retries"] === "string" ? { maxRetries: parsePositiveInt(values["max-retries"], "max-retries") } : {}),
     positionals
@@ -1293,6 +1311,20 @@ async function main(argv: string[]): Promise<number> {
         configFile: args.configFile,
         credentialsFile: args.credentialsFile,
         env: process.env
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "command failed";
+      process.stderr.write(`Error: ${message}\n`);
+      return ExitCode.GeneralError;
+    }
+  }
+
+  if (args.positionals[0] === "skills") {
+    try {
+      return await handleSkillsCommand(args.positionals.slice(1), {
+        json: args.json,
+        jsonEnvelope: args.jsonEnvelope,
+        ...(args.location === undefined ? {} : { location: args.location }),
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : "command failed";

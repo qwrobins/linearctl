@@ -197,6 +197,18 @@ linear-agent schema check --json
 
 See [schema-and-generated.md](schema-and-generated.md) for details.
 
+## Skills
+
+```bash
+# Install agent skills to project (.claude/skills/)
+linear-agent skills install [--location project|user] [--json]
+
+# List embedded skills
+linear-agent skills list [--json]
+```
+
+`--location project` (default) writes to `.claude/skills/` in the current directory. `--location user` writes to `~/.claude/skills/`.
+
 ## Generated API
 
 The generated layer covers any Linear API resource not handled by curated commands.
