@@ -7,11 +7,23 @@ Three command layers: curated commands for common workflows, a generated API lay
 ## Install
 
 ```bash
+curl -fsSL https://raw.githubusercontent.com/qwrobins/linear-cli/main/install.sh | sh
+```
+
+Or install a specific version:
+
+```bash
+LINEAR_VERSION=v0.1.0 curl -fsSL https://raw.githubusercontent.com/qwrobins/linear-cli/main/install.sh | sh
+```
+
+Or build from source:
+
+```bash
 bun run build:binary
 cp dist/linear ~/.local/bin/linear
 ```
 
-Requires [Bun](https://bun.sh) to build. The compiled binary has no runtime dependencies.
+The compiled binary has no runtime dependencies. Building from source requires [Bun](https://bun.sh).
 
 ## Quick start
 
