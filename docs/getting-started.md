@@ -21,11 +21,17 @@ The binary is self-contained. End users do not need Bun installed.
 If you're using an LLM agent (Claude Code, Codex, etc.), install the bundled skills so the agent knows how to use the CLI:
 
 ```bash
-# Install to the current project
+# Install to the current project (both Claude Code and Codex)
 linear-agent skills install
 
-# Or install to your user-level config (available in all projects)
-linear-agent skills install --location user
+# Install to Claude Code user config only
+linear-agent skills install --location claude
+
+# Install to Codex user config only
+linear-agent skills install --location codex
+
+# Install to all user-level agent directories
+linear-agent skills install --location all
 ```
 
 ## Authenticate

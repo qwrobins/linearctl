@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-04-12
+
+### Added
+
+- **Renamed to `linear-agent-cli`** — binary is now `linear-agent`, package is `linear-agent-cli`
+- **Workflow state commands** — `linear-agent state list/get/create` for managing issue workflow states
+- **Project status commands** — `linear-agent project-status list/get/create/delete` for workspace-level statuses
+- **Label delete** — `linear-agent label delete <id>`
+- **Project delete** — `linear-agent project delete <id>`
+- **Skills install command** — `linear-agent skills install` embeds skills in the binary and writes to agent config directories
+- **Codex support** — skills install supports `--location codex` for OpenAI Codex agent
+- **Multi-agent install** — `--location project` installs to both Claude Code and Codex, `--location all` for user-level
+- **skills.sh compatibility** — skills restructured as `skills/<name>/SKILL.md` with YAML frontmatter
+- **CI/CD** — GitHub Actions for CI, semver releases with auto-tagging, curl installer
+- **Changelog** — Keep a Changelog format
+
 ## [0.1.0] - 2026-04-12
 
 ### Added
