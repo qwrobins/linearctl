@@ -16,7 +16,14 @@ main() {
     version="$LINEAR_VERSION"
   fi
 
-  url="https://github.com/${REPO}/releases/download/${version}/${artifact}"
+  if [ -z "$version" ]; then
+    echo "Error: could not determine version to install" >&2
+    exit 1
+  fi
+
+  base_url="https://github.com/${REPO}/releases/download/${version}"
+  url="${base_url}/${artifact}"
+  checksums_url="${base_url}/checksums.txt"
 
   echo "Installing linear ${version} (${os}/${arch})..."
   echo "  From: ${url}"
@@ -24,13 +31,17 @@ main() {
 
   mkdir -p "$INSTALL_DIR"
 
-  if command -v curl > /dev/null 2>&1; then
-    curl -fsSL "$url" -o "${INSTALL_DIR}/${BINARY_NAME}"
-  elif command -v wget > /dev/null 2>&1; then
-    wget -qO "${INSTALL_DIR}/${BINARY_NAME}" "$url"
+  # Download binary
+  download "$url" "${INSTALL_DIR}/${BINARY_NAME}"
+
+  # Verify checksum
+  checksums_file=$(mktemp)
+  if download "$checksums_url" "$checksums_file" 2>/dev/null; then
+    verify_checksum "${INSTALL_DIR}/${BINARY_NAME}" "$artifact" "$checksums_file"
+    rm -f "$checksums_file"
   else
-    echo "Error: curl or wget is required" >&2
-    exit 1
+    rm -f "$checksums_file"
+    echo "Warning: could not download checksums, skipping verification" >&2
   fi
 
   chmod +x "${INSTALL_DIR}/${BINARY_NAME}"
@@ -47,6 +58,48 @@ main() {
     echo "Add ${INSTALL_DIR} to your PATH:"
     echo "  export PATH=\"${INSTALL_DIR}:\$PATH\""
   fi
+}
+
+download() {
+  if command -v curl > /dev/null 2>&1; then
+    curl -fsSL "$1" -o "$2"
+  elif command -v wget > /dev/null 2>&1; then
+    wget -qO "$2" "$1"
+  else
+    echo "Error: curl or wget is required" >&2
+    exit 1
+  fi
+}
+
+verify_checksum() {
+  binary_path="$1"
+  artifact_name="$2"
+  checksums_file="$3"
+
+  expected=$(grep "$artifact_name" "$checksums_file" | awk '{print $1}')
+  if [ -z "$expected" ]; then
+    echo "Warning: no checksum found for ${artifact_name}, skipping verification" >&2
+    return 0
+  fi
+
+  if command -v sha256sum > /dev/null 2>&1; then
+    actual=$(sha256sum "$binary_path" | awk '{print $1}')
+  elif command -v shasum > /dev/null 2>&1; then
+    actual=$(shasum -a 256 "$binary_path" | awk '{print $1}')
+  else
+    echo "Warning: sha256sum/shasum not found, skipping verification" >&2
+    return 0
+  fi
+
+  if [ "$actual" != "$expected" ]; then
+    echo "Error: checksum mismatch" >&2
+    echo "  Expected: ${expected}" >&2
+    echo "  Actual:   ${actual}" >&2
+    rm -f "$binary_path"
+    exit 1
+  fi
+
+  echo "  Checksum verified."
 }
 
 detect_os() {
@@ -72,14 +125,34 @@ detect_arch() {
 }
 
 latest_version() {
+  api_response=$(mktemp)
+
   if command -v curl > /dev/null 2>&1; then
-    curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" | grep '"tag_name"' | head -1 | sed 's/.*"tag_name": *"\([^"]*\)".*/\1/'
+    http_code=$(curl -sL -w "%{http_code}" "https://api.github.com/repos/${REPO}/releases/latest" -o "$api_response")
   elif command -v wget > /dev/null 2>&1; then
-    wget -qO- "https://api.github.com/repos/${REPO}/releases/latest" | grep '"tag_name"' | head -1 | sed 's/.*"tag_name": *"\([^"]*\)".*/\1/'
+    wget -qO "$api_response" "https://api.github.com/repos/${REPO}/releases/latest" 2>/dev/null
+    http_code="200"
   else
     echo "Error: curl or wget is required" >&2
     exit 1
   fi
+
+  if [ "$http_code" != "200" ]; then
+    echo "Error: failed to fetch latest release (HTTP ${http_code})" >&2
+    echo "  Check that ${REPO} has at least one published release." >&2
+    rm -f "$api_response"
+    exit 1
+  fi
+
+  tag=$(grep '"tag_name"' "$api_response" | head -1 | sed 's/.*"tag_name": *"\([^"]*\)".*/\1/')
+  rm -f "$api_response"
+
+  if [ -z "$tag" ]; then
+    echo "Error: could not parse latest release version" >&2
+    exit 1
+  fi
+
+  echo "$tag"
 }
 
 main
