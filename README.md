@@ -50,7 +50,7 @@ linearctl issue list --json
 linearctl issue create --title "Fix pagination bug" --priority 2 --json
 ```
 
-LLM agents can bootstrap this setup for you — install the agent skills with `linearctl skills install` and the [linearctl skill](skills/linearctl/SKILL.md) includes first-time setup instructions.
+LLM agents can bootstrap this setup for you — install the agent skills with `linearctl skills install` and the [linearctl skill](skills/linearctl/SKILL.md) includes first-time setup instructions for agents.
 
 ## Commands
 
