@@ -495,7 +495,7 @@ export async function handleProjectStatusCommand(
   if (subcommand === "get") {
     const identifier = rest[0]?.trim();
     if (identifier === undefined || identifier === "") {
-      return emitValidationError("usage: linear project-status get <id>", options);
+      return emitValidationError("usage: linear-agent project-status get <id>", options);
     }
     if (rest.length > 1) {
       return emitValidationError("project-status get accepts exactly one identifier.", options);
@@ -520,7 +520,7 @@ export async function handleProjectStatusCommand(
   if (subcommand === "delete") {
     const statusId = rest[0]?.trim();
     if (statusId === undefined || statusId === "") {
-      return emitValidationError("usage: linear project-status delete <id>", options);
+      return emitValidationError("usage: linear-agent project-status delete <id>", options);
     }
     if (rest.length > 1) {
       return emitValidationError("project-status delete accepts exactly one identifier.", options);
@@ -528,7 +528,7 @@ export async function handleProjectStatusCommand(
     return handleProjectStatusDelete(statusId, options);
   }
 
-  return emitValidationError("unsupported project-status command. Try linear project-status get, list, create, or delete.", options);
+  return emitValidationError("unsupported project-status command. Try linear-agent project-status get, list, create, or delete.", options);
 }
 
 function hasErrors(errors: GraphQLErrorPayload[] | undefined): boolean {

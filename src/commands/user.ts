@@ -370,7 +370,7 @@ export async function handleUserCommand(
   if (subcommand === "get") {
     const identifier = rest[0];
     if (identifier === undefined || identifier === "") {
-      return emitValidationError("usage: linear user get <id>", options);
+      return emitValidationError("usage: linear-agent user get <id>", options);
     }
     if (rest.length > 1) {
       return emitValidationError("user get accepts exactly one identifier.", options);
@@ -392,7 +392,7 @@ export async function handleUserCommand(
     return handleUserList(options);
   }
 
-  return emitValidationError("unsupported user command. Try linear user get, linear user me, or linear user list.", options);
+  return emitValidationError("unsupported user command. Try linear-agent user get, linear-agent user me, or linear-agent user list.", options);
 }
 
 function hasErrors(errors: GraphQLErrorPayload[] | undefined): boolean {

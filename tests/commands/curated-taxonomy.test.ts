@@ -5,46 +5,46 @@ import { assertValidCommandMetadataList } from "../../src/core/metadata/command-
 describe("curated command taxonomy", () => {
   it("matches the MVP curated command set", () => {
     expect(curatedCommandMetadata.map((command) => command.commandPath)).toEqual([
-      "linear auth login",
-      "linear auth logout",
-      "linear auth status",
-      "linear auth switch",
-      "linear issue list",
-      "linear issue get",
-      "linear issue create",
-      "linear issue update",
-      "linear issue close",
-      "linear issue assign",
-      "linear issue comment",
-      "linear project list",
-      "linear project get",
-      "linear project create",
-      "linear project update",
-      "linear cycle list",
-      "linear cycle get",
-      "linear cycle create",
-      "linear cycle update",
-      "linear team list",
-      "linear team get",
-      "linear user list",
-      "linear user get",
-      "linear user me",
-      "linear label list",
-      "linear label get",
-      "linear label create",
-      "linear comment list",
-      "linear comment create",
-      "linear comment update",
-      "linear comment delete",
-      "linear attachment list",
-      "linear attachment create",
-      "linear attachment delete",
-      "linear file upload",
-      "linear file download",
-      "linear file url",
-      "linear schema pull",
-      "linear schema version",
-      "linear schema check"
+      "linear-agent auth login",
+      "linear-agent auth logout",
+      "linear-agent auth status",
+      "linear-agent auth switch",
+      "linear-agent issue list",
+      "linear-agent issue get",
+      "linear-agent issue create",
+      "linear-agent issue update",
+      "linear-agent issue close",
+      "linear-agent issue assign",
+      "linear-agent issue comment",
+      "linear-agent project list",
+      "linear-agent project get",
+      "linear-agent project create",
+      "linear-agent project update",
+      "linear-agent cycle list",
+      "linear-agent cycle get",
+      "linear-agent cycle create",
+      "linear-agent cycle update",
+      "linear-agent team list",
+      "linear-agent team get",
+      "linear-agent user list",
+      "linear-agent user get",
+      "linear-agent user me",
+      "linear-agent label list",
+      "linear-agent label get",
+      "linear-agent label create",
+      "linear-agent comment list",
+      "linear-agent comment create",
+      "linear-agent comment update",
+      "linear-agent comment delete",
+      "linear-agent attachment list",
+      "linear-agent attachment create",
+      "linear-agent attachment delete",
+      "linear-agent file upload",
+      "linear-agent file download",
+      "linear-agent file url",
+      "linear-agent schema pull",
+      "linear-agent schema version",
+      "linear-agent schema check"
     ]);
   });
 
@@ -53,10 +53,10 @@ describe("curated command taxonomy", () => {
   });
 
   it("marks destructive and confirmation-requiring commands explicitly", () => {
-    expect(findCuratedCommand("linear comment delete")?.safety).toBe("destructive");
-    expect(findCuratedCommand("linear attachment delete")?.safety).toBe("destructive");
-    expect(findCuratedCommand("linear auth logout")?.safety).toBe("confirmation-required");
-    expect(findCuratedCommand("linear issue close")?.safety).toBe("confirmation-required");
+    expect(findCuratedCommand("linear-agent comment delete")?.safety).toBe("destructive");
+    expect(findCuratedCommand("linear-agent attachment delete")?.safety).toBe("destructive");
+    expect(findCuratedCommand("linear-agent auth logout")?.safety).toBe("confirmation-required");
+    expect(findCuratedCommand("linear-agent issue close")?.safety).toBe("confirmation-required");
   });
 
   it("keeps curated commands stable and JSON-capable for agents", () => {

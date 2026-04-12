@@ -6,7 +6,7 @@
  * Usage:  bun run src/generated/generate-manifest.ts
  *         (wired as `bun run generate:api-manifest` in package.json)
  *
- * Input:  src/generated/manifest/schema.json  (output of `linear schema pull`)
+ * Input:  src/generated/manifest/schema.json  (output of `linear-agent schema pull`)
  * Output: src/generated/manifest/api-commands.json
  */
 
@@ -251,7 +251,7 @@ function fieldToEntry(
   });
 
   return {
-    commandPath: `linear api ${resource} ${operation}`,
+    commandPath: `linear-agent api ${resource} ${operation}`,
     resource,
     operation,
     graphqlField: field.name,
@@ -315,7 +315,7 @@ function resolveCollisions(entries: ApiCommandEntry[]): ApiCommandEntry[] {
       const updated: ApiCommandEntry = {
         ...entry,
         operation: newOp,
-        commandPath: `linear api ${entry.resource} ${newOp}`
+        commandPath: `linear-agent api ${entry.resource} ${newOp}`
       };
       result.push(updated);
     }
@@ -390,7 +390,7 @@ async function main(): Promise<void> {
   } catch {
     process.stderr.write(
       `Error: schema.json not found at ${schemaPath}\n` +
-      "Run 'linear schema pull' first to download the introspection schema.\n"
+      "Run 'linear-agent schema pull' first to download the introspection schema.\n"
     );
     process.exitCode = 1;
     return;

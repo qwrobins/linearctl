@@ -420,7 +420,7 @@ export async function handleAttachmentCommand(
   if (subcommand === "delete") {
     const attachmentId = rest[0];
     if (attachmentId === undefined || attachmentId.trim() === "") {
-      return emitValidationError("usage: linear attachment delete <attachmentId>", options);
+      return emitValidationError("usage: linear-agent attachment delete <attachmentId>", options);
     }
     if (rest.length > 1) {
       return emitValidationError("attachment delete accepts exactly one attachment ID.", options);
@@ -428,7 +428,7 @@ export async function handleAttachmentCommand(
     return handleAttachmentDelete(attachmentId, options);
   }
 
-  return emitValidationError("unsupported attachment command. Try linear attachment list, create, or delete.", options);
+  return emitValidationError("unsupported attachment command. Try linear-agent attachment list, create, or delete.", options);
 }
 
 function hasErrors(errors: GraphQLErrorPayload[] | undefined): boolean {

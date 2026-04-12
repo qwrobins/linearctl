@@ -157,7 +157,7 @@ describe("generateManifest", () => {
     expect(issueGet!.graphqlField).toBe("issue");
     expect(issueGet!.graphqlOperationType).toBe("query");
     expect(issueGet!.inputMode).toBe("id");
-    expect(issueGet!.commandPath).toBe("linear api issue get");
+    expect(issueGet!.commandPath).toBe("linear-agent api issue get");
 
     const issueList = manifest.find((e) => e.operation === "list" && e.resource === "issue");
     expect(issueList).toBeDefined();

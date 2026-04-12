@@ -758,7 +758,7 @@ export async function handleAuthCommand(
 
   if (subcommand === "switch") {
     if (profileName === undefined || extraPositionals.length > 0) {
-      process.stderr.write("Error: usage: linear auth switch <profile>\n");
+      process.stderr.write("Error: usage: linear-agent auth switch <profile>\n");
       return ExitCode.ValidationError;
     }
 
@@ -791,6 +791,6 @@ export async function handleAuthCommand(
     return ExitCode.Success;
   }
 
-  process.stderr.write("Error: unsupported auth command. Try linear auth status or linear auth switch <profile>.\n");
+  process.stderr.write("Error: unsupported auth command. Try linear-agent auth status or linear-agent auth switch <profile>.\n");
   return ExitCode.ValidationError;
 }

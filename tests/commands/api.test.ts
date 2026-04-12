@@ -61,7 +61,7 @@ function makeFetch(responseBody: unknown): FetchLike {
 
 const MOCK_MANIFEST: ApiCommandManifest = [
   {
-    commandPath: "linear api issue get",
+    commandPath: "linear-agent api issue get",
     resource: "issue",
     operation: "get",
     graphqlField: "issue",
@@ -76,7 +76,7 @@ const MOCK_MANIFEST: ApiCommandManifest = [
     deprecation: null
   },
   {
-    commandPath: "linear api issue list",
+    commandPath: "linear-agent api issue list",
     resource: "issue",
     operation: "list",
     graphqlField: "issues",
@@ -91,7 +91,7 @@ const MOCK_MANIFEST: ApiCommandManifest = [
     deprecation: null
   },
   {
-    commandPath: "linear api issue create",
+    commandPath: "linear-agent api issue create",
     resource: "issue",
     operation: "create",
     graphqlField: "issueCreate",
@@ -106,7 +106,7 @@ const MOCK_MANIFEST: ApiCommandManifest = [
     deprecation: null
   },
   {
-    commandPath: "linear api issue update",
+    commandPath: "linear-agent api issue update",
     resource: "issue",
     operation: "update",
     graphqlField: "issueUpdate",
@@ -124,7 +124,7 @@ const MOCK_MANIFEST: ApiCommandManifest = [
     deprecation: null
   },
   {
-    commandPath: "linear api project list",
+    commandPath: "linear-agent api project list",
     resource: "project",
     operation: "list",
     graphqlField: "projects",
@@ -215,8 +215,8 @@ describe("handleApiCommand", () => {
 
       expect(result).toBe(0);
       const text = output.stdout.join("");
-      expect(text).toContain("linear api issue get");
-      expect(text).toContain("linear api issue list");
+      expect(text).toContain("linear-agent api issue get");
+      expect(text).toContain("linear-agent api issue list");
     });
 
     it("returns JSON with --json", async () => {
@@ -300,7 +300,7 @@ describe("handleApiCommand", () => {
       expect(result).toBe(5);
       const text = output.stderr.join("");
       expect(text).toContain("manifest not found");
-      expect(text).toContain("linear schema pull");
+      expect(text).toContain("linear-agent schema pull");
     });
   });
 

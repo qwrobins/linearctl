@@ -1,6 +1,6 @@
 [
   {
-    "commandPath": "linear auth login",
+    "commandPath": "linear-agent auth login",
     "layer": "curated",
     "resource": "auth",
     "operation": "login",
@@ -12,7 +12,7 @@
     "supportedOutputModes": ["human", "json", "json-envelope"]
   },
   {
-    "commandPath": "linear auth logout",
+    "commandPath": "linear-agent auth logout",
     "layer": "curated",
     "resource": "auth",
     "operation": "logout",
@@ -24,7 +24,7 @@
     "supportedOutputModes": ["human", "json", "json-envelope"]
   },
   {
-    "commandPath": "linear auth status",
+    "commandPath": "linear-agent auth status",
     "layer": "curated",
     "resource": "auth",
     "operation": "status",
@@ -36,7 +36,7 @@
     "supportedOutputModes": ["human", "json", "json-envelope"]
   },
   {
-    "commandPath": "linear auth switch",
+    "commandPath": "linear-agent auth switch",
     "layer": "curated",
     "resource": "auth",
     "operation": "switch",
@@ -48,7 +48,7 @@
     "supportedOutputModes": ["human", "json", "json-envelope"]
   },
   {
-    "commandPath": "linear issue list",
+    "commandPath": "linear-agent issue list",
     "layer": "curated",
     "resource": "issue",
     "operation": "list",
@@ -64,7 +64,7 @@
     }
   },
   {
-    "commandPath": "linear issue get",
+    "commandPath": "linear-agent issue get",
     "layer": "curated",
     "resource": "issue",
     "operation": "get",
@@ -76,7 +76,7 @@
     "supportedOutputModes": ["human", "json", "json-envelope"]
   },
   {
-    "commandPath": "linear issue create",
+    "commandPath": "linear-agent issue create",
     "layer": "curated",
     "resource": "issue",
     "operation": "create",
@@ -88,7 +88,7 @@
     "supportedOutputModes": ["human", "json", "json-envelope"]
   },
   {
-    "commandPath": "linear issue update",
+    "commandPath": "linear-agent issue update",
     "layer": "curated",
     "resource": "issue",
     "operation": "update",
@@ -100,7 +100,7 @@
     "supportedOutputModes": ["human", "json", "json-envelope"]
   },
   {
-    "commandPath": "linear issue close",
+    "commandPath": "linear-agent issue close",
     "layer": "curated",
     "resource": "issue",
     "operation": "close",
@@ -112,7 +112,7 @@
     "supportedOutputModes": ["human", "json", "json-envelope"]
   },
   {
-    "commandPath": "linear issue assign",
+    "commandPath": "linear-agent issue assign",
     "layer": "curated",
     "resource": "issue",
     "operation": "assign",
@@ -124,7 +124,7 @@
     "supportedOutputModes": ["human", "json", "json-envelope"]
   },
   {
-    "commandPath": "linear issue comment",
+    "commandPath": "linear-agent issue comment",
     "layer": "curated",
     "resource": "issue",
     "operation": "comment",
@@ -136,7 +136,7 @@
     "supportedOutputModes": ["human", "json", "json-envelope"]
   },
   {
-    "commandPath": "linear project list",
+    "commandPath": "linear-agent project list",
     "layer": "curated",
     "resource": "project",
     "operation": "list",
@@ -148,7 +148,7 @@
     "supportedOutputModes": ["human", "json", "json-envelope"]
   },
   {
-    "commandPath": "linear project get",
+    "commandPath": "linear-agent project get",
     "layer": "curated",
     "resource": "project",
     "operation": "get",
@@ -160,7 +160,7 @@
     "supportedOutputModes": ["human", "json", "json-envelope"]
   },
   {
-    "commandPath": "linear project create",
+    "commandPath": "linear-agent project create",
     "layer": "curated",
     "resource": "project",
     "operation": "create",
@@ -172,7 +172,7 @@
     "supportedOutputModes": ["human", "json", "json-envelope"]
   },
   {
-    "commandPath": "linear project update",
+    "commandPath": "linear-agent project update",
     "layer": "curated",
     "resource": "project",
     "operation": "update",
@@ -184,7 +184,7 @@
     "supportedOutputModes": ["human", "json", "json-envelope"]
   },
   {
-    "commandPath": "linear cycle list",
+    "commandPath": "linear-agent cycle list",
     "layer": "curated",
     "resource": "cycle",
     "operation": "list",
@@ -196,7 +196,7 @@
     "supportedOutputModes": ["human", "json", "json-envelope"]
   },
   {
-    "commandPath": "linear cycle get",
+    "commandPath": "linear-agent cycle get",
     "layer": "curated",
     "resource": "cycle",
     "operation": "get",
@@ -208,7 +208,7 @@
     "supportedOutputModes": ["human", "json", "json-envelope"]
   },
   {
-    "commandPath": "linear cycle create",
+    "commandPath": "linear-agent cycle create",
     "layer": "curated",
     "resource": "cycle",
     "operation": "create",
@@ -220,7 +220,7 @@
     "supportedOutputModes": ["human", "json", "json-envelope"]
   },
   {
-    "commandPath": "linear cycle update",
+    "commandPath": "linear-agent cycle update",
     "layer": "curated",
     "resource": "cycle",
     "operation": "update",
@@ -232,7 +232,7 @@
     "supportedOutputModes": ["human", "json", "json-envelope"]
   },
   {
-    "commandPath": "linear team list",
+    "commandPath": "linear-agent team list",
     "layer": "curated",
     "resource": "team",
     "operation": "list",
@@ -244,7 +244,7 @@
     "supportedOutputModes": ["human", "json", "json-envelope"]
   },
   {
-    "commandPath": "linear team get",
+    "commandPath": "linear-agent team get",
     "layer": "curated",
     "resource": "team",
     "operation": "get",
@@ -256,7 +256,7 @@
     "supportedOutputModes": ["human", "json", "json-envelope"]
   },
   {
-    "commandPath": "linear user list",
+    "commandPath": "linear-agent user list",
     "layer": "curated",
     "resource": "user",
     "operation": "list",
@@ -268,7 +268,7 @@
     "supportedOutputModes": ["human", "json", "json-envelope"]
   },
   {
-    "commandPath": "linear user get",
+    "commandPath": "linear-agent user get",
     "layer": "curated",
     "resource": "user",
     "operation": "get",
@@ -280,7 +280,7 @@
     "supportedOutputModes": ["human", "json", "json-envelope"]
   },
   {
-    "commandPath": "linear user me",
+    "commandPath": "linear-agent user me",
     "layer": "curated",
     "resource": "user",
     "operation": "me",
@@ -292,7 +292,7 @@
     "supportedOutputModes": ["human", "json", "json-envelope"]
   },
   {
-    "commandPath": "linear label list",
+    "commandPath": "linear-agent label list",
     "layer": "curated",
     "resource": "label",
     "operation": "list",
@@ -304,7 +304,7 @@
     "supportedOutputModes": ["human", "json", "json-envelope"]
   },
   {
-    "commandPath": "linear label get",
+    "commandPath": "linear-agent label get",
     "layer": "curated",
     "resource": "label",
     "operation": "get",
@@ -316,7 +316,7 @@
     "supportedOutputModes": ["human", "json", "json-envelope"]
   },
   {
-    "commandPath": "linear label create",
+    "commandPath": "linear-agent label create",
     "layer": "curated",
     "resource": "label",
     "operation": "create",
@@ -328,7 +328,7 @@
     "supportedOutputModes": ["human", "json", "json-envelope"]
   },
   {
-    "commandPath": "linear comment list",
+    "commandPath": "linear-agent comment list",
     "layer": "curated",
     "resource": "comment",
     "operation": "list",
@@ -340,7 +340,7 @@
     "supportedOutputModes": ["human", "json", "json-envelope"]
   },
   {
-    "commandPath": "linear comment create",
+    "commandPath": "linear-agent comment create",
     "layer": "curated",
     "resource": "comment",
     "operation": "create",
@@ -352,7 +352,7 @@
     "supportedOutputModes": ["human", "json", "json-envelope"]
   },
   {
-    "commandPath": "linear comment update",
+    "commandPath": "linear-agent comment update",
     "layer": "curated",
     "resource": "comment",
     "operation": "update",
@@ -364,7 +364,7 @@
     "supportedOutputModes": ["human", "json", "json-envelope"]
   },
   {
-    "commandPath": "linear comment delete",
+    "commandPath": "linear-agent comment delete",
     "layer": "curated",
     "resource": "comment",
     "operation": "delete",
@@ -376,7 +376,7 @@
     "supportedOutputModes": ["human", "json", "json-envelope"]
   },
   {
-    "commandPath": "linear attachment list",
+    "commandPath": "linear-agent attachment list",
     "layer": "curated",
     "resource": "attachment",
     "operation": "list",
@@ -388,7 +388,7 @@
     "supportedOutputModes": ["human", "json", "json-envelope"]
   },
   {
-    "commandPath": "linear attachment create",
+    "commandPath": "linear-agent attachment create",
     "layer": "curated",
     "resource": "attachment",
     "operation": "create",
@@ -400,7 +400,7 @@
     "supportedOutputModes": ["human", "json", "json-envelope"]
   },
   {
-    "commandPath": "linear attachment delete",
+    "commandPath": "linear-agent attachment delete",
     "layer": "curated",
     "resource": "attachment",
     "operation": "delete",
@@ -412,7 +412,7 @@
     "supportedOutputModes": ["human", "json", "json-envelope"]
   },
   {
-    "commandPath": "linear file upload",
+    "commandPath": "linear-agent file upload",
     "layer": "curated",
     "resource": "file",
     "operation": "upload",
@@ -424,7 +424,7 @@
     "supportedOutputModes": ["human", "json", "json-envelope"]
   },
   {
-    "commandPath": "linear file download",
+    "commandPath": "linear-agent file download",
     "layer": "curated",
     "resource": "file",
     "operation": "download",
@@ -436,7 +436,7 @@
     "supportedOutputModes": ["human", "json", "json-envelope"]
   },
   {
-    "commandPath": "linear file url",
+    "commandPath": "linear-agent file url",
     "layer": "curated",
     "resource": "file",
     "operation": "url",
@@ -448,7 +448,7 @@
     "supportedOutputModes": ["human", "json", "json-envelope"]
   },
   {
-    "commandPath": "linear schema pull",
+    "commandPath": "linear-agent schema pull",
     "layer": "curated",
     "resource": "schema",
     "operation": "pull",
@@ -460,7 +460,7 @@
     "supportedOutputModes": ["human", "json", "json-envelope"]
   },
   {
-    "commandPath": "linear schema version",
+    "commandPath": "linear-agent schema version",
     "layer": "curated",
     "resource": "schema",
     "operation": "version",
@@ -472,7 +472,7 @@
     "supportedOutputModes": ["human", "json", "json-envelope"]
   },
   {
-    "commandPath": "linear schema check",
+    "commandPath": "linear-agent schema check",
     "layer": "curated",
     "resource": "schema",
     "operation": "check",

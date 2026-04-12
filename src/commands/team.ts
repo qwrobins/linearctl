@@ -286,7 +286,7 @@ export async function handleTeamCommand(
   if (subcommand === "get") {
     const identifier = rest[0];
     if (identifier === undefined || identifier === "") {
-      return emitValidationError("usage: linear team get <id-or-key>", options);
+      return emitValidationError("usage: linear-agent team get <id-or-key>", options);
     }
     if (rest.length > 1) {
       return emitValidationError("team get accepts exactly one identifier.", options);
@@ -304,7 +304,7 @@ export async function handleTeamCommand(
     return handleTeamList(options);
   }
 
-  return emitValidationError("unsupported team command. Try linear team get or linear team list.", options);
+  return emitValidationError("unsupported team command. Try linear-agent team get or linear-agent team list.", options);
 }
 
 function hasErrors(errors: GraphQLErrorPayload[] | undefined): boolean {

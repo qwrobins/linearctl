@@ -15,16 +15,16 @@ jobs:
         include:
           - os: ubuntu-latest
             target: bun-linux-x64
-            artifact: linear-linux-x64
+            artifact: linear-agent-linux-x64
           - os: ubuntu-latest
             target: bun-linux-arm64
-            artifact: linear-linux-arm64
+            artifact: linear-agent-linux-arm64
           - os: macos-latest
             target: bun-darwin-x64
-            artifact: linear-darwin-x64
+            artifact: linear-agent-darwin-x64
           - os: macos-latest
             target: bun-darwin-arm64
-            artifact: linear-darwin-arm64
+            artifact: linear-agent-darwin-arm64
 
     runs-on: ${{ matrix.os }}
 

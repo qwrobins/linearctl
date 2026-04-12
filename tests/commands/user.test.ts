@@ -207,7 +207,7 @@ describe("handleUserCommand — validation", () => {
       });
 
       expect(exitCode).toBe(5);
-      expect(output.stderr.join("")).toContain("usage: linear user get");
+      expect(output.stderr.join("")).toContain("usage: linear-agent user get");
     } finally {
       output.restore();
     }

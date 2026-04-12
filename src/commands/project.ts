@@ -627,7 +627,7 @@ export async function handleProjectCommand(
   if (subcommand === "get") {
     const id = rest[0];
     if (id === undefined || id === "") {
-      return emitValidationError("usage: linear project get <id>", options);
+      return emitValidationError("usage: linear-agent project get <id>", options);
     }
     if (rest.length > 1) {
       return emitValidationError("project get accepts exactly one identifier.", options);
@@ -652,7 +652,7 @@ export async function handleProjectCommand(
   if (subcommand === "update") {
     const id = rest[0];
     if (id === undefined || id === "") {
-      return emitValidationError("usage: linear project update <id>", options);
+      return emitValidationError("usage: linear-agent project update <id>", options);
     }
     if (rest.length > 1) {
       return emitValidationError("project update accepts exactly one identifier.", options);
@@ -663,7 +663,7 @@ export async function handleProjectCommand(
   if (subcommand === "delete") {
     const id = rest[0];
     if (id === undefined || id === "") {
-      return emitValidationError("usage: linear project delete <id>", options);
+      return emitValidationError("usage: linear-agent project delete <id>", options);
     }
     if (rest.length > 1) {
       return emitValidationError("project delete accepts exactly one identifier.", options);
@@ -671,7 +671,7 @@ export async function handleProjectCommand(
     return handleProjectDelete(id, options);
   }
 
-  return emitValidationError("unsupported project command. Try linear project get, list, create, update, or delete.", options);
+  return emitValidationError("unsupported project command. Try linear-agent project get, list, create, update, or delete.", options);
 }
 
 function hasErrors(errors: GraphQLErrorPayload[] | undefined): boolean {

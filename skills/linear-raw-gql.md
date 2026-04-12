@@ -1,11 +1,11 @@
-# linear-raw-gql
+# linear-agent-raw-gql
 
 Fallback skill for direct GraphQL access to the Linear API. Use only when no curated command and no generated command exists for the operation, or the user explicitly asks for raw GraphQL.
 
 ## When to use
 
 - No curated command covers the operation
-- No generated command covers the operation (check with `linear api search <term>`)
+- No generated command covers the operation (check with `linear-agent api search <term>`)
 - The user explicitly asks for raw GraphQL
 - The curated/generated layers lag behind a new Linear API feature
 
@@ -13,20 +13,20 @@ Fallback skill for direct GraphQL access to the Linear API. Use only when no cur
 
 ### Query
 ```bash
-linear gql query '{ viewer { id name email } }' --json
-linear gql query --file query.graphql --vars-file vars.json --json
-cat query.graphql | linear gql query --stdin --json
+linear-agent gql query '{ viewer { id name email } }' --json
+linear-agent gql query --file query.graphql --vars-file vars.json --json
+cat query.graphql | linear-agent gql query --stdin --json
 ```
 
 ### Mutation
 ```bash
-linear gql mutation 'mutation { issueCreate(input: {...}) { success } }' --json
-linear gql mutation --file mutation.graphql --vars-file vars.json --json-envelope
+linear-agent gql mutation 'mutation { issueCreate(input: {...}) { success } }' --json
+linear-agent gql mutation --file mutation.graphql --vars-file vars.json --json-envelope
 ```
 
 ### Introspect
 ```bash
-linear gql introspect --json
+linear-agent gql introspect --json
 ```
 
 ## Output modes
@@ -53,5 +53,5 @@ Raw GraphQL commands require exactly one output mode:
 
 - Do not use raw GraphQL when curated or generated commands exist
 - Do not use `--raw` unless explicitly debugging
-- Do not construct complex queries when `linear api` or curated commands handle the use case
+- Do not construct complex queries when `linear-agent api` or curated commands handle the use case
 - Always prefer deterministic command discovery over ad-hoc GraphQL construction

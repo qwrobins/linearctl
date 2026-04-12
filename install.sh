@@ -1,14 +1,14 @@
 #!/bin/sh
 set -e
 
-REPO="qwrobins/linear-cli"
+REPO="qwrobins/linear-agent-cli"
 INSTALL_DIR="${LINEAR_INSTALL_DIR:-$HOME/.local/bin}"
-BINARY_NAME="linear"
+BINARY_NAME="linear-agent"
 
 main() {
   os=$(detect_os)
   arch=$(detect_arch)
-  artifact="linear-${os}-${arch}"
+  artifact="linear-agent-${os}-${arch}"
 
   if [ -z "$LINEAR_VERSION" ]; then
     version=$(latest_version)
@@ -25,7 +25,7 @@ main() {
   url="${base_url}/${artifact}"
   checksums_url="${base_url}/checksums.txt"
 
-  echo "Installing linear ${version} (${os}/${arch})..."
+  echo "Installing linear-agent ${version} (${os}/${arch})..."
   echo "  From: ${url}"
   echo "  To:   ${INSTALL_DIR}/${BINARY_NAME}"
 

@@ -1,4 +1,4 @@
-# linear
+# linear-agent
 
 Agent-first CLI for the Linear API. Built to be used by LLM coding agents like Claude Code and Codex, but works just as well for humans at the terminal.
 
@@ -7,20 +7,20 @@ Three command layers: curated commands for common workflows, a generated API lay
 ## Install
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/qwrobins/linear-cli/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/qwrobins/linear-agent-cli/main/install.sh | sh
 ```
 
 Or install a specific version:
 
 ```bash
-LINEAR_VERSION=v0.1.0 curl -fsSL https://raw.githubusercontent.com/qwrobins/linear-cli/main/install.sh | sh
+LINEAR_VERSION=v0.1.0 curl -fsSL https://raw.githubusercontent.com/qwrobins/linear-agent-cli/main/install.sh | sh
 ```
 
 Or build from source:
 
 ```bash
 bun run build:binary
-cp dist/linear ~/.local/bin/linear
+cp dist/linear-agent ~/.local/bin/linear-agent
 ```
 
 The compiled binary has no runtime dependencies. Building from source requires [Bun](https://bun.sh).
@@ -30,21 +30,21 @@ The compiled binary has no runtime dependencies. Building from source requires [
 ```bash
 # Authenticate with an API key (create one at https://linear.app/settings/api)
 export LINEAR_API_KEY=lin_api_...
-linear auth login --profile work --api-key-env LINEAR_API_KEY --set-default
+linear-agent auth login --profile work --api-key-env LINEAR_API_KEY --set-default
 
 # Set a default team so list commands are scoped automatically
-linear team list --json
-linear team get <team-key> --set-default
+linear-agent team list --json
+linear-agent team get <team-key> --set-default
 
 # Verify setup
-linear auth whoami --json
+linear-agent auth whoami --json
 
 # Use it
-linear issue list --json
-linear issue create --title "Fix pagination bug" --priority 2 --json
+linear-agent issue list --json
+linear-agent issue create --title "Fix pagination bug" --priority 2 --json
 ```
 
-LLM agents can bootstrap this setup for you — the [linear-cli skill](skills/linear-cli.md) includes first-time setup instructions.
+LLM agents can bootstrap this setup for you — the [linear-agent-cli skill](skills/linear-cli.md) includes first-time setup instructions.
 
 ## Commands
 

@@ -508,7 +508,7 @@ export async function handleLabelCommand(
   if (subcommand === "get") {
     const identifier = rest[0];
     if (identifier === undefined || identifier === "") {
-      return emitValidationError("usage: linear label get <id>", options);
+      return emitValidationError("usage: linear-agent label get <id>", options);
     }
     if (rest.length > 1) {
       return emitValidationError("label get accepts exactly one identifier.", options);
@@ -533,7 +533,7 @@ export async function handleLabelCommand(
   if (subcommand === "delete") {
     const labelId = rest[0];
     if (labelId === undefined || labelId.trim() === "") {
-      return emitValidationError("usage: linear label delete <id>", options);
+      return emitValidationError("usage: linear-agent label delete <id>", options);
     }
     if (rest.length > 1) {
       return emitValidationError("label delete accepts exactly one identifier.", options);
@@ -541,7 +541,7 @@ export async function handleLabelCommand(
     return handleLabelDelete(labelId, options);
   }
 
-  return emitValidationError("unsupported label command. Try linear label get, list, create, or delete.", options);
+  return emitValidationError("unsupported label command. Try linear-agent label get, list, create, or delete.", options);
 }
 
 function hasErrors(errors: GraphQLErrorPayload[] | undefined): boolean {

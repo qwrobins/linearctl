@@ -14,13 +14,13 @@ Store the key in an environment variable and pass the variable name (not the key
 
 ```bash
 export LINEAR_API_KEY=lin_api_...
-linear auth login --profile work --api-key-env LINEAR_API_KEY
+linear-agent auth login --profile work --api-key-env LINEAR_API_KEY
 ```
 
 Or pipe via stdin:
 
 ```bash
-echo "$LINEAR_API_KEY" | linear auth login --profile work --api-key-stdin
+echo "$LINEAR_API_KEY" | linear-agent auth login --profile work --api-key-stdin
 ```
 
 The CLI never accepts API keys as plain command-line arguments. This prevents secrets from appearing in shell history and process listings.
@@ -32,7 +32,7 @@ OAuth uses the PKCE authorization code flow with a local loopback callback serve
 You need an OAuth application client ID. Create one at [Linear API applications](https://linear.app/settings/api/applications).
 
 ```bash
-linear auth login --profile work --oauth --oauth-client-id <client-id>
+linear-agent auth login --profile work --oauth --oauth-client-id <client-id>
 ```
 
 This:
@@ -53,10 +53,10 @@ OAuth tokens expire. The CLI auto-refreshes expired tokens during profile resolu
 
 ```bash
 # During login
-linear auth login --profile work --api-key-env LINEAR_API_KEY --set-default
+linear-agent auth login --profile work --api-key-env LINEAR_API_KEY --set-default
 
 # After login
-linear auth switch work
+linear-agent auth switch work
 ```
 
 ## Profile resolution order
@@ -74,23 +74,23 @@ The CLI never silently chooses among multiple profiles. If resolution is ambiguo
 
 ```bash
 # List all profiles with auth type and workspace
-linear auth status --json
+linear-agent auth status --json
 
 # Show current user and organization for the active profile
-linear auth whoami --json
+linear-agent auth whoami --json
 
 # List workspaces accessible to the active profile
-linear workspace list --json
+linear-agent workspace list --json
 ```
 
 ## Logout
 
 ```bash
 # Remove credentials for a profile
-linear auth logout --profile work
+linear-agent auth logout --profile work
 
 # Also remove config metadata
-linear auth logout --profile work --remove-config
+linear-agent auth logout --profile work --remove-config
 ```
 
 ## File layout
@@ -135,7 +135,7 @@ Profile names must match across both files. The `[default]` section in config st
 For non-standard config locations:
 
 ```bash
-linear auth status --config-file /path/to/config --credentials-file /path/to/credentials
+linear-agent auth status --config-file /path/to/config --credentials-file /path/to/credentials
 ```
 
 ## Security

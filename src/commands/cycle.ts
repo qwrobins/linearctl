@@ -562,7 +562,7 @@ export async function handleCycleCommand(
   if (subcommand === "get") {
     const id = rest[0];
     if (id === undefined || id === "") {
-      return emitValidationError("usage: linear cycle get <id>", options);
+      return emitValidationError("usage: linear-agent cycle get <id>", options);
     }
     if (rest.length > 1) {
       return emitValidationError("cycle get accepts exactly one identifier.", options);
@@ -587,7 +587,7 @@ export async function handleCycleCommand(
   if (subcommand === "update") {
     const id = rest[0];
     if (id === undefined || id === "") {
-      return emitValidationError("usage: linear cycle update <id>", options);
+      return emitValidationError("usage: linear-agent cycle update <id>", options);
     }
     if (rest.length > 1) {
       return emitValidationError("cycle update accepts exactly one identifier.", options);
@@ -595,7 +595,7 @@ export async function handleCycleCommand(
     return handleCycleUpdate(id, options);
   }
 
-  return emitValidationError("unsupported cycle command. Try linear cycle get, list, create, or update.", options);
+  return emitValidationError("unsupported cycle command. Try linear-agent cycle get, list, create, or update.", options);
 }
 
 function hasErrors(errors: GraphQLErrorPayload[] | undefined): boolean {

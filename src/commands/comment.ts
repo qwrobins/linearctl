@@ -498,7 +498,7 @@ export async function handleCommentCommand(
   if (subcommand === "update") {
     const commentId = rest[0];
     if (commentId === undefined || commentId.trim() === "") {
-      return emitValidationError("usage: linear comment update <commentId> --body <text>", options);
+      return emitValidationError("usage: linear-agent comment update <commentId> --body <text>", options);
     }
     if (rest.length > 1) {
       return emitValidationError("comment update accepts exactly one comment ID.", options);
@@ -509,7 +509,7 @@ export async function handleCommentCommand(
   if (subcommand === "delete") {
     const commentId = rest[0];
     if (commentId === undefined || commentId.trim() === "") {
-      return emitValidationError("usage: linear comment delete <commentId>", options);
+      return emitValidationError("usage: linear-agent comment delete <commentId>", options);
     }
     if (rest.length > 1) {
       return emitValidationError("comment delete accepts exactly one comment ID.", options);
@@ -517,7 +517,7 @@ export async function handleCommentCommand(
     return handleCommentDelete(commentId, options);
   }
 
-  return emitValidationError("unsupported comment command. Try linear comment list, create, update, or delete.", options);
+  return emitValidationError("unsupported comment command. Try linear-agent comment list, create, update, or delete.", options);
 }
 
 function hasErrors(errors: GraphQLErrorPayload[] | undefined): boolean {

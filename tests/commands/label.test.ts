@@ -250,7 +250,7 @@ describe("handleLabelCommand — validation", () => {
       });
 
       expect(exitCode).toBe(5);
-      expect(output.stderr.join("")).toContain("usage: linear label get");
+      expect(output.stderr.join("")).toContain("usage: linear-agent label get");
     } finally {
       output.restore();
     }

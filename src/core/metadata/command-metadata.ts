@@ -132,8 +132,8 @@ export function assertValidCommandMetadata(command: unknown): asserts command is
     throw new Error("commandPath is required");
   }
 
-  if (!command.commandPath.startsWith("linear ")) {
-    throw new Error(`commandPath must start with "linear ": ${command.commandPath}`);
+  if (!command.commandPath.startsWith("linear-agent ")) {
+    throw new Error(`commandPath must start with "linear-agent ": ${command.commandPath}`);
   }
 
   if (command.supportedOutputModes.length === 0) {

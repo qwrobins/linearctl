@@ -21,9 +21,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `state` — list, get, create (workflow states)
   - `project-status` — list, get, create, delete
 - **File operations** — upload (with optional attachment), download, signed URL
-- **Generated API layer** — `linear api <resource> <operation>` with manifest-driven discovery, search, and help
-- **Raw GraphQL** — `linear gql query`, `linear gql mutation`, `linear gql introspect`
-- **Schema management** — `linear schema version`, `linear schema pull`, `linear schema check` with structural diff
+- **Generated API layer** — `linear-agent api <resource> <operation>` with manifest-driven discovery, search, and help
+- **Raw GraphQL** — `linear-agent gql query`, `linear-agent gql mutation`, `linear-agent gql introspect`
+- **Schema management** — `linear-agent schema version`, `linear-agent schema pull`, `linear-agent schema check` with structural diff
 - **Authentication** — API key auth (`--api-key-env`, `--api-key-stdin`), OAuth PKCE browser flow with auto-refresh
 - **Named profiles** — AWS CLI-style INI config/credentials files at `~/.config/linear/`
 - **Profile management** — `auth status`, `auth login`, `auth logout`, `auth switch`, `auth whoami`
@@ -37,6 +37,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`--dry-run`** for all destructive/mutating commands
 - **Transport retry** — bounded exponential backoff for 429 rate limits, `--no-retry`, `--max-retries`
 - **Schema regeneration** — `bun run regenerate:schema` for CI with diff detection
-- **Skills** — `linear-cli` and `linear-raw-gql` agent skills with routing rules and examples
+- **Skills** — `linear-agent-cli` and `linear-agent-raw-gql` agent skills with routing rules and examples
 - **CI/CD** — GitHub Actions for CI (typecheck, test, build) and releases (multi-platform binaries)
 - **Install script** — `curl | sh` installer for Linux and macOS (x64, arm64)

@@ -348,7 +348,7 @@ describe("handleIssueCommand — validation", () => {
       });
 
       expect(exitCode).toBe(5);
-      expect(output.stderr.join("")).toContain("usage: linear issue get <identifier>");
+      expect(output.stderr.join("")).toContain("usage: linear-agent issue get <identifier>");
     } finally {
       output.restore();
     }
@@ -575,7 +575,7 @@ describe("handleIssueCommand — issue assign", () => {
       });
 
       expect(exitCode).toBe(5);
-      expect(output.stderr.join("")).toContain("usage: linear issue assign");
+      expect(output.stderr.join("")).toContain("usage: linear-agent issue assign");
     } finally {
       output.restore();
     }

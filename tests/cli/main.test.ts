@@ -20,22 +20,22 @@ describe("CLI scaffold", () => {
     const { stdout: output } = await runCli(["--help"]);
 
     expect(output).toContain("curated");
-    expect(output).toContain("linear api");
-    expect(output).toContain("linear gql");
+    expect(output).toContain("linear-agent api");
+    expect(output).toContain("linear-agent gql");
   });
 
   it("prints curated metadata as JSON", async () => {
     const { stdout: output } = await runCli(["--metadata", "curated", "--json"]);
     const metadata = JSON.parse(output) as Array<{ commandPath: string }>;
 
-    expect(metadata.some((command) => command.commandPath === "linear issue get")).toBe(true);
+    expect(metadata.some((command) => command.commandPath === "linear-agent issue get")).toBe(true);
   });
 
   it("accepts metadata flags in alternate valid forms", async () => {
     const { stdout: output } = await runCli(["--json", "--metadata=curated"]);
     const metadata = JSON.parse(output) as Array<{ commandPath: string }>;
 
-    expect(metadata.some((command) => command.commandPath === "linear issue get")).toBe(true);
+    expect(metadata.some((command) => command.commandPath === "linear-agent issue get")).toBe(true);
   });
 
   it("returns validation errors for malformed arguments", async () => {

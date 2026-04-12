@@ -50,7 +50,7 @@ export async function handleSchemaCommand(
     return handleSchemaCheck(rest, options);
   }
 
-  process.stderr.write("Error: unsupported schema command. Try linear schema version, linear schema pull, or linear schema check.\n");
+  process.stderr.write("Error: unsupported schema command. Try linear-agent schema version, linear-agent schema pull, or linear-agent schema check.\n");
   return ExitCode.ValidationError;
 }
 
@@ -75,7 +75,7 @@ function handleSchemaVersion(positionals: string[], options: SchemaCommandOption
   }
 
   if (output.status === "not-bundled") {
-    process.stdout.write("No schema is bundled. Run linear schema pull to fetch the live schema.\n");
+    process.stdout.write("No schema is bundled. Run linear-agent schema pull to fetch the live schema.\n");
   } else {
     process.stdout.write(`Schema version: ${output.schemaVersion}\n`);
     process.stdout.write(`Bundled at: ${output.bundledAt}\n`);

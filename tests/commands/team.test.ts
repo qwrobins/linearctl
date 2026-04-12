@@ -178,7 +178,7 @@ describe("handleTeamCommand — validation", () => {
       });
 
       expect(exitCode).toBe(5);
-      expect(output.stderr.join("")).toContain("usage: linear team get");
+      expect(output.stderr.join("")).toContain("usage: linear-agent team get");
     } finally {
       output.restore();
     }

@@ -1411,7 +1411,7 @@ export async function handleIssueCommand(
   if (subcommand === "get") {
     const identifier = rest[0];
     if (identifier === undefined || identifier === "") {
-      return emitValidationError("usage: linear issue get <identifier>", options);
+      return emitValidationError("usage: linear-agent issue get <identifier>", options);
     }
     if (rest.length > 1) {
       return emitValidationError("issue get accepts exactly one identifier.", options);
@@ -1436,7 +1436,7 @@ export async function handleIssueCommand(
   if (subcommand === "update") {
     const identifier = rest[0];
     if (identifier === undefined || identifier === "") {
-      return emitValidationError("usage: linear issue update <identifier> [--title ...]", options);
+      return emitValidationError("usage: linear-agent issue update <identifier> [--title ...]", options);
     }
     if (rest.length > 1) {
       return emitValidationError("issue update accepts exactly one identifier.", options);
@@ -1447,7 +1447,7 @@ export async function handleIssueCommand(
   if (subcommand === "close") {
     const identifier = rest[0];
     if (identifier === undefined || identifier === "") {
-      return emitValidationError("usage: linear issue close <identifier>", options);
+      return emitValidationError("usage: linear-agent issue close <identifier>", options);
     }
     if (rest.length > 1) {
       return emitValidationError("issue close accepts exactly one identifier.", options);
@@ -1459,7 +1459,7 @@ export async function handleIssueCommand(
     const identifier = rest[0];
     const assigneeId = rest[1];
     if (identifier === undefined || identifier === "" || assigneeId === undefined || assigneeId === "") {
-      return emitValidationError("usage: linear issue assign <identifier> <assignee-id>", options);
+      return emitValidationError("usage: linear-agent issue assign <identifier> <assignee-id>", options);
     }
     if (rest.length > 2) {
       return emitValidationError("issue assign accepts exactly two positional arguments.", options);
@@ -1470,7 +1470,7 @@ export async function handleIssueCommand(
   if (subcommand === "comment") {
     const identifier = rest[0];
     if (identifier === undefined || identifier === "") {
-      return emitValidationError("usage: linear issue comment <identifier> --body <text>", options);
+      return emitValidationError("usage: linear-agent issue comment <identifier> --body <text>", options);
     }
     if (rest.length > 1) {
       return emitValidationError("issue comment accepts exactly one identifier.", options);
