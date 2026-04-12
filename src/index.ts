@@ -26,6 +26,7 @@ export * from "./commands/user.js";
 export * from "./commands/label.js";
 export * from "./commands/project.js";
 export * from "./commands/state.js";
+export * from "./commands/project-status.js";
 export * from "./commands/cycle.js";
 export * from "./commands/file.js";
 export * from "./commands/workspace.js";

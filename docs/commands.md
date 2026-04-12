@@ -104,6 +104,20 @@ linear state create --name <name> --team <name|key|id> --state-type <type> \
 
 `--state-type` must be one of: `backlog`, `unstarted`, `started`, `completed`, `canceled`.
 
+## Project status
+
+Project statuses are workspace-level (not team-scoped) and represent customizable statuses for projects.
+
+```bash
+linear project-status list [--json]
+linear project-status get <id> [--json]
+linear project-status create --name <name> --status-type <type> \
+  [--description <text>] [--color <hex>] [--position <n>] [--json]
+linear project-status delete <id> [--json]          # [destructive]
+```
+
+`--status-type` must be one of: `backlog`, `planned`, `started`, `paused`, `completed`, `canceled`.
+
 ## Comment
 
 ```bash
