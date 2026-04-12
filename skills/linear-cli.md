@@ -46,6 +46,13 @@ Raw GraphQL should not be used merely because it is possible. It is the fallback
 - `linear project list [--team <id>] [--everything] --json`
 - `linear project create --name <name> [--description <text>] [--team <id>] --json`
 - `linear project update <id> [--name <text>] [--description <text>] [--state <state>] --json`
+- `linear project delete <id> --json`
+
+### Project statuses
+- `linear project-status list --json` — list workspace-level project statuses
+- `linear project-status get <id> --json`
+- `linear project-status create --name <name> --status-type <type> --color <hex> --json` (types: backlog, planned, started, paused, completed, canceled)
+- `linear project-status delete <id> --json` — archives the status
 
 ### Cycles
 - `linear cycle get <id> --json`
@@ -66,6 +73,7 @@ Raw GraphQL should not be used merely because it is possible. It is the fallback
 - `linear label get <id> --json`
 - `linear label list [--team <id>] [--everything] --json`
 - `linear label create --name <name> [--description <text>] [--color <hex>] [--team <id>] --json`
+- `linear label delete <id> --json`
 
 ### Comments
 - `linear comment list --issue <id> --json`
@@ -82,6 +90,11 @@ Raw GraphQL should not be used merely because it is possible. It is the fallback
 - `linear file upload <path> [--issue <id>] --json`
 - `linear file url <attachment-id> [--expires-in <seconds>] --json`
 - `linear file download <url> [--output <path>] --json`
+
+### Workflow states
+- `linear state list [--team <id>] [--everything] --json` — list issue workflow states for a team
+- `linear state get <id> --json`
+- `linear state create --name <name> --team <id> --state-type <type> --json` (types: backlog, unstarted, started, completed, canceled)
 
 ### Schema
 - `linear schema version --json`
