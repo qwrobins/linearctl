@@ -83,21 +83,23 @@ describe("handleSkillsCommand", () => {
   });
 
   describe("skills install", () => {
-    it("writes skill files to .claude/skills/ in project mode", async () => {
+    it("writes skill files to .claude/skills/ and .codex/skills/ in project mode", async () => {
       const tempDir = await mkdtemp(join(tmpdir(), "linear-cli-skills-"));
       const originalCwd = process.cwd();
       process.chdir(tempDir);
 
       const { chunks, spy: stdoutSpy } = captureStdout();
       const { spy: stderrSpy } = captureStderr();
+      const skillCount = Object.keys(EMBEDDED_SKILLS).length;
 
       try {
         const code = await handleSkillsCommand(["install"], baseOptions());
         expect(code).toBe(0);
 
         const parsed = JSON.parse(chunks.join(""));
-        expect(parsed.location).toBe("project");
-        expect(parsed.installed).toHaveLength(2);
+        expect(parsed.locations).toHaveLength(2);
+        // 2 agents x N skills
+        expect(parsed.installed).toHaveLength(skillCount * 2);
 
         for (const entry of parsed.installed) {
           const content = await readFile(entry.path, "utf8");
@@ -110,27 +112,29 @@ describe("handleSkillsCommand", () => {
       }
     });
 
-    it("writes skill files to ~/.claude/skills/ in user mode", async () => {
+    it("writes skill files to ~/.claude/skills/ with --location claude", async () => {
       const tempDir = await mkdtemp(join(tmpdir(), "linear-cli-skills-user-"));
       const originalHome = process.env.HOME;
       process.env.HOME = tempDir;
 
       const { chunks, spy: stdoutSpy } = captureStdout();
       const { spy: stderrSpy } = captureStderr();
+      const skillCount = Object.keys(EMBEDDED_SKILLS).length;
 
       try {
         const code = await handleSkillsCommand(
           ["install"],
-          baseOptions({ location: "user" })
+          baseOptions({ location: "claude" })
         );
         expect(code).toBe(0);
 
         const parsed = JSON.parse(chunks.join(""));
-        expect(parsed.location).toBe("user");
-        expect(parsed.installed).toHaveLength(2);
+        expect(parsed.locations).toHaveLength(1);
+        expect(parsed.installed).toHaveLength(skillCount);
 
         for (const entry of parsed.installed) {
           expect(entry.path).toContain(tempDir);
+          expect(entry.agent).toBe("claude");
           const content = await readFile(entry.path, "utf8");
           expect(content).toBe(EMBEDDED_SKILLS[entry.name]!.content);
         }

@@ -1,3 +1,8 @@
+---
+name: linear-agent-cli
+description: Agent-first CLI for the Linear API — curated commands, generated API, and raw GraphQL with stable JSON output contracts
+---
+
 # linear-agent-cli
 
 Default skill for all Linear CLI usage. Use this skill for any request involving Linear data unless raw GraphQL is explicitly required or the curated/generated layers cannot cover the operation.

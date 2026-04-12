@@ -1,5 +1,5 @@
-import { readFileSync, writeFileSync, readdirSync, mkdirSync } from "node:fs";
-import { join, dirname, basename } from "node:path";
+import { readFileSync, writeFileSync, readdirSync, mkdirSync, statSync } from "node:fs";
+import { join, dirname } from "node:path";
 
 const rootDir = join(dirname(import.meta.filename), "..");
 const skillsDir = join(rootDir, "skills");
@@ -8,14 +8,20 @@ const outFile = join(outDir, "embedded-skills.ts");
 
 mkdirSync(outDir, { recursive: true });
 
-const skillFiles = readdirSync(skillsDir).filter((f) => f.endsWith(".md")).sort();
+// Discover skills: each subdirectory of skills/ containing a SKILL.md
+const skillDirs = readdirSync(skillsDir)
+  .filter((name) => {
+    const path = join(skillsDir, name);
+    return statSync(path).isDirectory() && statSync(join(path, "SKILL.md"), { throwIfNoEntry: false })?.isFile();
+  })
+  .sort();
+
 const entries: string[] = [];
 
-for (const file of skillFiles) {
-  const content = readFileSync(join(skillsDir, file), "utf8");
-  const key = basename(file, ".md");
-  entries.push(`  ${JSON.stringify(key)}: {
-    filename: ${JSON.stringify(file)},
+for (const dir of skillDirs) {
+  const content = readFileSync(join(skillsDir, dir, "SKILL.md"), "utf8");
+  entries.push(`  ${JSON.stringify(dir)}: {
+    filename: ${JSON.stringify(dir + ".md")},
     content: ${JSON.stringify(content)}
   }`);
 }
@@ -27,4 +33,4 @@ ${entries.join(",\n")}
 `;
 
 writeFileSync(outFile, output);
-console.log(`Embedded ${skillFiles.length} skill(s) into src/generated/embedded-skills.ts`);
+console.log(`Embedded ${skillDirs.length} skill(s) into src/generated/embedded-skills.ts`);

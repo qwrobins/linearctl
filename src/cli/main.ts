@@ -509,7 +509,7 @@ Commands:
   linear-agent gql introspect --json
   linear-agent gql query '{ viewer { id } }' --json
   linear-agent gql mutation --file m.graphql --vars-file v.json --json
-  linear-agent skills install [--location project|user] [--json]
+  linear-agent skills install [--location project|claude|codex|all] [--json]
   linear-agent skills list [--json]
   linear-agent schema version [--json]
   linear-agent schema pull [--json] [--output-dir <path>]  (default: project src/generated/manifest)
