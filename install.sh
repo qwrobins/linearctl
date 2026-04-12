@@ -130,8 +130,13 @@ latest_version() {
   if command -v curl > /dev/null 2>&1; then
     http_code=$(curl -sL -w "%{http_code}" "https://api.github.com/repos/${REPO}/releases/latest" -o "$api_response")
   elif command -v wget > /dev/null 2>&1; then
-    wget -qO "$api_response" "https://api.github.com/repos/${REPO}/releases/latest" 2>/dev/null
-    http_code="200"
+    wget_headers=$(mktemp)
+    wget -S -O "$api_response" "https://api.github.com/repos/${REPO}/releases/latest" 2>"$wget_headers" || true
+    http_code=$(awk '/^  HTTP\/|^HTTP\// { code=$2 } END { print code }' "$wget_headers")
+    rm -f "$wget_headers"
+    if [ -z "$http_code" ]; then
+      http_code="000"
+    fi
   else
     echo "Error: curl or wget is required" >&2
     exit 1
