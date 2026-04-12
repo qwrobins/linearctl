@@ -88,7 +88,7 @@ const PROJECT_STATUS_CREATE_MUTATION = `
 mutation ProjectStatusCreate($input: ProjectStatusCreateInput!) {
   projectStatusCreate(input: $input) {
     success
-    projectStatus {
+    status {
       ...CuratedProjectStatus
     }
   }
@@ -96,8 +96,8 @@ mutation ProjectStatusCreate($input: ProjectStatusCreateInput!) {
 ${CURATED_PROJECT_STATUS_FRAGMENT}`;
 
 const PROJECT_STATUS_DELETE_MUTATION = `
-mutation ProjectStatusDelete($id: String!) {
-  projectStatusDelete(id: $id) {
+mutation ProjectStatusArchive($id: String!) {
+  projectStatusArchive(id: $id) {
     success
   }
 }`;
@@ -310,23 +310,28 @@ async function handleProjectStatusCreate(options: ProjectStatusCommandOptions): 
     );
   }
 
-  const input: Record<string, unknown> = {
-    name: options.name,
-    type: options.statusType
-  };
+  if (options.color === undefined || options.color.trim() === "") {
+    return emitValidationError("--color is required for project-status create.", options);
+  }
 
-  if (options.description !== undefined) {
-    input.description = options.description;
-  }
-  if (options.color !== undefined) {
-    input.color = options.color;
-  }
+  let position = 0;
   if (options.position !== undefined) {
     const pos = Number(options.position);
     if (!Number.isFinite(pos)) {
       return emitValidationError("--position must be a number.", options);
     }
-    input.position = pos;
+    position = pos;
+  }
+
+  const input: Record<string, unknown> = {
+    name: options.name,
+    type: options.statusType,
+    color: options.color.trim(),
+    position
+  };
+
+  if (options.description !== undefined) {
+    input.description = options.description;
   }
 
   if (options.dryRun === true) {
@@ -344,7 +349,7 @@ async function handleProjectStatusCreate(options: ProjectStatusCommandOptions): 
     });
 
     const response = await executeGraphQL<{
-      projectStatusCreate: { success: boolean; projectStatus: RawProjectStatus | null };
+      projectStatusCreate: { success: boolean; status: RawProjectStatus | null };
     }>({
       query: PROJECT_STATUS_CREATE_MUTATION,
       variables: { input },
@@ -359,8 +364,8 @@ async function handleProjectStatusCreate(options: ProjectStatusCommandOptions): 
 
     if (
       hasErrors(response.body.errors) ||
-      response.body.data?.projectStatusCreate?.projectStatus === null ||
-      response.body.data?.projectStatusCreate?.projectStatus === undefined
+      response.body.data?.projectStatusCreate?.status === null ||
+      response.body.data?.projectStatusCreate?.status === undefined
     ) {
       if (options.jsonEnvelope) {
         const errors = mapGraphQLErrors(response.body.errors);
@@ -376,7 +381,7 @@ async function handleProjectStatusCreate(options: ProjectStatusCommandOptions): 
       return ExitCode.GeneralError;
     }
 
-    const status = normalizeProjectStatus(response.body.data.projectStatusCreate.projectStatus);
+    const status = normalizeProjectStatus(response.body.data.projectStatusCreate.status);
 
     if (options.jsonEnvelope) {
       const envelope = successEnvelope(status, { sourceLayer: "curated", profile: profile.name });
@@ -421,7 +426,7 @@ async function handleProjectStatusDelete(statusId: string, options: ProjectStatu
     });
 
     const response = await executeGraphQL<{
-      projectStatusDelete: { success: boolean };
+      projectStatusArchive: { success: boolean };
     }>({
       query: PROJECT_STATUS_DELETE_MUTATION,
       variables: { id: statusId },
@@ -436,7 +441,7 @@ async function handleProjectStatusDelete(statusId: string, options: ProjectStatu
 
     if (
       hasErrors(response.body.errors) ||
-      !response.body.data?.projectStatusDelete?.success
+      !response.body.data?.projectStatusArchive?.success
     ) {
       if (options.jsonEnvelope) {
         const errors = mapGraphQLErrors(response.body.errors);

@@ -157,7 +157,7 @@ describe("handleProjectStatusCommand — project-status create", () => {
     const paths = await writeProfileFiles(directory);
     const createdStatus = makeRawProjectStatus({ name: "Paused", type: "paused" });
     const fetchImpl = makeFetch({
-      data: { projectStatusCreate: { success: true, projectStatus: createdStatus } }
+      data: { projectStatusCreate: { success: true, status: createdStatus } }
     });
     const output = captureOutput();
 
@@ -166,6 +166,7 @@ describe("handleProjectStatusCommand — project-status create", () => {
         ...baseOptions(paths),
         name: "Paused",
         statusType: "paused",
+        color: "#ff0000",
         fetchImpl
       });
 
@@ -242,6 +243,7 @@ describe("handleProjectStatusCommand — project-status create", () => {
         ...baseOptions(paths),
         name: "Paused",
         statusType: "paused",
+        color: "#ff0000",
         dryRun: true
       });
 
@@ -261,7 +263,7 @@ describe("handleProjectStatusCommand — project-status delete", () => {
     const directory = await mkdtemp(join(tmpdir(), "linear-cli-ps-"));
     const paths = await writeProfileFiles(directory);
     const fetchImpl = makeFetch({
-      data: { projectStatusDelete: { success: true } }
+      data: { projectStatusArchive: { success: true } }
     });
     const output = captureOutput();
 
