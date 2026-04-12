@@ -76,7 +76,7 @@ verify_checksum() {
   artifact_name="$2"
   checksums_file="$3"
 
-  expected=$(grep "$artifact_name" "$checksums_file" | awk '{print $1}')
+  expected=$(awk -v name="$artifact_name" '$2 == name {print $1}' "$checksums_file")
   if [ -z "$expected" ]; then
     echo "Warning: no checksum found for ${artifact_name}, skipping verification" >&2
     return 0
