@@ -16,6 +16,12 @@ Or install a specific version:
 LINEAR_VERSION=v0.1.0 curl -fsSL https://raw.githubusercontent.com/qwrobins/linear-agent-cli/main/install.sh | sh
 ```
 
+On Debian/Ubuntu, the installer automatically uses the `.deb` package. To skip deb and install the raw binary instead:
+
+```bash
+LINEAR_NO_DEB=1 curl -fsSL https://raw.githubusercontent.com/qwrobins/linear-agent-cli/main/install.sh | sh
+```
+
 Or build from source:
 
 ```bash

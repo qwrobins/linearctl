@@ -22,8 +22,24 @@ main() {
   fi
 
   base_url="https://github.com/${REPO}/releases/download/${version}"
-  url="${base_url}/${artifact}"
   checksums_url="${base_url}/checksums.txt"
+
+  # On Linux with dpkg, use .deb package
+  if [ "$os" = "linux" ] && command -v dpkg > /dev/null 2>&1 && [ "$LINEAR_NO_DEB" != "1" ]; then
+    deb_arch=$(detect_deb_arch)
+    deb_name="linear-agent_${version#v}_${deb_arch}.deb"
+    deb_url="${base_url}/${deb_name}"
+    deb_file=$(mktemp --suffix=.deb)
+
+    echo "Installing linear-agent ${version} via deb package (${deb_arch})..."
+    download "$deb_url" "$deb_file"
+    sudo dpkg -i "$deb_file"
+    rm -f "$deb_file"
+    echo "Installed linear-agent to /usr/bin/linear-agent"
+    return
+  fi
+
+  url="${base_url}/${artifact}"
 
   echo "Installing linear-agent ${version} (${os}/${arch})..."
   echo "  From: ${url}"
@@ -108,6 +124,17 @@ detect_os() {
     Darwin*) echo "darwin" ;;
     *)
       echo "Error: unsupported OS: $(uname -s)" >&2
+      exit 1
+      ;;
+  esac
+}
+
+detect_deb_arch() {
+  case "$(uname -m)" in
+    x86_64|amd64)  echo "amd64" ;;
+    aarch64|arm64) echo "arm64" ;;
+    *)
+      echo "Error: unsupported architecture for deb: $(uname -m)" >&2
       exit 1
       ;;
   esac

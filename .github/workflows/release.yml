@@ -93,10 +93,49 @@ jobs:
             cp "$dir/$name" "release/$name"
             chmod +x "release/$name"
           done
-          cd release
-          for f in *; do
-            sha256sum "$f" >> checksums.txt
+
+      - name: Build deb packages
+        env:
+          TAG_NAME: ${{ github.event.inputs.tag || github.ref_name }}
+        run: |
+          version="${TAG_NAME#v}"
+          for arch_pair in "x64:amd64" "arm64:arm64"; do
+            bun_arch="${arch_pair%%:*}"
+            deb_arch="${arch_pair##*:}"
+            binary="release/linear-agent-linux-${bun_arch}"
+            deb_name="linear-agent_${version}_${deb_arch}"
+
+            if [ ! -f "$binary" ]; then
+              echo "Skipping $deb_arch — binary not found"
+              continue
+            fi
+
+            mkdir -p "${deb_name}/DEBIAN"
+            mkdir -p "${deb_name}/usr/bin"
+
+            cp "$binary" "${deb_name}/usr/bin/linear-agent"
+            chmod 755 "${deb_name}/usr/bin/linear-agent"
+
+            cat > "${deb_name}/DEBIAN/control" << CTRL
+          Package: linear-agent
+          Version: ${version}
+          Architecture: ${deb_arch}
+          Maintainer: qwrobins
+          Description: Agent-first CLI for the Linear API
+           Built for LLM coding agents like Claude Code and Codex.
+           Three command layers: curated, generated API, and raw GraphQL.
+          CTRL
+            # Remove leading whitespace from heredoc
+            sed -i 's/^          //' "${deb_name}/DEBIAN/control"
+
+            dpkg-deb --build "$deb_name" "release/${deb_name}.deb"
+            echo "Built release/${deb_name}.deb"
           done
+
+      - name: Generate checksums
+        run: |
+          cd release
+          sha256sum * > checksums.txt
 
       - name: Extract changelog for version
         env:
