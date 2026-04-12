@@ -195,6 +195,24 @@ describe("handleProjectStatusCommand — project-status create", () => {
     }
   });
 
+  it("returns exit code 5 when --status-type is missing", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-ps-"));
+    const paths = await writeProfileFiles(directory);
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleProjectStatusCommand(["create"], {
+        ...baseOptions(paths),
+        name: "Test"
+      });
+
+      expect(exitCode).toBe(5);
+      expect(output.stderr.join("")).toContain("--status-type is required");
+    } finally {
+      output.restore();
+    }
+  });
+
   it("returns exit code 5 when --status-type is invalid", async () => {
     const directory = await mkdtemp(join(tmpdir(), "linear-cli-ps-"));
     const paths = await writeProfileFiles(directory);

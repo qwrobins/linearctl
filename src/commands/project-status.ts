@@ -48,16 +48,7 @@ interface RawProjectStatus {
   updatedAt: string;
 }
 
-export interface NormalizedProjectStatus {
-  id: string;
-  name: string;
-  color: string;
-  position: number;
-  type: string;
-  description: string | null;
-  createdAt: string;
-  updatedAt: string;
-}
+export type NormalizedProjectStatus = RawProjectStatus;
 
 const CURATED_PROJECT_STATUS_FRAGMENT = `
 fragment CuratedProjectStatus on ProjectStatus {
@@ -497,7 +488,7 @@ export async function handleProjectStatusCommand(
   const [subcommand, ...rest] = positionals;
 
   if (subcommand === "get") {
-    const identifier = rest[0];
+    const identifier = rest[0]?.trim();
     if (identifier === undefined || identifier === "") {
       return emitValidationError("usage: linear project-status get <id>", options);
     }
