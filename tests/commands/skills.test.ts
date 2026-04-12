@@ -42,7 +42,7 @@ describe("handleSkillsCommand", () => {
 
         const parsed = JSON.parse(chunks.join(""));
         expect(Array.isArray(parsed)).toBe(true);
-        expect(parsed.length).toBe(2);
+        expect(parsed.length).toBe(Object.keys(EMBEDDED_SKILLS).length);
 
         const names = parsed.map((entry: { name: string }) => entry.name);
         expect(names).toContain("linear-agent-cli");

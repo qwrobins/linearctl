@@ -53,9 +53,9 @@ async function handleSkillsInstall(options: SkillsCommandOptions): Promise<numbe
   } else if (options.json) {
     process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
   } else {
-    process.stderr.write(`Installed ${installed.length} skill(s) to ${skillsDir}\n`);
+    process.stdout.write(`Installed ${installed.length} skill(s) to ${skillsDir}\n`);
     for (const entry of installed) {
-      process.stderr.write(`  ${entry.name} → ${entry.path}\n`);
+      process.stdout.write(`  ${entry.name} → ${entry.path}\n`);
     }
   }
 
