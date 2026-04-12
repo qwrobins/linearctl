@@ -17,8 +17,8 @@ This repository is an agent-first `linear-agent` CLI. The primary consumer is AI
 - `docs/agent-usage.md` — how AI agents should use the CLI
 - `docs/schema-and-generated.md` — schema management and generated API layer
 - `docs/implementation-progress.md` — implementation status and history
-- `skills/linear-cli.md` — default agent skill (`linear-agent-cli`) with routing rules
-- `skills/linear-raw-gql.md` — raw GraphQL fallback skill (`linear-agent-raw-gql`)
+- `skills/linear-agent-cli.md` — default agent skill (`linear-agent-cli`) with routing rules
+- `skills/linear-agent-raw-gql.md` — raw GraphQL fallback skill (`linear-agent-raw-gql`)
 
 ## Stack
 

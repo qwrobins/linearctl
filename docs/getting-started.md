@@ -16,6 +16,18 @@ cp dist/linear-agent ~/.local/bin/linear-agent
 
 The binary is self-contained. End users do not need Bun installed.
 
+## Install agent skills
+
+If you're using an LLM agent (Claude Code, Codex, etc.), install the bundled skills so the agent knows how to use the CLI:
+
+```bash
+# Install to the current project
+linear-agent skills install
+
+# Or install to your user-level config (available in all projects)
+linear-agent skills install --location user
+```
+
 ## Authenticate
 
 The CLI uses named profiles. You must create at least one before running commands.
