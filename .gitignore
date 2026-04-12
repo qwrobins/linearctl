@@ -12,3 +12,6 @@ coverage/
 *.tsbuildinfo
 
 .firecrawl/
+
+.codex
+.gitconfig
