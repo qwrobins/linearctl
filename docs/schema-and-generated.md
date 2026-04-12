@@ -7,7 +7,7 @@ The CLI bundles a snapshot of the Linear GraphQL schema. Schema commands let you
 ### Check bundled version
 
 ```bash
-linear-agent schema version --json
+linearctl schema version --json
 ```
 
 Returns the bundled schema version fingerprint.
@@ -15,19 +15,19 @@ Returns the bundled schema version fingerprint.
 ### Pull latest schema
 
 ```bash
-linear-agent schema pull --json
+linearctl schema pull --json
 ```
 
 Runs a live introspection query against the Linear API, writes the schema files, and updates the schema metadata manifest. Defaults to writing to `src/generated/manifest/`. Override with:
 
 ```bash
-linear-agent schema pull --output-dir /path/to/output --json
+linearctl schema pull --output-dir /path/to/output --json
 ```
 
 ### Check for drift
 
 ```bash
-linear-agent schema check --json
+linearctl schema check --json
 ```
 
 Compares the bundled schema against the live API. Reports added/removed types and fields. Exits with code 6 if drift is detected.
@@ -53,32 +53,32 @@ The generated layer provides commands for Linear API resources not covered by cu
 
 ```bash
 # List all available resources
-linear-agent api --help
+linearctl api --help
 
 # List operations for a specific resource
-linear-agent api <resource> --help
+linearctl api <resource> --help
 
 # Search across all generated commands
-linear-agent api search <term>
+linearctl api search <term>
 ```
 
 ### Execute commands
 
 ```bash
 # Simple read with ID
-linear-agent api <resource> <operation> --id <id> --json
+linearctl api <resource> <operation> --id <id> --json
 
 # Operation with JSON input
-linear-agent api <resource> <operation> --input-json '{"name":"test"}' --json
+linearctl api <resource> <operation> --input-json '{"name":"test"}' --json
 
 # Input from file
-linear-agent api <resource> <operation> --input-file input.json --json
+linearctl api <resource> <operation> --input-file input.json --json
 
 # Input from stdin
-echo '{"name":"test"}' | linear-agent api <resource> <operation> --input-stdin --json
+echo '{"name":"test"}' | linearctl api <resource> <operation> --input-stdin --json
 
 # Select specific fields
-linear-agent api <resource> <operation> --id <id> --fields "id,name,description" --json
+linearctl api <resource> <operation> --id <id> --fields "id,name,description" --json
 ```
 
 ### When to use generated vs curated
@@ -99,4 +99,4 @@ After pulling a new schema, regenerate the API command manifest:
 bun run generate:api-manifest
 ```
 
-This reads the schema and produces the manifest file that drives `linear-agent api` commands.
+This reads the schema and produces the manifest file that drives `linearctl api` commands.

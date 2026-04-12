@@ -17,16 +17,16 @@ By default, list commands return the first page only (bounded).
 
 ```bash
 # First page (default)
-linear-agent issue list --team INF --json
+linearctl issue list --team INF --json
 
 # All issues, capped at 50
-linear-agent issue list --team INF --all --max 50 --json
+linearctl issue list --team INF --all --max 50 --json
 
 # Stream all issues as JSONL
-linear-agent issue list --team INF --jsonl
+linearctl issue list --team INF --jsonl
 
 # Resume from a cursor (from pageInfo in --json-envelope)
-linear-agent issue list --team INF --after "abc123" --json
+linearctl issue list --team INF --after "abc123" --json
 ```
 
 ### Best practices
@@ -54,16 +54,16 @@ Issue list supports these filter flags:
 
 ```bash
 # Issues assigned to me in a specific state
-linear-agent issue list --assignee me --state "In Progress" --json
+linearctl issue list --assignee me --state "In Progress" --json
 
 # High-priority issues on a team
-linear-agent issue list --team INF --priority 1 --json
+linearctl issue list --team INF --priority 1 --json
 
 # Issues with a specific label
-linear-agent issue list --team INF --label "bug" --json
+linearctl issue list --team INF --label "bug" --json
 
 # Complex filter using JSON
-linear-agent issue list --filter-json '{"state":{"name":{"in":["Todo","In Progress"]}},"priority":{"lte":2}}' --json
+linearctl issue list --filter-json '{"state":{"name":{"in":["Todo","In Progress"]}},"priority":{"lte":2}}' --json
 ```
 
 ### Filter precedence

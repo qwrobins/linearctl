@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This repository is for building an agent-first `linear-agent` CLI.
+This repository is for building an agent-first `linearctl` CLI.
 
 The primary consumer is AI agents, not only human operators. The CLI and the skill layer should be treated as a single product:
 
@@ -48,9 +48,9 @@ Preserve these priorities:
 
 The CLI has three layers:
 
-1. Curated commands: `linear-agent <resource> ...`
-2. Generated commands: `linear-agent api ...`
-3. Raw GraphQL: `linear-agent gql ...`
+1. Curated commands: `linearctl <resource> ...`
+2. Generated commands: `linearctl api ...`
+3. Raw GraphQL: `linearctl gql ...`
 
 Default routing should prefer:
 

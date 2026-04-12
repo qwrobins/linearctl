@@ -126,6 +126,6 @@ export async function handleSkillsCommand(
     return handleSkillsList(options);
   }
 
-  process.stderr.write("Error: usage: linear-agent skills install or linear-agent skills list\n");
+  process.stderr.write("Error: usage: linearctl skills install or linearctl skills list\n");
   return ExitCode.ValidationError;
 }

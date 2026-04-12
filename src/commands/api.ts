@@ -77,23 +77,23 @@ export function searchManifest(manifest: ApiCommandManifest, term: string): ApiC
 
 function printApiHelp(manifest: ApiCommandManifest): void {
   const resources = [...new Set(manifest.map((e) => e.resource))].sort();
-  process.stdout.write("linear-agent api <resource> <operation>\n\n");
+  process.stdout.write("linearctl api <resource> <operation>\n\n");
   process.stdout.write("Available resources:\n");
   for (const r of resources) {
     const count = manifest.filter((e) => e.resource === r).length;
     process.stdout.write(`  ${r}  (${count} operation${count !== 1 ? "s" : ""})\n`);
   }
-  process.stdout.write("\nUse: linear-agent api <resource> --help for operations\n");
-  process.stdout.write("Use: linear-agent api search <term> to search commands\n");
+  process.stdout.write("\nUse: linearctl api <resource> --help for operations\n");
+  process.stdout.write("Use: linearctl api search <term> to search commands\n");
 }
 
 function printResourceHelp(manifest: ApiCommandManifest, resource: string): void {
   const entries = manifest.filter((e) => e.resource === resource);
   if (entries.length === 0) {
-    process.stderr.write(`Error: unknown resource '${resource}'. Use 'linear-agent api --help' to list resources.\n`);
+    process.stderr.write(`Error: unknown resource '${resource}'. Use 'linearctl api --help' to list resources.\n`);
     return;
   }
-  process.stdout.write(`linear-agent api ${resource} <operation>\n\n`);
+  process.stdout.write(`linearctl api ${resource} <operation>\n\n`);
   process.stdout.write("Operations:\n");
   for (const entry of entries) {
     const desc = entry.description !== "" ? `  ${entry.description}` : "";
@@ -215,7 +215,7 @@ export async function handleApiCommand(
   if (manifest === null) {
     process.stderr.write(
       "Error: API commands manifest not found.\n" +
-      "Run 'linear-agent schema pull' and then 'bun run generate:api-manifest' to generate it.\n"
+      "Run 'linearctl schema pull' and then 'bun run generate:api-manifest' to generate it.\n"
     );
     return ExitCode.ValidationError;
   }
@@ -232,7 +232,7 @@ export async function handleApiCommand(
   if (resource === "search") {
     const term = operation;
     if (term === undefined || term === "") {
-      process.stderr.write("Error: usage: linear-agent api search <term>\n");
+      process.stderr.write("Error: usage: linearctl api search <term>\n");
       return ExitCode.ValidationError;
     }
     const results = searchManifest(manifest, term);

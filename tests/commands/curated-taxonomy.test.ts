@@ -5,46 +5,46 @@ import { assertValidCommandMetadataList } from "../../src/core/metadata/command-
 describe("curated command taxonomy", () => {
   it("matches the MVP curated command set", () => {
     expect(curatedCommandMetadata.map((command) => command.commandPath)).toEqual([
-      "linear-agent auth login",
-      "linear-agent auth logout",
-      "linear-agent auth status",
-      "linear-agent auth switch",
-      "linear-agent issue list",
-      "linear-agent issue get",
-      "linear-agent issue create",
-      "linear-agent issue update",
-      "linear-agent issue close",
-      "linear-agent issue assign",
-      "linear-agent issue comment",
-      "linear-agent project list",
-      "linear-agent project get",
-      "linear-agent project create",
-      "linear-agent project update",
-      "linear-agent cycle list",
-      "linear-agent cycle get",
-      "linear-agent cycle create",
-      "linear-agent cycle update",
-      "linear-agent team list",
-      "linear-agent team get",
-      "linear-agent user list",
-      "linear-agent user get",
-      "linear-agent user me",
-      "linear-agent label list",
-      "linear-agent label get",
-      "linear-agent label create",
-      "linear-agent comment list",
-      "linear-agent comment create",
-      "linear-agent comment update",
-      "linear-agent comment delete",
-      "linear-agent attachment list",
-      "linear-agent attachment create",
-      "linear-agent attachment delete",
-      "linear-agent file upload",
-      "linear-agent file download",
-      "linear-agent file url",
-      "linear-agent schema pull",
-      "linear-agent schema version",
-      "linear-agent schema check"
+      "linearctl auth login",
+      "linearctl auth logout",
+      "linearctl auth status",
+      "linearctl auth switch",
+      "linearctl issue list",
+      "linearctl issue get",
+      "linearctl issue create",
+      "linearctl issue update",
+      "linearctl issue close",
+      "linearctl issue assign",
+      "linearctl issue comment",
+      "linearctl project list",
+      "linearctl project get",
+      "linearctl project create",
+      "linearctl project update",
+      "linearctl cycle list",
+      "linearctl cycle get",
+      "linearctl cycle create",
+      "linearctl cycle update",
+      "linearctl team list",
+      "linearctl team get",
+      "linearctl user list",
+      "linearctl user get",
+      "linearctl user me",
+      "linearctl label list",
+      "linearctl label get",
+      "linearctl label create",
+      "linearctl comment list",
+      "linearctl comment create",
+      "linearctl comment update",
+      "linearctl comment delete",
+      "linearctl attachment list",
+      "linearctl attachment create",
+      "linearctl attachment delete",
+      "linearctl file upload",
+      "linearctl file download",
+      "linearctl file url",
+      "linearctl schema pull",
+      "linearctl schema version",
+      "linearctl schema check"
     ]);
   });
 
@@ -53,10 +53,10 @@ describe("curated command taxonomy", () => {
   });
 
   it("marks destructive and confirmation-requiring commands explicitly", () => {
-    expect(findCuratedCommand("linear-agent comment delete")?.safety).toBe("destructive");
-    expect(findCuratedCommand("linear-agent attachment delete")?.safety).toBe("destructive");
-    expect(findCuratedCommand("linear-agent auth logout")?.safety).toBe("confirmation-required");
-    expect(findCuratedCommand("linear-agent issue close")?.safety).toBe("confirmation-required");
+    expect(findCuratedCommand("linearctl comment delete")?.safety).toBe("destructive");
+    expect(findCuratedCommand("linearctl attachment delete")?.safety).toBe("destructive");
+    expect(findCuratedCommand("linearctl auth logout")?.safety).toBe("confirmation-required");
+    expect(findCuratedCommand("linearctl issue close")?.safety).toBe("confirmation-required");
   });
 
   it("keeps curated commands stable and JSON-capable for agents", () => {

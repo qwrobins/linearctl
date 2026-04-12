@@ -16,7 +16,7 @@
 - --dry-run for destructive commands
 - Transport retry with exponential backoff
 - Schema management (version, pull, check, diff, regeneration)
-- Agent skills (linear-agent-cli, linear-raw-gql)
+- Agent skills (linearctl, linear-raw-gql)
 - CI/CD with GitHub Actions, semver releases, auto-tagging
 - Curl installer for Linux and macOS
 - User-facing documentation
@@ -25,23 +25,23 @@
 
 ### Distribution
 
-- AUR package (`linear-agent-cli-bin`) for Arch Linux
+- AUR package (`linearctl-bin`) for Arch Linux
 - Homebrew formula for macOS
 - Nix package
 - Scoop manifest for Windows
 - Windows binary builds (pending Bun Windows compile support)
-- npm global install (`npm install -g @qwrobins/linear-agent-cli`)
+- npm global install (`npm install -g @qwrobins/linearctl`)
 
 ### CLI improvements
 
 - Bundle a default OAuth client ID so `--oauth` works without `--oauth-client-id`
 - Add Linear docs link to OAuth setup error message
 - `--verbose` flag for debugging transport and resolution
-- `linear-agent config get/set` commands for managing profile settings
-- `linear-agent init` interactive setup wizard
+- `linearctl config get/set` commands for managing profile settings
+- `linearctl init` interactive setup wizard
 - Shell completions (bash, zsh, fish)
 - `--output-format table` for human-readable tabular output
-- `linear-agent issue move <identifier> --state <name>` as alias for update
+- `linearctl issue move <identifier> --state <name>` as alias for update
 - Additional curated resources: initiatives, milestones, documents, webhooks
 
 ### Output and integration

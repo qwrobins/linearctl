@@ -17,12 +17,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **Renamed to `linear-agent-cli`** — binary is now `linear-agent`, package is `linear-agent-cli`
-- **Workflow state commands** — `linear-agent state list/get/create` for managing issue workflow states
-- **Project status commands** — `linear-agent project-status list/get/create/delete` for workspace-level statuses
-- **Label delete** — `linear-agent label delete <id>`
-- **Project delete** — `linear-agent project delete <id>`
-- **Skills install command** — `linear-agent skills install` embeds skills in the binary and writes to agent config directories
+- **Renamed to `linearctl`** — binary is now `linearctl`, package is `linearctl`
+- **Workflow state commands** — `linearctl state list/get/create` for managing issue workflow states
+- **Project status commands** — `linearctl project-status list/get/create/delete` for workspace-level statuses
+- **Label delete** — `linearctl label delete <id>`
+- **Project delete** — `linearctl project delete <id>`
+- **Skills install command** — `linearctl skills install` embeds skills in the binary and writes to agent config directories
 - **Multi-agent auto-discovery** — skills install auto-detects Claude Code and Codex at project and user level
 - **skills.sh compatibility** — skills restructured as `skills/<name>/SKILL.md` with YAML frontmatter
 - **CI/CD** — GitHub Actions for CI, semver releases with auto-tagging, curl installer
@@ -44,9 +44,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `state` — list, get, create (workflow states)
   - `project-status` — list, get, create, delete
 - **File operations** — upload (with optional attachment), download, signed URL
-- **Generated API layer** — `linear-agent api <resource> <operation>` with manifest-driven discovery, search, and help
-- **Raw GraphQL** — `linear-agent gql query`, `linear-agent gql mutation`, `linear-agent gql introspect`
-- **Schema management** — `linear-agent schema version`, `linear-agent schema pull`, `linear-agent schema check` with structural diff
+- **Generated API layer** — `linearctl api <resource> <operation>` with manifest-driven discovery, search, and help
+- **Raw GraphQL** — `linearctl gql query`, `linearctl gql mutation`, `linearctl gql introspect`
+- **Schema management** — `linearctl schema version`, `linearctl schema pull`, `linearctl schema check` with structural diff
 - **Authentication** — API key auth (`--api-key-env`, `--api-key-stdin`), OAuth PKCE browser flow with auto-refresh
 - **Named profiles** — AWS CLI-style INI config/credentials files at `~/.config/linear/`
 - **Profile management** — `auth status`, `auth login`, `auth logout`, `auth switch`, `auth whoami`
@@ -60,6 +60,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`--dry-run`** for all destructive/mutating commands
 - **Transport retry** — bounded exponential backoff for 429 rate limits, `--no-retry`, `--max-retries`
 - **Schema regeneration** — `bun run regenerate:schema` for CI with diff detection
-- **Skills** — `linear-agent-cli` and `linear-agent-raw-gql` agent skills with routing rules and examples
+- **Skills** — `linearctl` and `linearctl-raw-gql` agent skills with routing rules and examples
 - **CI/CD** — GitHub Actions for CI (typecheck, test, build) and releases (multi-platform binaries)
 - **Install script** — `curl | sh` installer for Linux and macOS (x64, arm64)

@@ -32,7 +32,7 @@ export async function handleGqlCommand(
   const [subcommand, ...rest] = positionals;
 
   if (subcommand !== "query" && subcommand !== "mutation" && subcommand !== "introspect") {
-    process.stderr.write("Error: unsupported gql command. Try linear-agent gql query, linear-agent gql mutation, or linear-agent gql introspect.\n");
+    process.stderr.write("Error: unsupported gql command. Try linearctl gql query, linearctl gql mutation, or linearctl gql introspect.\n");
     return 5;
   }
 

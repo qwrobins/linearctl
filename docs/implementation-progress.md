@@ -38,20 +38,20 @@ Completed:
 - Current Phase 2 auth/config foundations:
   - atomic config and credentials writes with restrictive permissions
   - config default-profile update support
-  - `linear-agent auth status` with human and JSON output
-  - `linear-agent auth switch <profile>`
+  - `linearctl auth status` with human and JSON output
+  - `linearctl auth switch <profile>`
   - CLI-level `--config`/`--config-file` and `--credentials`/`--credentials-file` overrides for local auth commands
   - GraphQL transport wrapper for lightweight authenticated requests such as `viewer`
   - shared runtime profile resolution loader for authenticated commands
   - shared transport error mapping for profile resolution and GraphQL failures
-  - API-key `linear-agent auth login --profile <name> --api-key-env <ENV>` and `--api-key-stdin`
+  - API-key `linearctl auth login --profile <name> --api-key-env <ENV>` and `--api-key-stdin`
   - optional `--set-default` on API-key login
-  - `linear-agent auth logout --profile <name>` with optional `--remove-config`
+  - `linearctl auth logout --profile <name>` with optional `--remove-config`
 - Initial Phase 3 raw GraphQL support:
-  - `linear-agent gql query` with inline query text, `--file`, or `--stdin`
-  - `linear-agent gql mutation` with inline document text, `--file`, or `--stdin`
-  - `linear-agent gql introspect` with the built-in GraphQL introspection query
-  - `linear-agent gql introspect` rejects document-source and variable flags that do not apply to the built-in query
+  - `linearctl gql query` with inline query text, `--file`, or `--stdin`
+  - `linearctl gql mutation` with inline document text, `--file`, or `--stdin`
+  - `linearctl gql introspect` with the built-in GraphQL introspection query
+  - `linearctl gql introspect` rejects document-source and variable flags that do not apply to the built-in query
   - variable input via repeated `--var key=value` and `--vars-file`
   - resolved-profile runtime auth for raw GraphQL commands
   - explicit `--json`, `--json-envelope`, or `--raw` output modes for raw GraphQL commands
@@ -63,8 +63,8 @@ Completed:
   - GraphQL transport reports GraphQL `errors` before treating missing `data` as invalid
 
 - Continued Phase 3 schema and infrastructure work:
-  - `linear-agent schema version` with `--json` and `--json-envelope` output
-  - `linear-agent schema pull` with live introspection, schema file output, and schema metadata generation
+  - `linearctl schema version` with `--json` and `--json-envelope` output
+  - `linearctl schema pull` with live introspection, schema file output, and schema metadata generation
   - bundled `schema-meta.json` manifest with version fingerprinting from introspection type names
   - `--output-dir` flag for schema pull to control where schema files are written
   - `--json-envelope` support for all auth commands (`status`, `login`, `logout`, `switch`)
@@ -73,7 +73,7 @@ Completed:
   - build pipeline updated to copy `schema-meta.json` to dist alongside `curated-commands.json`
 
 - Phase 3 schema check and transport retry:
-  - `linear-agent schema check` with bundled-vs-live drift detection, exit code 6 on drift
+  - `linearctl schema check` with bundled-vs-live drift detection, exit code 6 on drift
   - transport retry with bounded exponential backoff for 429 rate-limited responses
   - `--no-retry` and `--max-retries` CLI flags
   - injectable sleep for fast retry tests
@@ -94,20 +94,20 @@ Completed:
   - human-readable default output for all commands
 
 - Phase 5 generated API layer:
-  - `linear-agent api <resource> <operation>` command handler
+  - `linearctl api <resource> <operation>` command handler
   - manifest-driven command discovery
-  - `linear-agent api --help`, `linear-agent api <resource> --help`, `linear-agent api search <term>`
+  - `linearctl api --help`, `linearctl api <resource> --help`, `linearctl api search <term>`
   - `--id`, `--input-json`, `--input-file`, `--input-stdin`, `--fields` support
   - schema-to-command manifest generator script
 
 - Phase 4 file commands:
-  - `linear-agent file upload <path>` with authenticated PUT to pre-signed URL
-  - `linear-agent file upload --issue <id>` with automatic attachment creation
-  - `linear-agent file url <attachment-id>` with signed URL and `--expires-in`
-  - `linear-agent file download <url>` with authenticated download
+  - `linearctl file upload <path>` with authenticated PUT to pre-signed URL
+  - `linearctl file upload --issue <id>` with automatic attachment creation
+  - `linearctl file url <attachment-id>` with signed URL and `--expires-in`
+  - `linearctl file download <url>` with authenticated download
 
 - Phase 6 skill packaging:
-  - `linear-agent-cli` skill with full command routing rules and examples
+  - `linearctl` skill with full command routing rules and examples
   - `linear-raw-gql` skill with raw GraphQL fallback guidance
   - anti-pattern documentation
   - error handling playbooks
@@ -120,8 +120,8 @@ Completed:
   - Bulk operations: `issue bulk-update`, `issue bulk-close`, `issue bulk-assign` with partial success reporting
   - Schema regeneration tooling: `bun run regenerate:schema` with schema diff, CI exit codes
   - Schema diff utility comparing introspection results (added/removed types and fields, breaking change detection)
-  - `linear-agent schema check` now shows structural diff details when drift detected
-  - Multi-organization selector: `linear-agent auth whoami`, `linear-agent workspace list`, workspace metadata stored on login
+  - `linearctl schema check` now shows structural diff details when drift detected
+  - Multi-organization selector: `linearctl auth whoami`, `linearctl workspace list`, workspace metadata stored on login
   - Profile resolution hints listing available profiles with workspace context on ambiguity
   - Name/identifier resolution: team name/key, user email/"me", label name, state name → ID
   - Resolution applied to issue create/update/assign/list, project create, cycle create/list, label create/list

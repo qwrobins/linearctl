@@ -20,16 +20,16 @@ jobs:
         include:
           - os: ubuntu-latest
             target: bun-linux-x64
-            artifact: linear-agent-linux-x64
+            artifact: linearctl-linux-x64
           - os: ubuntu-latest
             target: bun-linux-arm64
-            artifact: linear-agent-linux-arm64
+            artifact: linearctl-linux-arm64
           - os: macos-latest
             target: bun-darwin-x64
-            artifact: linear-agent-darwin-x64
+            artifact: linearctl-darwin-x64
           - os: macos-latest
             target: bun-darwin-arm64
-            artifact: linear-agent-darwin-arm64
+            artifact: linearctl-darwin-arm64
 
     runs-on: ${{ matrix.os }}
 
@@ -102,8 +102,8 @@ jobs:
           for arch_pair in "x64:amd64" "arm64:arm64"; do
             bun_arch="${arch_pair%%:*}"
             deb_arch="${arch_pair##*:}"
-            binary="release/linear-agent-linux-${bun_arch}"
-            deb_name="linear-agent_${version}_${deb_arch}"
+            binary="release/linearctl-linux-${bun_arch}"
+            deb_name="linearctl_${version}_${deb_arch}"
 
             if [ ! -f "$binary" ]; then
               echo "Skipping $deb_arch — binary not found"
@@ -113,11 +113,11 @@ jobs:
             mkdir -p "${deb_name}/DEBIAN"
             mkdir -p "${deb_name}/usr/bin"
 
-            cp "$binary" "${deb_name}/usr/bin/linear-agent"
-            chmod 755 "${deb_name}/usr/bin/linear-agent"
+            cp "$binary" "${deb_name}/usr/bin/linearctl"
+            chmod 755 "${deb_name}/usr/bin/linearctl"
 
             cat > "${deb_name}/DEBIAN/control" << CTRL
-          Package: linear-agent
+          Package: linearctl
           Version: ${version}
           Architecture: ${deb_arch}
           Maintainer: qwrobins

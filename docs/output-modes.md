@@ -9,7 +9,7 @@ Without any output flag, commands print human-readable text to stdout. This form
 Data-only JSON. This is the primary machine-readable format.
 
 ```bash
-linear-agent issue get INF-42 --json
+linearctl issue get INF-42 --json
 ```
 
 ```json
@@ -32,7 +32,7 @@ For list commands, `--json` outputs a JSON array.
 Wraps the response in an envelope with metadata:
 
 ```bash
-linear-agent issue list --team INF --json-envelope
+linearctl issue list --team INF --json-envelope
 ```
 
 ```json
@@ -61,7 +61,7 @@ Use `--json-envelope` when you need:
 Streaming output. One JSON object per line. Auto-paginates through all results.
 
 ```bash
-linear-agent issue list --team INF --jsonl
+linearctl issue list --team INF --jsonl
 ```
 
 ```json
@@ -73,10 +73,10 @@ Use `--jsonl` for large result sets where you want to process items as they arri
 
 ## --raw
 
-Available only for `linear-agent gql` commands. Returns the exact GraphQL response body without normalization.
+Available only for `linearctl gql` commands. Returns the exact GraphQL response body without normalization.
 
 ```bash
-linear-agent gql query '{ viewer { id name } }' --raw
+linearctl gql query '{ viewer { id name } }' --raw
 ```
 
 ```json
@@ -96,11 +96,11 @@ linear-agent gql query '{ viewer { id name } }' --raw
 |---|---|---|
 | 0 | Success | -- |
 | 1 | General error | Read stderr for details |
-| 2 | Authentication error | Run `linear-agent auth status`, re-authenticate |
+| 2 | Authentication error | Run `linearctl auth status`, re-authenticate |
 | 3 | Rate limit exhausted | Wait, reduce result count, add filters |
 | 4 | Not found | Verify identifier or ID |
 | 5 | Validation error | Check flags and input |
-| 6 | Schema drift | Update CLI, fall back to `linear-agent gql` |
+| 6 | Schema drift | Update CLI, fall back to `linearctl gql` |
 
 ## Stderr
 

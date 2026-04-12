@@ -57,7 +57,7 @@ async function handleWorkspaceList(options: WorkspaceCommandOptions): Promise<nu
     process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
   } else {
     if (workspaces.length === 0) {
-      process.stdout.write("No workspaces configured. Run linear-agent auth login to add one.\n");
+      process.stdout.write("No workspaces configured. Run linearctl auth login to add one.\n");
       return ExitCode.Success;
     }
 
@@ -90,6 +90,6 @@ export async function handleWorkspaceCommand(
     return handleWorkspaceList(options);
   }
 
-  process.stderr.write("Error: unsupported workspace command. Try linear-agent workspace list.\n");
+  process.stderr.write("Error: unsupported workspace command. Try linearctl workspace list.\n");
   return ExitCode.ValidationError;
 }

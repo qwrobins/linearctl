@@ -31,4 +31,4 @@ jobs:
         run: bun run build:binary
 
       - name: Smoke test binary
-        run: ./dist/linear-agent --help
+        run: ./dist/linearctl --help

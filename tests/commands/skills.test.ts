@@ -45,8 +45,8 @@ describe("handleSkillsCommand", () => {
         expect(parsed.length).toBe(Object.keys(EMBEDDED_SKILLS).length);
 
         const names = parsed.map((entry: { name: string }) => entry.name);
-        expect(names).toContain("linear-agent-cli");
-        expect(names).toContain("linear-agent-raw-gql");
+        expect(names).toContain("linearctl");
+        expect(names).toContain("linearctl-raw-gql");
       } finally {
         spy.mockRestore();
       }
@@ -74,8 +74,8 @@ describe("handleSkillsCommand", () => {
         expect(code).toBe(0);
 
         const output = chunks.join("");
-        expect(output).toContain("linear-agent-cli");
-        expect(output).toContain("linear-agent-raw-gql");
+        expect(output).toContain("linearctl");
+        expect(output).toContain("linearctl-raw-gql");
       } finally {
         spy.mockRestore();
       }

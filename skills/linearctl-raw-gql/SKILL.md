@@ -1,16 +1,16 @@
 ---
-name: linear-agent-raw-gql
+name: linearctl-raw-gql
 description: Raw GraphQL fallback for the Linear API — direct queries, mutations, and introspection when curated/generated commands don't cover the operation
 ---
 
-# linear-agent-raw-gql
+# linearctl-raw-gql
 
 Fallback skill for direct GraphQL access to the Linear API. Use only when no curated command and no generated command exists for the operation, or the user explicitly asks for raw GraphQL.
 
 ## When to use
 
 - No curated command covers the operation
-- No generated command covers the operation (check with `linear-agent api search <term>`)
+- No generated command covers the operation (check with `linearctl api search <term>`)
 - The user explicitly asks for raw GraphQL
 - The curated/generated layers lag behind a new Linear API feature
 
@@ -18,20 +18,20 @@ Fallback skill for direct GraphQL access to the Linear API. Use only when no cur
 
 ### Query
 ```bash
-linear-agent gql query '{ viewer { id name email } }' --json
-linear-agent gql query --file query.graphql --vars-file vars.json --json
-cat query.graphql | linear-agent gql query --stdin --json
+linearctl gql query '{ viewer { id name email } }' --json
+linearctl gql query --file query.graphql --vars-file vars.json --json
+cat query.graphql | linearctl gql query --stdin --json
 ```
 
 ### Mutation
 ```bash
-linear-agent gql mutation 'mutation { issueCreate(input: {...}) { success } }' --json
-linear-agent gql mutation --file mutation.graphql --vars-file vars.json --json-envelope
+linearctl gql mutation 'mutation { issueCreate(input: {...}) { success } }' --json
+linearctl gql mutation --file mutation.graphql --vars-file vars.json --json-envelope
 ```
 
 ### Introspect
 ```bash
-linear-agent gql introspect --json
+linearctl gql introspect --json
 ```
 
 ## Output modes
@@ -58,5 +58,5 @@ Raw GraphQL commands require exactly one output mode:
 
 - Do not use raw GraphQL when curated or generated commands exist
 - Do not use `--raw` unless explicitly debugging
-- Do not construct complex queries when `linear-agent api` or curated commands handle the use case
+- Do not construct complex queries when `linearctl api` or curated commands handle the use case
 - Always prefer deterministic command discovery over ad-hoc GraphQL construction

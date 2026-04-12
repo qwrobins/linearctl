@@ -450,7 +450,7 @@ export async function handleStateCommand(
   if (subcommand === "get") {
     const identifier = rest[0];
     if (identifier === undefined || identifier === "") {
-      return emitValidationError("usage: linear-agent state get <id>", options);
+      return emitValidationError("usage: linearctl state get <id>", options);
     }
     if (rest.length > 1) {
       return emitValidationError("state get accepts exactly one identifier.", options);
@@ -472,7 +472,7 @@ export async function handleStateCommand(
     return handleStateCreate(options);
   }
 
-  return emitValidationError("unsupported state command. Try linear-agent state get, linear-agent state list, or linear-agent state create.", options);
+  return emitValidationError("unsupported state command. Try linearctl state get, linearctl state list, or linearctl state create.", options);
 }
 
 function hasErrors(errors: GraphQLErrorPayload[] | undefined): boolean {

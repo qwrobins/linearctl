@@ -1,14 +1,14 @@
 #!/bin/sh
 set -e
 
-REPO="qwrobins/linear-agent-cli"
+REPO="qwrobins/linearctl"
 INSTALL_DIR="${LINEAR_INSTALL_DIR:-$HOME/.local/bin}"
-BINARY_NAME="linear-agent"
+BINARY_NAME="linearctl"
 
 main() {
   os=$(detect_os)
   arch=$(detect_arch)
-  artifact="linear-agent-${os}-${arch}"
+  artifact="linearctl-${os}-${arch}"
 
   if [ -z "$LINEAR_VERSION" ]; then
     version=$(latest_version)
@@ -27,21 +27,21 @@ main() {
   # On Linux with dpkg, use .deb package
   if [ "$os" = "linux" ] && command -v dpkg > /dev/null 2>&1 && [ "$LINEAR_NO_DEB" != "1" ]; then
     deb_arch=$(detect_deb_arch)
-    deb_name="linear-agent_${version#v}_${deb_arch}.deb"
+    deb_name="linearctl_${version#v}_${deb_arch}.deb"
     deb_url="${base_url}/${deb_name}"
     deb_file=$(mktemp --suffix=.deb)
 
-    echo "Installing linear-agent ${version} via deb package (${deb_arch})..."
+    echo "Installing linearctl ${version} via deb package (${deb_arch})..."
     download "$deb_url" "$deb_file"
     sudo dpkg -i "$deb_file"
     rm -f "$deb_file"
-    echo "Installed linear-agent to /usr/bin/linear-agent"
+    echo "Installed linearctl to /usr/bin/linearctl"
     return
   fi
 
   url="${base_url}/${artifact}"
 
-  echo "Installing linear-agent ${version} (${os}/${arch})..."
+  echo "Installing linearctl ${version} (${os}/${arch})..."
   echo "  From: ${url}"
   echo "  To:   ${INSTALL_DIR}/${BINARY_NAME}"
 

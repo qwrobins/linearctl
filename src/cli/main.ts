@@ -440,81 +440,81 @@ const API_OPTION_DEFINITIONS = {
 } as const;
 
 function printTopLevelHelp(): void {
-  process.stdout.write(`linear-agent
+  process.stdout.write(`linearctl
 
 Agent-first Linear CLI.
 
 Layers:
-  curated       linear-agent <resource> ...
-  generated     linear-agent api ...
-  raw GraphQL   linear-agent gql ...
+  curated       linearctl <resource> ...
+  generated     linearctl api ...
+  raw GraphQL   linearctl gql ...
 
 Commands:
-  linear-agent issue get <identifier> [--json]
-  linear-agent issue create --title <title> --team <id> [--json]
-  linear-agent issue list [--state <name>] [--assignee <id>] [--team <id>] [--everything] [--json]
-  linear-agent issue update <identifier> [--title ...] [--state ...] [--json]
-  linear-agent issue close <identifier> [--json]
-  linear-agent issue assign <identifier> <assignee-id> [--json]
-  linear-agent issue comment <identifier> --body <text> [--json]
-  linear-agent issue bulk-update --ids <id1,id2,...> [--state <id>] [--assignee <id>] [--priority <0-4>] [--label <id>] [--json]
-  linear-agent issue bulk-close --ids <id1,id2,...> [--json]
-  linear-agent issue bulk-assign --ids <id1,id2,...> --assignee <id> [--json]
-  linear-agent project get <id> [--json]
-  linear-agent project list [--team <id>] [--everything] [--json]
-  linear-agent project create --name <name> [--description ...] [--team <id>] [--json]
-  linear-agent project update <id> [--name ...] [--state ...] [--json]
-  linear-agent project delete <id> [--json]
-  linear-agent cycle get <id> [--json]
-  linear-agent cycle list [--team <id>] [--everything] [--json]
-  linear-agent cycle create --team <id> [--name ...] [--starts-at ...] [--ends-at ...] [--json]
-  linear-agent cycle update <id> [--name ...] [--starts-at ...] [--ends-at ...] [--json]
-  linear-agent team get <id-or-key> [--set-default] [--json]
-  linear-agent team list [--json]
-  linear-agent user get <id> [--json]
-  linear-agent user me [--json]
-  linear-agent user list [--json]
-  linear-agent label get <id> [--json]
-  linear-agent label list [--team <id>] [--everything] [--json]
-  linear-agent label create --name <name> [--description ...] [--color ...] [--team <id>] [--json]
-  linear-agent label delete <id> [--json]
-  linear-agent state get <id> [--json]
-  linear-agent state list [--team <id>] [--everything] [--json]
-  linear-agent state create --name <name> --team <id> --state-type <type> [--json]
-  linear-agent project-status list [--json]
-  linear-agent project-status get <id> [--json]
-  linear-agent project-status create --name <name> --status-type <type> [--json]
-  linear-agent project-status delete <id> [--json]
-  linear-agent comment list --issue <id> [--json]
-  linear-agent comment create --issue <id> --body <text> [--json]
-  linear-agent comment update <id> --body <text> [--json]
-  linear-agent comment delete <id> [--json]
-  linear-agent attachment list --issue <id> [--json]
-  linear-agent attachment create --issue <id> --url <url> --title <title> [--json]
-  linear-agent attachment delete <id> [--json]
-  linear-agent file upload <path> [--issue <id>] [--json]
-  linear-agent file url <attachment-id> [--expires-in <seconds>] [--json]
-  linear-agent file download <url> [--output <path>] [--json]
-  linear-agent api <resource> <operation> [--id <id>] [--input-json <json>] [--fields <f1,f2>] [--json]
-  linear-agent api --help                 (list resources)
-  linear-agent api <resource> --help      (list operations)
-  linear-agent api search <term>          (search commands)
-  linear-agent auth login --profile <name> --api-key-env <ENV>
-  linear-agent auth logout --profile <name>
-  linear-agent auth status [--json]
-  linear-agent auth switch <profile>
-  linear-agent auth whoami [--json]
-  linear-agent workspace list [--json]
-  linear-agent gql introspect --json
-  linear-agent gql query '{ viewer { id } }' --json
-  linear-agent gql mutation --file m.graphql --vars-file v.json --json
-  linear-agent skills install [--json]
-  linear-agent skills list [--json]
-  linear-agent schema version [--json]
-  linear-agent schema pull [--json] [--output-dir <path>]  (default: project src/generated/manifest)
-  linear-agent schema check [--json]
-  linear-agent --metadata curated --json
-  linear-agent --help
+  linearctl issue get <identifier> [--json]
+  linearctl issue create --title <title> --team <id> [--json]
+  linearctl issue list [--state <name>] [--assignee <id>] [--team <id>] [--everything] [--json]
+  linearctl issue update <identifier> [--title ...] [--state ...] [--json]
+  linearctl issue close <identifier> [--json]
+  linearctl issue assign <identifier> <assignee-id> [--json]
+  linearctl issue comment <identifier> --body <text> [--json]
+  linearctl issue bulk-update --ids <id1,id2,...> [--state <id>] [--assignee <id>] [--priority <0-4>] [--label <id>] [--json]
+  linearctl issue bulk-close --ids <id1,id2,...> [--json]
+  linearctl issue bulk-assign --ids <id1,id2,...> --assignee <id> [--json]
+  linearctl project get <id> [--json]
+  linearctl project list [--team <id>] [--everything] [--json]
+  linearctl project create --name <name> [--description ...] [--team <id>] [--json]
+  linearctl project update <id> [--name ...] [--state ...] [--json]
+  linearctl project delete <id> [--json]
+  linearctl cycle get <id> [--json]
+  linearctl cycle list [--team <id>] [--everything] [--json]
+  linearctl cycle create --team <id> [--name ...] [--starts-at ...] [--ends-at ...] [--json]
+  linearctl cycle update <id> [--name ...] [--starts-at ...] [--ends-at ...] [--json]
+  linearctl team get <id-or-key> [--set-default] [--json]
+  linearctl team list [--json]
+  linearctl user get <id> [--json]
+  linearctl user me [--json]
+  linearctl user list [--json]
+  linearctl label get <id> [--json]
+  linearctl label list [--team <id>] [--everything] [--json]
+  linearctl label create --name <name> [--description ...] [--color ...] [--team <id>] [--json]
+  linearctl label delete <id> [--json]
+  linearctl state get <id> [--json]
+  linearctl state list [--team <id>] [--everything] [--json]
+  linearctl state create --name <name> --team <id> --state-type <type> [--json]
+  linearctl project-status list [--json]
+  linearctl project-status get <id> [--json]
+  linearctl project-status create --name <name> --status-type <type> [--json]
+  linearctl project-status delete <id> [--json]
+  linearctl comment list --issue <id> [--json]
+  linearctl comment create --issue <id> --body <text> [--json]
+  linearctl comment update <id> --body <text> [--json]
+  linearctl comment delete <id> [--json]
+  linearctl attachment list --issue <id> [--json]
+  linearctl attachment create --issue <id> --url <url> --title <title> [--json]
+  linearctl attachment delete <id> [--json]
+  linearctl file upload <path> [--issue <id>] [--json]
+  linearctl file url <attachment-id> [--expires-in <seconds>] [--json]
+  linearctl file download <url> [--output <path>] [--json]
+  linearctl api <resource> <operation> [--id <id>] [--input-json <json>] [--fields <f1,f2>] [--json]
+  linearctl api --help                 (list resources)
+  linearctl api <resource> --help      (list operations)
+  linearctl api search <term>          (search commands)
+  linearctl auth login --profile <name> --api-key-env <ENV>
+  linearctl auth logout --profile <name>
+  linearctl auth status [--json]
+  linearctl auth switch <profile>
+  linearctl auth whoami [--json]
+  linearctl workspace list [--json]
+  linearctl gql introspect --json
+  linearctl gql query '{ viewer { id } }' --json
+  linearctl gql mutation --file m.graphql --vars-file v.json --json
+  linearctl skills install [--json]
+  linearctl skills list [--json]
+  linearctl schema version [--json]
+  linearctl schema pull [--json] [--output-dir <path>]  (default: project src/generated/manifest)
+  linearctl schema check [--json]
+  linearctl --metadata curated --json
+  linearctl --help
 `);
 }
 

@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This repository is an agent-first `linear-agent` CLI. The primary consumer is AI agents, not only human operators. The CLI and the skill layer are a single product:
+This repository is an agent-first `linearctl` CLI. The primary consumer is AI agents, not only human operators. The CLI and the skill layer are a single product:
 
 - The CLI is the execution layer
 - The skills are the routing and decision layer
@@ -17,8 +17,8 @@ This repository is an agent-first `linear-agent` CLI. The primary consumer is AI
 - `docs/agent-usage.md` — how AI agents should use the CLI
 - `docs/schema-and-generated.md` — schema management and generated API layer
 - `docs/implementation-progress.md` — implementation status and history
-- `skills/linear-agent-cli/SKILL.md` — default agent skill (`linear-agent-cli`) with routing rules
-- `skills/linear-agent-raw-gql/SKILL.md` — raw GraphQL fallback skill (`linear-agent-raw-gql`)
+- `skills/linearctl/SKILL.md` — default agent skill (`linearctl`) with routing rules
+- `skills/linearctl-raw-gql/SKILL.md` — raw GraphQL fallback skill (`linearctl-raw-gql`)
 
 ## Stack
 
@@ -32,9 +32,9 @@ This repository is an agent-first `linear-agent` CLI. The primary consumer is AI
 
 Three command layers, kept separate — do not collapse them:
 
-1. **Curated commands**: `linear-agent <resource> ...`
-2. **Generated commands**: `linear-agent api ...`
-3. **Raw GraphQL**: `linear-agent gql ...`
+1. **Curated commands**: `linearctl <resource> ...`
+2. **Generated commands**: `linearctl api ...`
+3. **Raw GraphQL**: `linearctl gql ...`
 
 Routing prefers curated → generated → raw GraphQL.
 

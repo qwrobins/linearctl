@@ -197,7 +197,7 @@ describe("handleFileCommand — file upload", () => {
       });
 
       expect(exitCode).toBe(5);
-      expect(output.stderr.join("")).toContain("usage: linear-agent file upload <path>");
+      expect(output.stderr.join("")).toContain("usage: linearctl file upload <path>");
     } finally {
       output.restore();
     }
