@@ -16,3 +16,5 @@ coverage/
 .codex
 .gitconfig
 .claude/
+CLAUDE.md
+AGENTS.md
