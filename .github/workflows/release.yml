@@ -78,6 +78,17 @@ jobs:
             sha256sum "$f" >> checksums.txt
           done
 
+      - name: Extract changelog for version
+        env:
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          version="${TAG_NAME#v}"
+          # Extract the section for this version from CHANGELOG.md
+          sed -n "/^## \[${version}\]/,/^## \[/p" CHANGELOG.md | sed '$d' > release-notes.md
+          if [ ! -s release-notes.md ]; then
+            echo "Release ${TAG_NAME}" > release-notes.md
+          fi
+
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -85,5 +96,5 @@ jobs:
         run: |
           gh release create "$TAG_NAME" \
             --title "$TAG_NAME" \
-            --generate-notes \
+            --notes-file release-notes.md \
             release/*
