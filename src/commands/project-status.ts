@@ -322,8 +322,8 @@ async function handleProjectStatusCreate(options: ProjectStatusCommandOptions): 
     input.color = options.color;
   }
   if (options.position !== undefined) {
-    const pos = parseFloat(options.position);
-    if (Number.isNaN(pos)) {
+    const pos = Number(options.position);
+    if (!Number.isFinite(pos)) {
       return emitValidationError("--position must be a number.", options);
     }
     input.position = pos;
@@ -513,8 +513,8 @@ export async function handleProjectStatusCommand(
   }
 
   if (subcommand === "delete") {
-    const statusId = rest[0];
-    if (statusId === undefined || statusId.trim() === "") {
+    const statusId = rest[0]?.trim();
+    if (statusId === undefined || statusId === "") {
       return emitValidationError("usage: linear project-status delete <id>", options);
     }
     if (rest.length > 1) {
