@@ -1,3 +1,8 @@
+---
+name: linear-agent-raw-gql
+description: Raw GraphQL fallback for the Linear API — direct queries, mutations, and introspection when curated/generated commands don't cover the operation
+---
+
 # linear-agent-raw-gql
 
 Fallback skill for direct GraphQL access to the Linear API. Use only when no curated command and no generated command exists for the operation, or the user explicitly asks for raw GraphQL.

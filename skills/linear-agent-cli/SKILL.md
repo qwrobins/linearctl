@@ -1,3 +1,8 @@
+---
+name: linear-agent-cli
+description: Agent-first CLI for the Linear API — curated commands, generated API, and raw GraphQL with stable JSON output contracts
+---
+
 # linear-agent-cli
 
 Default skill for all Linear CLI usage. Use this skill for any request involving Linear data unless raw GraphQL is explicitly required or the curated/generated layers cannot cover the operation.
@@ -95,6 +100,10 @@ Raw GraphQL should not be used merely because it is possible. It is the fallback
 - `linear-agent state list [--team <id>] [--everything] --json` — list issue workflow states for a team
 - `linear-agent state get <id> --json`
 - `linear-agent state create --name <name> --team <id> --state-type <type> --json` (types: backlog, unstarted, started, completed, canceled)
+
+### Skills
+- `linear-agent skills install [--json]` — auto-detect agents and install skill files
+- `linear-agent skills list --json` — list available embedded skills
 
 ### Schema
 - `linear-agent schema version --json`

@@ -30,4 +30,5 @@ export * from "./commands/project-status.js";
 export * from "./commands/cycle.js";
 export * from "./commands/file.js";
 export * from "./commands/workspace.js";
+export * from "./commands/skills.js";
 export * from "./commands/metadata/curated-taxonomy.js";

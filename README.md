@@ -44,7 +44,7 @@ linear-agent issue list --json
 linear-agent issue create --title "Fix pagination bug" --priority 2 --json
 ```
 
-LLM agents can bootstrap this setup for you — the [linear-agent-cli skill](skills/linear-cli.md) includes first-time setup instructions.
+LLM agents can bootstrap this setup for you — install the agent skills with `linear-agent skills install` and the [linear-agent-cli skill](skills/linear-agent-cli/SKILL.md) includes first-time setup instructions.
 
 ## Commands
 
