@@ -15,8 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Label delete** — `linear-agent label delete <id>`
 - **Project delete** — `linear-agent project delete <id>`
 - **Skills install command** — `linear-agent skills install` embeds skills in the binary and writes to agent config directories
-- **Codex support** — skills install supports `--location codex` for OpenAI Codex agent
-- **Multi-agent install** — `--location project` installs to both Claude Code and Codex, `--location all` for user-level
+- **Multi-agent auto-discovery** — skills install auto-detects Claude Code and Codex at project and user level
 - **skills.sh compatibility** — skills restructured as `skills/<name>/SKILL.md` with YAML frontmatter
 - **CI/CD** — GitHub Actions for CI, semver releases with auto-tagging, curl installer
 - **Changelog** — Keep a Changelog format

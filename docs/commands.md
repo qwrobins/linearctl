@@ -207,7 +207,7 @@ linear-agent skills install [--json]
 linear-agent skills list [--json]
 ```
 
-`--location project` (default) writes to `.claude/skills/` in the current directory. `--location user` writes to `~/.claude/skills/`.
+Auto-discovers installed agents (Claude Code, Codex) at project and user level and installs skills to all found directories.
 
 ## Generated API
 
