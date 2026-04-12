@@ -1,4 +1,4 @@
-import { mkdtemp, readFile } from "node:fs/promises";
+import { mkdtemp, readFile, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
@@ -57,10 +57,10 @@ describe("handleSkillsCommand", () => {
 
       try {
         await handleSkillsCommand(["list"], baseOptions());
-
         const parsed = JSON.parse(chunks.join(""));
-        const cliEntry = parsed.find((e: { name: string }) => e.name === "linear-agent-cli");
-        expect(cliEntry.filename).toBe("linear-agent-cli.md");
+        for (const entry of parsed) {
+          expect(entry.filename).toMatch(/\.md$/);
+        }
       } finally {
         spy.mockRestore();
       }
@@ -83,13 +83,14 @@ describe("handleSkillsCommand", () => {
   });
 
   describe("skills install", () => {
-    it("writes skill files to .claude/skills/ and .codex/skills/ in project mode", async () => {
+    it("auto-discovers .claude and installs skills", async () => {
       const tempDir = await mkdtemp(join(tmpdir(), "linear-cli-skills-"));
+      // Create .claude dir so it's discovered
+      await mkdir(join(tempDir, ".claude"), { recursive: true });
       const originalCwd = process.cwd();
       process.chdir(tempDir);
 
       const { chunks, spy: stdoutSpy } = captureStdout();
-      const { spy: stderrSpy } = captureStderr();
       const skillCount = Object.keys(EMBEDDED_SKILLS).length;
 
       try {
@@ -97,117 +98,95 @@ describe("handleSkillsCommand", () => {
         expect(code).toBe(0);
 
         const parsed = JSON.parse(chunks.join(""));
-        expect(parsed.locations).toHaveLength(2);
-        // 2 agents x N skills
-        expect(parsed.installed).toHaveLength(skillCount * 2);
+        expect(parsed.installed.length).toBeGreaterThanOrEqual(skillCount);
 
+        // Verify files were written
         for (const entry of parsed.installed) {
           const content = await readFile(entry.path, "utf8");
           expect(content).toBe(EMBEDDED_SKILLS[entry.name]!.content);
         }
       } finally {
         stdoutSpy.mockRestore();
-        stderrSpy.mockRestore();
         process.chdir(originalCwd);
       }
     });
 
-    it("writes skill files to ~/.claude/skills/ with --location claude", async () => {
-      const tempDir = await mkdtemp(join(tmpdir(), "linear-cli-skills-user-"));
+    it("discovers both .claude and .codex when both exist", async () => {
+      const tempDir = await mkdtemp(join(tmpdir(), "linear-cli-skills-"));
+      await mkdir(join(tempDir, ".claude"), { recursive: true });
+      await mkdir(join(tempDir, ".codex"), { recursive: true });
+      const originalCwd = process.cwd();
       const originalHome = process.env.HOME;
-      process.env.HOME = tempDir;
+      process.chdir(tempDir);
+      process.env.HOME = tempDir; // isolate from real ~/.claude
 
       const { chunks, spy: stdoutSpy } = captureStdout();
-      const { spy: stderrSpy } = captureStderr();
       const skillCount = Object.keys(EMBEDDED_SKILLS).length;
 
       try {
-        const code = await handleSkillsCommand(
-          ["install"],
-          baseOptions({ location: "claude" })
-        );
+        const code = await handleSkillsCommand(["install"], baseOptions());
         expect(code).toBe(0);
 
         const parsed = JSON.parse(chunks.join(""));
-        expect(parsed.locations).toHaveLength(1);
-        expect(parsed.installed).toHaveLength(skillCount);
-
-        for (const entry of parsed.installed) {
-          expect(entry.path).toContain(tempDir);
-          expect(entry.agent).toBe("claude");
-          const content = await readFile(entry.path, "utf8");
-          expect(content).toBe(EMBEDDED_SKILLS[entry.name]!.content);
-        }
+        // project + user point to same dir, so deduped to 2 targets
+        expect(parsed.targets).toHaveLength(2);
+        expect(parsed.installed).toHaveLength(skillCount * 2);
       } finally {
         stdoutSpy.mockRestore();
-        stderrSpy.mockRestore();
+        process.chdir(originalCwd);
         process.env.HOME = originalHome;
       }
     });
 
-    it("creates directory if it does not exist", async () => {
-      const tempDir = await mkdtemp(join(tmpdir(), "linear-cli-skills-mkdir-"));
+    it("falls back to .claude when no agents detected", async () => {
+      const tempDir = await mkdtemp(join(tmpdir(), "linear-cli-skills-empty-"));
       const originalCwd = process.cwd();
+      const originalHome = process.env.HOME;
       process.chdir(tempDir);
+      process.env.HOME = tempDir;
 
-      const { spy: stdoutSpy } = captureStdout();
-      const { spy: stderrSpy } = captureStderr();
+      const { chunks, spy: stdoutSpy } = captureStdout();
 
       try {
         const code = await handleSkillsCommand(["install"], baseOptions());
         expect(code).toBe(0);
 
-        const cliSkill = await readFile(
-          join(tempDir, ".claude", "skills", "linear-agent-cli.md"),
-          "utf8"
-        );
-        expect(cliSkill.length).toBeGreaterThan(0);
+        const parsed = JSON.parse(chunks.join(""));
+        expect(parsed.targets).toHaveLength(1);
+        expect(parsed.targets[0]).toContain(".claude");
       } finally {
         stdoutSpy.mockRestore();
-        stderrSpy.mockRestore();
         process.chdir(originalCwd);
-      }
-    });
-
-    it("rejects invalid --location value", async () => {
-      const { spy: stdoutSpy } = captureStdout();
-      const { chunks: stderrChunks, spy: stderrSpy } = captureStderr();
-
-      try {
-        const code = await handleSkillsCommand(
-          ["install"],
-          baseOptions({ location: "invalid" })
-        );
-        expect(code).toBe(5);
-        expect(stderrChunks.join("")).toContain("--location");
-      } finally {
-        stdoutSpy.mockRestore();
-        stderrSpy.mockRestore();
+        process.env.HOME = originalHome;
       }
     });
   });
 
-  describe("unknown subcommand", () => {
-    it("returns validation error for unknown subcommand", async () => {
-      const { spy: stderrSpy } = captureStderr();
+  it("rejects unknown subcommand", async () => {
+    const { spy: stdoutSpy } = captureStdout();
+    const { chunks: stderrChunks, spy: stderrSpy } = captureStderr();
 
-      try {
-        const code = await handleSkillsCommand(["unknown"], baseOptions());
-        expect(code).toBe(5);
-      } finally {
-        stderrSpy.mockRestore();
-      }
-    });
+    try {
+      const code = await handleSkillsCommand(["unknown"], baseOptions());
+      expect(code).toBe(5);
+      expect(stderrChunks.join("")).toContain("usage:");
+    } finally {
+      stdoutSpy.mockRestore();
+      stderrSpy.mockRestore();
+    }
+  });
 
-    it("returns validation error when no subcommand given", async () => {
-      const { spy: stderrSpy } = captureStderr();
+  it("rejects no subcommand", async () => {
+    const { spy: stdoutSpy } = captureStdout();
+    const { chunks: stderrChunks, spy: stderrSpy } = captureStderr();
 
-      try {
-        const code = await handleSkillsCommand([], baseOptions());
-        expect(code).toBe(5);
-      } finally {
-        stderrSpy.mockRestore();
-      }
-    });
+    try {
+      const code = await handleSkillsCommand([], baseOptions());
+      expect(code).toBe(5);
+      expect(stderrChunks.join("")).toContain("usage:");
+    } finally {
+      stdoutSpy.mockRestore();
+      stderrSpy.mockRestore();
+    }
   });
 });

@@ -1,28 +1,13 @@
-import { writeFile, mkdir, access } from "node:fs/promises";
+import { writeFile, mkdir, stat } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
-import { constants } from "node:fs";
 import { ExitCode } from "../core/errors/exit-codes.js";
 import { EMBEDDED_SKILLS } from "../generated/embedded-skills.js";
 
 export interface SkillsCommandOptions {
   json: boolean;
   jsonEnvelope: boolean;
-  location?: string;
-}
-
-type InstallLocation = "project" | "claude" | "codex" | "all";
-
-const VALID_LOCATIONS: InstallLocation[] = ["project", "claude", "codex", "all"];
-
-interface SkillInstallResult {
-  installed: { name: string; filename: string; path: string; agent: string }[];
-  locations: string[];
-}
-
-interface SkillListEntry {
-  name: string;
-  filename: string;
 }
 
 interface AgentTarget {
@@ -30,47 +15,59 @@ interface AgentTarget {
   dir: string;
 }
 
-function getAgentTargets(location: InstallLocation): AgentTarget[] {
+interface SkillInstallResult {
+  installed: { name: string; filename: string; path: string; agent: string }[];
+  targets: string[];
+}
+
+interface SkillListEntry {
+  name: string;
+  filename: string;
+}
+
+function discoverAgentTargets(): AgentTarget[] {
   const home = homedir();
+  const cwd = process.cwd();
   const targets: AgentTarget[] = [];
 
-  if (location === "project") {
-    targets.push({ name: "claude (project)", dir: join(process.cwd(), ".claude", "skills") });
-    targets.push({ name: "codex (project)", dir: join(process.cwd(), ".codex", "skills") });
-    return targets;
+  // Check project-level agent directories
+  if (existsSync(join(cwd, ".claude"))) {
+    targets.push({ name: "claude (project)", dir: join(cwd, ".claude", "skills") });
+  }
+  if (existsSync(join(cwd, ".codex"))) {
+    targets.push({ name: "codex (project)", dir: join(cwd, ".codex", "skills") });
   }
 
-  if (location === "claude") {
-    targets.push({ name: "claude", dir: join(home, ".claude", "skills") });
-    return targets;
+  // Check user-level agent directories
+  if (existsSync(join(home, ".claude"))) {
+    targets.push({ name: "claude (user)", dir: join(home, ".claude", "skills") });
+  }
+  if (existsSync(join(home, ".codex"))) {
+    targets.push({ name: "codex (user)", dir: join(home, ".codex", "skills") });
   }
 
-  if (location === "codex") {
-    targets.push({ name: "codex", dir: join(home, ".codex", "skills") });
-    return targets;
+  // If nothing detected, default to project-level claude
+  if (targets.length === 0) {
+    targets.push({ name: "claude (project)", dir: join(cwd, ".claude", "skills") });
   }
 
-  // "all" — install to all detected agents at user level
-  targets.push({ name: "claude", dir: join(home, ".claude", "skills") });
-  targets.push({ name: "codex", dir: join(home, ".codex", "skills") });
-  return targets;
+  // Deduplicate by resolved path (e.g., when cwd === home)
+  const seen = new Set<string>();
+  return targets.filter((t) => {
+    if (seen.has(t.dir)) return false;
+    seen.add(t.dir);
+    return true;
+  });
 }
 
 async function handleSkillsInstall(options: SkillsCommandOptions): Promise<number> {
-  const location = (options.location ?? "project") as InstallLocation;
-
-  if (!VALID_LOCATIONS.includes(location)) {
-    process.stderr.write(`Error: --location must be one of: ${VALID_LOCATIONS.join(", ")}\n`);
-    return ExitCode.ValidationError;
-  }
-
-  const targets = getAgentTargets(location);
+  const targets = discoverAgentTargets();
   const installed: SkillInstallResult["installed"] = [];
-  const locations: string[] = [];
+  const targetDirs: string[] = [];
 
   for (const target of targets) {
     await mkdir(target.dir, { recursive: true });
-    locations.push(target.dir);
+    targetDirs.push(target.dir);
 
     for (const [name, skill] of Object.entries(EMBEDDED_SKILLS)) {
       const filePath = join(target.dir, skill.filename);
@@ -79,14 +76,14 @@ async function handleSkillsInstall(options: SkillsCommandOptions): Promise<numbe
     }
   }
 
-  const result: SkillInstallResult = { installed, locations };
+  const result: SkillInstallResult = { installed, targets: targetDirs };
 
   if (options.jsonEnvelope) {
     process.stdout.write(`${JSON.stringify({ ok: true, data: result }, null, 2)}\n`);
   } else if (options.json) {
     process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
   } else {
-    process.stdout.write(`Installed ${installed.length} skill(s) to ${locations.length} location(s):\n`);
+    process.stdout.write(`Installed ${installed.length} skill(s) to ${targets.length} agent(s):\n`);
     for (const entry of installed) {
       process.stdout.write(`  [${entry.agent}] ${entry.name} → ${entry.path}\n`);
     }
@@ -129,6 +126,6 @@ export async function handleSkillsCommand(
     return handleSkillsList(options);
   }
 
-  process.stderr.write("Error: usage: linear-agent skills install [--location project|claude|codex|all] or linear-agent skills list\n");
+  process.stderr.write("Error: usage: linear-agent skills install or linear-agent skills list\n");
   return ExitCode.ValidationError;
 }

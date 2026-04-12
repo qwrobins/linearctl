@@ -201,7 +201,7 @@ See [schema-and-generated.md](schema-and-generated.md) for details.
 
 ```bash
 # Install agent skills to project (.claude/skills/)
-linear-agent skills install [--location project|claude|codex|all] [--json]
+linear-agent skills install [--json]
 
 # List embedded skills
 linear-agent skills list [--json]
