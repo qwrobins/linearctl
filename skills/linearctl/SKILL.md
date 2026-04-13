@@ -48,7 +48,7 @@ Raw GraphQL should not be used merely because it is possible. It is the fallback
 
 ### Projects
 - `linearctl project get <id> --json`
-- `linearctl project list [--team <id>] [--cycle <id>] [--project <id>] [--everything] --json`
+- `linearctl project list [--team <id>] [--everything] --json`
 - `linearctl project create --name <name> [--description <text>] [--team <id>] --json`
 - `linearctl project update <id> [--name <text>] [--description <text>] [--state <state>] --json`
 - `linearctl project delete <id> --json`
@@ -61,7 +61,7 @@ Raw GraphQL should not be used merely because it is possible. It is the fallback
 
 ### Cycles
 - `linearctl cycle get <id> --json`
-- `linearctl cycle list [--team <id>] [--cycle <id>] [--project <id>] [--everything] --json`
+- `linearctl cycle list [--team <id>] [--everything] --json`
 - `linearctl cycle create --team <id> [--name <text>] [--starts-at <date>] [--ends-at <date>] --json`
 - `linearctl cycle update <id> [--name <text>] [--starts-at <date>] [--ends-at <date>] --json`
 
@@ -76,7 +76,7 @@ Raw GraphQL should not be used merely because it is possible. It is the fallback
 
 ### Labels
 - `linearctl label get <id> --json`
-- `linearctl label list [--team <id>] [--cycle <id>] [--project <id>] [--everything] --json`
+- `linearctl label list [--team <id>] [--everything] --json`
 - `linearctl label create --name <name> [--description <text>] [--color <hex>] [--team <id>] --json`
 - `linearctl label delete <id> --json`
 
@@ -97,7 +97,7 @@ Raw GraphQL should not be used merely because it is possible. It is the fallback
 - `linearctl file download <url> [--output <path>] --json`
 
 ### Workflow states
-- `linearctl state list [--team <id>] [--cycle <id>] [--project <id>] [--everything] --json` — list issue workflow states for a team
+- `linearctl state list [--team <id>] [--everything] --json` — list issue workflow states for a team
 - `linearctl state get <id> --json`
 - `linearctl state create --name <name> --team <id> --state-type <type> --json` (types: backlog, unstarted, started, completed, canceled)
 
