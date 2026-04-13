@@ -288,7 +288,7 @@ describe("handleIssueCommand — issue create", () => {
       });
 
       expect(exitCode).toBe(0);
-      const fetchBody = JSON.parse(String(fetchSpy.mock.calls[0]?.[1]?.body));
+      const fetchBody = JSON.parse(String((fetchSpy as ReturnType<typeof vi.fn>).mock.calls[0]?.[1]?.body));
       expect(fetchBody.variables.input.title).toBe("Explicit title");
       expect(fetchBody.variables.input.teamId).toBe("a0000000-0000-0000-0000-000000000001");
       expect(fetchBody.variables.input.description).toBe("From JSON");
@@ -323,7 +323,7 @@ describe("handleIssueCommand — issue create", () => {
       });
 
       expect(exitCode).toBe(0);
-      const fetchBody = JSON.parse(String(fetchSpy.mock.calls[0]?.[1]?.body));
+      const fetchBody = JSON.parse(String((fetchSpy as ReturnType<typeof vi.fn>).mock.calls[0]?.[1]?.body));
       const input = fetchBody.variables.input;
       expect(input.description).toBe("Fix the thing");
       expect(input.priority).toBe(2);
@@ -462,6 +462,102 @@ describe("handleIssueCommand — issue list", () => {
       expect(second.identifier).toBe("INF-3001");
       // Verify each line is valid standalone JSON (not pretty-printed)
       expect(lines[0]).not.toContain("\n");
+    } finally {
+      output.restore();
+    }
+  });
+  it("passes --cycle filter to GraphQL query", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-issue-"));
+    const paths = await writeProfileFiles(directory);
+    const fetchSpy = vi.fn(async () =>
+      new Response(JSON.stringify({
+        data: {
+          issues: {
+            nodes: [makeRawIssue()],
+            pageInfo: { hasNextPage: false, endCursor: null }
+          }
+        }
+      }), { status: 200 })
+    );
+    const fetchImpl = fetchSpy as unknown as FetchLike;
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleIssueCommand(["list"], {
+        ...baseOptions(paths),
+        cycle: "cycle-uuid-1",
+        fetchImpl
+      });
+
+      expect(exitCode).toBe(0);
+      const callBody = JSON.parse(String((fetchSpy as ReturnType<typeof vi.fn>).mock.calls[0]?.[1]?.body));
+      expect(callBody.variables.filter.cycle).toEqual({ id: { eq: "cycle-uuid-1" } });
+    } finally {
+      output.restore();
+    }
+  });
+
+  it("passes --project filter to GraphQL query", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-issue-"));
+    const paths = await writeProfileFiles(directory);
+    const fetchSpy = vi.fn(async () =>
+      new Response(JSON.stringify({
+        data: {
+          issues: {
+            nodes: [makeRawIssue()],
+            pageInfo: { hasNextPage: false, endCursor: null }
+          }
+        }
+      }), { status: 200 })
+    );
+    const fetchImpl = fetchSpy as unknown as FetchLike;
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleIssueCommand(["list"], {
+        ...baseOptions(paths),
+        project: "project-uuid-1",
+        fetchImpl
+      });
+
+      expect(exitCode).toBe(0);
+      const callBody = JSON.parse(String((fetchSpy as ReturnType<typeof vi.fn>).mock.calls[0]?.[1]?.body));
+      expect(callBody.variables.filter.project).toEqual({ id: { eq: "project-uuid-1" } });
+    } finally {
+      output.restore();
+    }
+  });
+
+  it("combines --cycle and --project with other filters", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-issue-"));
+    const paths = await writeProfileFiles(directory);
+    const fetchSpy = vi.fn(async () =>
+      new Response(JSON.stringify({
+        data: {
+          issues: {
+            nodes: [],
+            pageInfo: { hasNextPage: false, endCursor: null }
+          }
+        }
+      }), { status: 200 })
+    );
+    const fetchImpl = fetchSpy as unknown as FetchLike;
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleIssueCommand(["list"], {
+        ...baseOptions(paths),
+        cycle: "cycle-uuid-1",
+        project: "project-uuid-1",
+        state: "In Progress",
+        fetchImpl
+      });
+
+      expect(exitCode).toBe(0);
+      const callBody = JSON.parse(String((fetchSpy as ReturnType<typeof vi.fn>).mock.calls[0]?.[1]?.body));
+      expect(callBody.variables.filter.cycle).toEqual({ id: { eq: "cycle-uuid-1" } });
+      expect(callBody.variables.filter.project).toEqual({ id: { eq: "project-uuid-1" } });
+      expect(callBody.variables.filter.state).toEqual({ name: { eq: "In Progress" } });
     } finally {
       output.restore();
     }
