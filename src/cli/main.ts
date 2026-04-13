@@ -56,6 +56,8 @@ const CLI_OPTION_DEFINITIONS = {
   fields: { type: "string" },
   body: { type: "string" },
   "filter-json": { type: "string" },
+  cycle: { type: "string" },
+  project: { type: "string" },
   "order-by": { type: "string" },
   "order-dir": { type: "string" },
   all: { type: "boolean" },
@@ -163,6 +165,8 @@ const ISSUE_OPTION_DEFINITIONS = {
   ids: CLI_OPTION_DEFINITIONS.ids,
   body: CLI_OPTION_DEFINITIONS.body,
   "filter-json": CLI_OPTION_DEFINITIONS["filter-json"],
+  cycle: CLI_OPTION_DEFINITIONS.cycle,
+  project: CLI_OPTION_DEFINITIONS.project,
   "order-by": CLI_OPTION_DEFINITIONS["order-by"],
   "order-dir": CLI_OPTION_DEFINITIONS["order-dir"],
   all: CLI_OPTION_DEFINITIONS.all,
@@ -453,7 +457,7 @@ Layers:
 Commands:
   linearctl issue get <identifier> [--json]
   linearctl issue create --title <title> --team <id> [--json]
-  linearctl issue list [--state <name>] [--assignee <id>] [--team <id>] [--everything] [--json]
+  linearctl issue list [--state <name>] [--assignee <id>] [--team <id>] [--cycle <id>] [--project <id>] [--everything] [--json]
   linearctl issue update <identifier> [--title ...] [--state ...] [--json]
   linearctl issue close <identifier> [--json]
   linearctl issue assign <identifier> <assignee-id> [--json]
@@ -573,6 +577,8 @@ interface ParsedCliArguments {
   output?: string;
   expiresIn?: string;
   filterJson?: string;
+  cycle?: string;
+  project?: string;
   orderBy?: string;
   orderDir?: string;
   all: boolean;
@@ -859,6 +865,8 @@ function toParsedCliArguments(values: Record<string, unknown>, positionals: stri
     ...(typeof values.output === "string" ? { output: values.output } : {}),
     ...(typeof values["expires-in"] === "string" ? { expiresIn: values["expires-in"] } : {}),
     ...(typeof values["filter-json"] === "string" ? { filterJson: values["filter-json"] } : {}),
+    ...(typeof values.cycle === "string" ? { cycle: values.cycle } : {}),
+    ...(typeof values.project === "string" ? { project: values.project } : {}),
     ...(typeof values["order-by"] === "string" ? { orderBy: values["order-by"] } : {}),
     ...(typeof values["order-dir"] === "string" ? { orderDir: values["order-dir"] } : {}),
     all: values.all === true,
@@ -999,6 +1007,8 @@ async function main(argv: string[]): Promise<number> {
         ...(args.ids === undefined ? {} : { ids: args.ids }),
         ...(args.body === undefined ? {} : { body: args.body }),
         ...(args.filterJson === undefined ? {} : { filterJson: args.filterJson }),
+        ...(args.cycle === undefined ? {} : { cycle: args.cycle }),
+        ...(args.project === undefined ? {} : { project: args.project }),
         ...(args.orderBy === undefined ? {} : { orderBy: args.orderBy }),
         ...(args.orderDir === undefined ? {} : { orderDir: args.orderDir }),
         ...(args.all ? { all: true } : {}),
