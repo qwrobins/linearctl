@@ -14,12 +14,14 @@ export interface SkillsCommandOptions {
 }
 
 interface AgentTarget {
-  name: string;
+  agent: string;
+  scope: string;
+  displayName: string;
   dir: string;
 }
 
 interface SkillInstallResult {
-  installed: { name: string; filename: string; path: string; agent: string }[];
+  installed: { name: string; filename: string; path: string; agent: string; scope: string; displayName: string }[];
   targets: string[];
 }
 
@@ -39,25 +41,22 @@ function discoverAgentTargets(scope: "user" | "project"): AgentTarget[] {
   const targets: AgentTarget[] = [];
 
   if (scope === "project") {
-    // Always install to both for project-level — create if needed
-    targets.push({ name: "claude (project)", dir: join(cwd, ".claude", "skills") });
-    targets.push({ name: "codex (project)", dir: join(cwd, ".codex", "skills") });
+    targets.push({ agent: "claude", scope: "project", displayName: "claude (project)", dir: join(cwd, ".claude", "skills") });
+    targets.push({ agent: "codex", scope: "project", displayName: "codex (project)", dir: join(cwd, ".codex", "skills") });
   } else {
-    // User-level — install to detected agents, default to both
     const claudeExists = existsSync(join(home, ".claude"));
     const codexExists = existsSync(join(home, ".codex"));
 
     if (claudeExists) {
-      targets.push({ name: "claude (user)", dir: join(home, ".claude", "skills") });
+      targets.push({ agent: "claude", scope: "user", displayName: "claude (user)", dir: join(home, ".claude", "skills") });
     }
     if (codexExists) {
-      targets.push({ name: "codex (user)", dir: join(home, ".codex", "skills") });
+      targets.push({ agent: "codex", scope: "user", displayName: "codex (user)", dir: join(home, ".codex", "skills") });
     }
 
-    // If neither detected, install to both
     if (targets.length === 0) {
-      targets.push({ name: "claude (user)", dir: join(home, ".claude", "skills") });
-      targets.push({ name: "codex (user)", dir: join(home, ".codex", "skills") });
+      targets.push({ agent: "claude", scope: "user", displayName: "claude (user)", dir: join(home, ".claude", "skills") });
+      targets.push({ agent: "codex", scope: "user", displayName: "codex (user)", dir: join(home, ".codex", "skills") });
     }
   }
 
@@ -82,15 +81,23 @@ async function promptScope(stdinStream?: NodeJS.ReadableStream): Promise<"user" 
     process.stderr.write("  2. User level (~/.claude/skills/ and ~/.codex/skills/)\n");
     process.stderr.write("\n");
 
-    rl.question("Choice [1]: ", (answer) => {
-      rl.close();
-      const trimmed = answer.trim();
-      if (trimmed === "2") {
-        resolve("user");
-      } else {
-        resolve("project");
-      }
-    });
+    const ask = () => {
+      rl.question("Choice [1]: ", (answer) => {
+        const trimmed = answer.trim();
+        if (trimmed === "" || trimmed === "1") {
+          rl.close();
+          resolve("project");
+        } else if (trimmed === "2") {
+          rl.close();
+          resolve("user");
+        } else {
+          process.stderr.write("  Please enter 1 or 2.\n");
+          ask();
+        }
+      });
+    };
+
+    ask();
   });
 }
 
@@ -119,7 +126,7 @@ async function handleSkillsInstall(options: SkillsCommandOptions): Promise<numbe
       await mkdir(skillDir, { recursive: true });
       const filePath = join(skillDir, "SKILL.md");
       await writeFile(filePath, skill.content, "utf8");
-      installed.push({ name, filename: "SKILL.md", path: filePath, agent: target.name });
+      installed.push({ name, filename: "SKILL.md", path: filePath, agent: target.agent, scope: target.scope, displayName: target.displayName });
     }
     targetDirs.push(target.dir);
   }
@@ -133,7 +140,7 @@ async function handleSkillsInstall(options: SkillsCommandOptions): Promise<numbe
   } else {
     process.stdout.write(`\nInstalled ${installed.length} skill(s) to ${targets.length} location(s):\n`);
     for (const entry of installed) {
-      process.stdout.write(`  [${entry.agent}] ${entry.name} → ${entry.path}\n`);
+      process.stdout.write(`  [${entry.displayName}] ${entry.name} → ${entry.path}\n`);
     }
   }
 
