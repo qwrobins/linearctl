@@ -19,13 +19,18 @@ interface AgentTarget {
 }
 
 interface SkillInstallResult {
-  installed: { name: string; path: string; agent: string }[];
+  installed: { name: string; filename: string; path: string; agent: string }[];
   targets: string[];
 }
 
 interface SkillListEntry {
   name: string;
   filename: string;
+}
+
+function isTty(stream?: NodeJS.ReadableStream): boolean {
+  const s = stream ?? process.stdin;
+  return "isTTY" in s && s.isTTY === true;
 }
 
 function discoverAgentTargets(scope: "user" | "project"): AgentTarget[] {
@@ -94,7 +99,10 @@ async function handleSkillsInstall(options: SkillsCommandOptions): Promise<numbe
 
   if (options.scope === "user" || options.scope === "project") {
     scope = options.scope;
-  } else if (options.json || options.jsonEnvelope) {
+  } else if (options.scope !== undefined) {
+    process.stderr.write(`Error: --scope must be "project" or "user"\n`);
+    return ExitCode.ValidationError;
+  } else if (options.json || options.jsonEnvelope || !isTty(options.stdinStream)) {
     // Non-interactive mode defaults to project
     scope = "project";
   } else {
@@ -111,7 +119,7 @@ async function handleSkillsInstall(options: SkillsCommandOptions): Promise<numbe
       await mkdir(skillDir, { recursive: true });
       const filePath = join(skillDir, "SKILL.md");
       await writeFile(filePath, skill.content, "utf8");
-      installed.push({ name, path: filePath, agent: target.name });
+      installed.push({ name, filename: "SKILL.md", path: filePath, agent: target.name });
     }
     targetDirs.push(target.dir);
   }
