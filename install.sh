@@ -36,6 +36,9 @@ main() {
     sudo dpkg -i "$deb_file"
     rm -f "$deb_file"
     echo "Installed linearctl to /usr/bin/linearctl"
+    echo ""
+    echo "Update agent skills to match this version:"
+    echo "  linearctl skills install"
     return
   fi
 
@@ -74,6 +77,10 @@ main() {
     echo "Add ${INSTALL_DIR} to your PATH:"
     echo "  export PATH=\"${INSTALL_DIR}:\$PATH\""
   fi
+
+  echo ""
+  echo "Update agent skills to match this version:"
+  echo "  ${BINARY_NAME} skills install"
 }
 
 download() {
