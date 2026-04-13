@@ -47,7 +47,6 @@ fragment CuratedCycle on Cycle {
   endsAt
   team { id key name }
   completedAt
-  url
   createdAt
   updatedAt
 }`;
@@ -105,7 +104,6 @@ interface RawCycle {
   endsAt: string | null;
   team: { id: string; key: string; name: string };
   completedAt: string | null;
-  url: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -119,7 +117,6 @@ export interface NormalizedCycle {
   endsAt: string | null;
   team: { id: string; key: string; name: string };
   completedAt: string | null;
-  url: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -134,7 +131,6 @@ export function normalizeCycle(raw: RawCycle): NormalizedCycle {
     endsAt: raw.endsAt,
     team: raw.team,
     completedAt: raw.completedAt,
-    url: raw.url,
     createdAt: raw.createdAt,
     updatedAt: raw.updatedAt
   };
@@ -153,7 +149,6 @@ function printHumanCycle(cycle: NormalizedCycle): void {
   if (cycle.completedAt !== null) {
     process.stdout.write(`  Done:  ${cycle.completedAt}\n`);
   }
-  process.stdout.write(`  URL:   ${cycle.url}\n`);
 }
 
 async function handleCycleGet(
@@ -431,7 +426,6 @@ async function handleCycleCreate(options: CycleCommandOptions): Promise<number> 
     } else {
       const label = cycle.name !== null ? cycle.name : `Cycle #${cycle.number}`;
       process.stdout.write(`Created cycle: ${label}\n`);
-      process.stdout.write(`  URL: ${cycle.url}\n`);
     }
 
     return ExitCode.Success;
@@ -532,7 +526,6 @@ async function handleCycleUpdate(
     } else {
       const label = cycle.name !== null ? cycle.name : `Cycle #${cycle.number}`;
       process.stdout.write(`Updated cycle: ${label}\n`);
-      process.stdout.write(`  URL: ${cycle.url}\n`);
     }
 
     return ExitCode.Success;
