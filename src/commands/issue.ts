@@ -46,6 +46,8 @@ export interface IssueCommandOptions {
   // issue comment flags
   body?: string;
   // issue list flags
+  cycle?: string;
+  project?: string;
   filterJson?: string;
   orderBy?: string;
   orderDir?: string;
@@ -529,6 +531,12 @@ async function handleIssueList(options: IssueCommandOptions): Promise<number> {
           return emitValidationError("--priority must be an integer.", options);
         }
         buildFilter.priority = { eq: parsed };
+      }
+      if (options.cycle !== undefined) {
+        buildFilter.cycle = { id: { eq: options.cycle } };
+      }
+      if (options.project !== undefined) {
+        buildFilter.project = { id: { eq: options.project } };
       }
       if (Object.keys(buildFilter).length > 0) {
         filter = buildFilter;
