@@ -34,7 +34,7 @@ Raw GraphQL should not be used merely because it is possible. It is the fallback
 
 ### Issues
 - `linearctl issue get <identifier> --json` — fetch a single issue by identifier (e.g. INF-2975) or UUID
-- `linearctl issue list [--state <name>] [--assignee <id>] [--team <id>] [--everything] [--json]` — list issues with filters
+- `linearctl issue list [--state <name>] [--assignee <id>] [--team <id>] [--cycle <id>] [--project <id>] [--everything] [--json]` — list issues with filters
 - `linearctl issue create --title <title> --team <id> [--description <text>] [--priority <0-4>] [--assignee <id>] [--label <id>] [--state <id>] --json` — create an issue
 - `linearctl issue update <identifier> [--title <text>] [--description <text>] [--priority <0-4>] [--assignee <id>] [--state <id>] --json` — update an issue
 - `linearctl issue close <identifier> --json` — archive an issue
@@ -48,7 +48,7 @@ Raw GraphQL should not be used merely because it is possible. It is the fallback
 
 ### Projects
 - `linearctl project get <id> --json`
-- `linearctl project list [--team <id>] [--everything] --json`
+- `linearctl project list [--team <id>] [--cycle <id>] [--project <id>] [--everything] --json`
 - `linearctl project create --name <name> [--description <text>] [--team <id>] --json`
 - `linearctl project update <id> [--name <text>] [--description <text>] [--state <state>] --json`
 - `linearctl project delete <id> --json`
@@ -61,7 +61,7 @@ Raw GraphQL should not be used merely because it is possible. It is the fallback
 
 ### Cycles
 - `linearctl cycle get <id> --json`
-- `linearctl cycle list [--team <id>] [--everything] --json`
+- `linearctl cycle list [--team <id>] [--cycle <id>] [--project <id>] [--everything] --json`
 - `linearctl cycle create --team <id> [--name <text>] [--starts-at <date>] [--ends-at <date>] --json`
 - `linearctl cycle update <id> [--name <text>] [--starts-at <date>] [--ends-at <date>] --json`
 
@@ -76,7 +76,7 @@ Raw GraphQL should not be used merely because it is possible. It is the fallback
 
 ### Labels
 - `linearctl label get <id> --json`
-- `linearctl label list [--team <id>] [--everything] --json`
+- `linearctl label list [--team <id>] [--cycle <id>] [--project <id>] [--everything] --json`
 - `linearctl label create --name <name> [--description <text>] [--color <hex>] [--team <id>] --json`
 - `linearctl label delete <id> --json`
 
@@ -97,7 +97,7 @@ Raw GraphQL should not be used merely because it is possible. It is the fallback
 - `linearctl file download <url> [--output <path>] --json`
 
 ### Workflow states
-- `linearctl state list [--team <id>] [--everything] --json` — list issue workflow states for a team
+- `linearctl state list [--team <id>] [--cycle <id>] [--project <id>] [--everything] --json` — list issue workflow states for a team
 - `linearctl state get <id> --json`
 - `linearctl state create --name <name> --team <id> --state-type <type> --json` (types: backlog, unstarted, started, completed, canceled)
 
