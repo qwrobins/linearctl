@@ -62,7 +62,6 @@ function makeRawCycle(overrides?: Partial<Record<string, unknown>>) {
     endsAt: "2026-04-21T00:00:00Z",
     team: { id: "team-1", key: "INF", name: "Infrastructure" },
     completedAt: null,
-    url: "https://linear.app/team/cycle/42",
     createdAt: "2026-04-01T10:00:00Z",
     updatedAt: "2026-04-09T11:00:00Z",
     ...overrides
