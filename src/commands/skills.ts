@@ -70,9 +70,11 @@ async function handleSkillsInstall(options: SkillsCommandOptions): Promise<numbe
     targetDirs.push(target.dir);
 
     for (const [name, skill] of Object.entries(EMBEDDED_SKILLS)) {
-      const filePath = join(target.dir, skill.filename);
+      const skillDir = join(target.dir, name);
+      await mkdir(skillDir, { recursive: true });
+      const filePath = join(skillDir, "SKILL.md");
       await writeFile(filePath, skill.content, "utf8");
-      installed.push({ name, filename: skill.filename, path: filePath, agent: target.name });
+      installed.push({ name, filename: "SKILL.md", path: filePath, agent: target.name });
     }
   }
 
