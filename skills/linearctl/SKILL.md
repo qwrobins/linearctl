@@ -34,7 +34,7 @@ Raw GraphQL should not be used merely because it is possible. It is the fallback
 
 ### Issues
 - `linearctl issue get <identifier> --json` — fetch a single issue by identifier (e.g. INF-2975) or UUID
-- `linearctl issue list [--state <name>] [--assignee <id>] [--team <id>] [--everything] [--json]` — list issues with filters
+- `linearctl issue list [--state <name>] [--assignee <id>] [--team <id>] [--cycle <id>] [--project <id>] [--everything] [--json]` — list issues with filters
 - `linearctl issue create --title <title> --team <id> [--description <text>] [--priority <0-4>] [--assignee <id>] [--label <id>] [--state <id>] --json` — create an issue
 - `linearctl issue update <identifier> [--title <text>] [--description <text>] [--priority <0-4>] [--assignee <id>] [--state <id>] --json` — update an issue
 - `linearctl issue close <identifier> --json` — archive an issue
