@@ -140,4 +140,4 @@ See [docs/output-modes.md](docs/output-modes.md).
 
 ## License
 
-Private.
+MIT
