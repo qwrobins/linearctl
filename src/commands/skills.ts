@@ -1,4 +1,5 @@
-import { writeFile, mkdir, stat } from "node:fs/promises";
+import { writeFile, mkdir } from "node:fs/promises";
+import { createInterface } from "node:readline";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
@@ -8,15 +9,19 @@ import { EMBEDDED_SKILLS } from "../generated/embedded-skills.js";
 export interface SkillsCommandOptions {
   json: boolean;
   jsonEnvelope: boolean;
+  scope?: string;
+  stdinStream?: NodeJS.ReadableStream;
 }
 
 interface AgentTarget {
-  name: string;
+  agent: string;
+  scope: string;
+  displayName: string;
   dir: string;
 }
 
 interface SkillInstallResult {
-  installed: { name: string; filename: string; path: string; agent: string }[];
+  installed: { name: string; filename: string; path: string; agent: string; scope: string; displayName: string }[];
   targets: string[];
 }
 
@@ -25,33 +30,37 @@ interface SkillListEntry {
   filename: string;
 }
 
-function discoverAgentTargets(): AgentTarget[] {
+function isTty(stream?: NodeJS.ReadableStream): boolean {
+  const s = stream ?? process.stdin;
+  return "isTTY" in s && s.isTTY === true;
+}
+
+function discoverAgentTargets(scope: "user" | "project"): AgentTarget[] {
   const home = homedir();
   const cwd = process.cwd();
   const targets: AgentTarget[] = [];
 
-  // Check project-level agent directories
-  if (existsSync(join(cwd, ".claude"))) {
-    targets.push({ name: "claude (project)", dir: join(cwd, ".claude", "skills") });
-  }
-  if (existsSync(join(cwd, ".codex"))) {
-    targets.push({ name: "codex (project)", dir: join(cwd, ".codex", "skills") });
+  if (scope === "project") {
+    targets.push({ agent: "claude", scope: "project", displayName: "claude (project)", dir: join(cwd, ".claude", "skills") });
+    targets.push({ agent: "codex", scope: "project", displayName: "codex (project)", dir: join(cwd, ".codex", "skills") });
+  } else {
+    const claudeExists = existsSync(join(home, ".claude"));
+    const codexExists = existsSync(join(home, ".codex"));
+
+    if (claudeExists) {
+      targets.push({ agent: "claude", scope: "user", displayName: "claude (user)", dir: join(home, ".claude", "skills") });
+    }
+    if (codexExists) {
+      targets.push({ agent: "codex", scope: "user", displayName: "codex (user)", dir: join(home, ".codex", "skills") });
+    }
+
+    if (targets.length === 0) {
+      targets.push({ agent: "claude", scope: "user", displayName: "claude (user)", dir: join(home, ".claude", "skills") });
+      targets.push({ agent: "codex", scope: "user", displayName: "codex (user)", dir: join(home, ".codex", "skills") });
+    }
   }
 
-  // Check user-level agent directories
-  if (existsSync(join(home, ".claude"))) {
-    targets.push({ name: "claude (user)", dir: join(home, ".claude", "skills") });
-  }
-  if (existsSync(join(home, ".codex"))) {
-    targets.push({ name: "codex (user)", dir: join(home, ".codex", "skills") });
-  }
-
-  // If nothing detected, default to project-level claude
-  if (targets.length === 0) {
-    targets.push({ name: "claude (project)", dir: join(cwd, ".claude", "skills") });
-  }
-
-  // Deduplicate by resolved path (e.g., when cwd === home)
+  // Deduplicate by resolved path
   const seen = new Set<string>();
   return targets.filter((t) => {
     if (seen.has(t.dir)) return false;
@@ -60,22 +69,66 @@ function discoverAgentTargets(): AgentTarget[] {
   });
 }
 
+async function promptScope(stdinStream?: NodeJS.ReadableStream): Promise<"user" | "project"> {
+  const rl = createInterface({
+    input: stdinStream ?? process.stdin,
+    output: process.stderr
+  });
+
+  return new Promise((resolve) => {
+    process.stderr.write("\nWhere should skills be installed?\n");
+    process.stderr.write("  1. Project level (.claude/skills/ and .codex/skills/ in current directory)\n");
+    process.stderr.write("  2. User level (~/.claude/skills/ and ~/.codex/skills/)\n");
+    process.stderr.write("\n");
+
+    const ask = () => {
+      rl.question("Choice [1]: ", (answer) => {
+        const trimmed = answer.trim();
+        if (trimmed === "" || trimmed === "1") {
+          rl.close();
+          resolve("project");
+        } else if (trimmed === "2") {
+          rl.close();
+          resolve("user");
+        } else {
+          process.stderr.write("  Please enter 1 or 2.\n");
+          ask();
+        }
+      });
+    };
+
+    ask();
+  });
+}
+
 async function handleSkillsInstall(options: SkillsCommandOptions): Promise<number> {
-  const targets = discoverAgentTargets();
+  let scope: "user" | "project";
+
+  if (options.scope === "user" || options.scope === "project") {
+    scope = options.scope;
+  } else if (options.scope !== undefined) {
+    process.stderr.write(`Error: --scope must be "project" or "user"\n`);
+    return ExitCode.ValidationError;
+  } else if (options.json || options.jsonEnvelope || !isTty(options.stdinStream)) {
+    // Non-interactive mode defaults to project
+    scope = "project";
+  } else {
+    scope = await promptScope(options.stdinStream);
+  }
+
+  const targets = discoverAgentTargets(scope);
   const installed: SkillInstallResult["installed"] = [];
   const targetDirs: string[] = [];
 
   for (const target of targets) {
-    await mkdir(target.dir, { recursive: true });
-    targetDirs.push(target.dir);
-
     for (const [name, skill] of Object.entries(EMBEDDED_SKILLS)) {
       const skillDir = join(target.dir, name);
       await mkdir(skillDir, { recursive: true });
       const filePath = join(skillDir, "SKILL.md");
       await writeFile(filePath, skill.content, "utf8");
-      installed.push({ name, filename: "SKILL.md", path: filePath, agent: target.name });
+      installed.push({ name, filename: "SKILL.md", path: filePath, agent: target.agent, scope: target.scope, displayName: target.displayName });
     }
+    targetDirs.push(target.dir);
   }
 
   const result: SkillInstallResult = { installed, targets: targetDirs };
@@ -85,9 +138,9 @@ async function handleSkillsInstall(options: SkillsCommandOptions): Promise<numbe
   } else if (options.json) {
     process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
   } else {
-    process.stdout.write(`Installed ${installed.length} skill(s) to ${targets.length} agent(s):\n`);
+    process.stdout.write(`\nInstalled ${installed.length} skill(s) to ${targets.length} location(s):\n`);
     for (const entry of installed) {
-      process.stdout.write(`  [${entry.agent}] ${entry.name} → ${entry.path}\n`);
+      process.stdout.write(`  [${entry.displayName}] ${entry.name} → ${entry.path}\n`);
     }
   }
 

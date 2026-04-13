@@ -81,7 +81,7 @@ const CLI_OPTION_DEFINITIONS = {
   "state-type": { type: "string" },
   "status-type": { type: "string" },
   position: { type: "string" },
-  location: { type: "string" }
+  scope: { type: "string" }
 } as const;
 
 const AUTH_OPTION_DEFINITIONS = {
@@ -417,6 +417,7 @@ const SKILLS_OPTION_DEFINITIONS = {
   help: CLI_OPTION_DEFINITIONS.help,
   json: CLI_OPTION_DEFINITIONS.json,
   "json-envelope": CLI_OPTION_DEFINITIONS["json-envelope"],
+  scope: CLI_OPTION_DEFINITIONS.scope,
 } as const;
 
 const API_OPTION_DEFINITIONS = {
@@ -508,7 +509,7 @@ Commands:
   linearctl gql introspect --json
   linearctl gql query '{ viewer { id } }' --json
   linearctl gql mutation --file m.graphql --vars-file v.json --json
-  linearctl skills install [--json]
+  linearctl skills install [--scope project|user] [--json]
   linearctl skills list [--json]
   linearctl schema version [--json]
   linearctl schema pull [--json] [--output-dir <path>]  (default: project src/generated/manifest)
@@ -580,7 +581,7 @@ interface ParsedCliArguments {
   after?: string;
   dryRun: boolean;
   everything: boolean;
-  location?: string;
+  scope?: string;
   noRetry: boolean;
   maxRetries?: number;
   positionals: string[];
@@ -866,7 +867,7 @@ function toParsedCliArguments(values: Record<string, unknown>, positionals: stri
     ...(typeof values.after === "string" ? { after: values.after } : {}),
     dryRun: values["dry-run"] === true,
     everything: values.everything === true,
-    ...(typeof values.location === "string" ? { location: values.location } : {}),
+    ...(typeof values.scope === "string" ? { scope: values.scope } : {}),
     noRetry: values["no-retry"] === true,
     ...(typeof values["max-retries"] === "string" ? { maxRetries: parsePositiveInt(values["max-retries"], "max-retries") } : {}),
     positionals
@@ -1323,6 +1324,8 @@ async function main(argv: string[]): Promise<number> {
       return await handleSkillsCommand(args.positionals.slice(1), {
         json: args.json,
         jsonEnvelope: args.jsonEnvelope,
+        ...(args.scope === undefined ? {} : { scope: args.scope }),
+        stdinStream: process.stdin,
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : "command failed";

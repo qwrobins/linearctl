@@ -1,4 +1,5 @@
 import { mkdtemp, readFile, mkdir } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
@@ -83,10 +84,8 @@ describe("handleSkillsCommand", () => {
   });
 
   describe("skills install", () => {
-    it("auto-discovers .claude and installs skills", async () => {
-      const tempDir = await mkdtemp(join(tmpdir(), "linear-cli-skills-"));
-      // Create .claude dir so it's discovered
-      await mkdir(join(tempDir, ".claude"), { recursive: true });
+    it("installs to project level with --scope project", async () => {
+      const tempDir = await mkdtemp(join(tmpdir(), "linearctl-skills-"));
       const originalCwd = process.cwd();
       process.chdir(tempDir);
 
@@ -94,56 +93,88 @@ describe("handleSkillsCommand", () => {
       const skillCount = Object.keys(EMBEDDED_SKILLS).length;
 
       try {
-        const code = await handleSkillsCommand(["install"], baseOptions());
+        const code = await handleSkillsCommand(["install"], baseOptions({ scope: "project" }));
         expect(code).toBe(0);
 
         const parsed = JSON.parse(chunks.join(""));
-        expect(parsed.installed.length).toBeGreaterThanOrEqual(skillCount);
+        // Project installs to both .claude and .codex
+        expect(parsed.targets).toHaveLength(2);
+        expect(parsed.installed).toHaveLength(skillCount * 2);
 
-        // Verify files were written
+        // Verify directory structure: <name>/SKILL.md
         for (const entry of parsed.installed) {
+          expect(entry.path).toContain("SKILL.md");
+          const content = await readFile(entry.path, "utf8");
+          expect(content).toBe(EMBEDDED_SKILLS[entry.name]!.content);
+        }
+
+        // Verify both agent dirs were created
+        expect(existsSync(join(tempDir, ".claude", "skills"))).toBe(true);
+        expect(existsSync(join(tempDir, ".codex", "skills"))).toBe(true);
+      } finally {
+        stdoutSpy.mockRestore();
+        process.chdir(originalCwd);
+      }
+    });
+
+    it("installs to user level with --scope user", async () => {
+      const tempDir = await mkdtemp(join(tmpdir(), "linearctl-skills-user-"));
+      const originalHome = process.env.HOME;
+      process.env.HOME = tempDir;
+
+      const { chunks, spy: stdoutSpy } = captureStdout();
+      const skillCount = Object.keys(EMBEDDED_SKILLS).length;
+
+      try {
+        const code = await handleSkillsCommand(["install"], baseOptions({ scope: "user" }));
+        expect(code).toBe(0);
+
+        const parsed = JSON.parse(chunks.join(""));
+        // User level installs to both .claude and .codex when neither detected
+        expect(parsed.targets).toHaveLength(2);
+        expect(parsed.installed).toHaveLength(skillCount * 2);
+
+        for (const entry of parsed.installed) {
+          expect(entry.path).toContain(tempDir);
+          expect(entry.path).toContain("SKILL.md");
           const content = await readFile(entry.path, "utf8");
           expect(content).toBe(EMBEDDED_SKILLS[entry.name]!.content);
         }
       } finally {
         stdoutSpy.mockRestore();
-        process.chdir(originalCwd);
+        process.env.HOME = originalHome;
       }
     });
 
-    it("discovers both .claude and .codex when both exist", async () => {
-      const tempDir = await mkdtemp(join(tmpdir(), "linear-cli-skills-"));
+    it("user level only installs to detected agents", async () => {
+      const tempDir = await mkdtemp(join(tmpdir(), "linearctl-skills-detect-"));
       await mkdir(join(tempDir, ".claude"), { recursive: true });
-      await mkdir(join(tempDir, ".codex"), { recursive: true });
-      const originalCwd = process.cwd();
+      // No .codex dir
       const originalHome = process.env.HOME;
-      process.chdir(tempDir);
-      process.env.HOME = tempDir; // isolate from real ~/.claude
+      process.env.HOME = tempDir;
 
       const { chunks, spy: stdoutSpy } = captureStdout();
       const skillCount = Object.keys(EMBEDDED_SKILLS).length;
 
       try {
-        const code = await handleSkillsCommand(["install"], baseOptions());
+        const code = await handleSkillsCommand(["install"], baseOptions({ scope: "user" }));
         expect(code).toBe(0);
 
         const parsed = JSON.parse(chunks.join(""));
-        // project + user point to same dir, so deduped to 2 targets
-        expect(parsed.targets).toHaveLength(2);
-        expect(parsed.installed).toHaveLength(skillCount * 2);
+        // Only claude detected
+        expect(parsed.targets).toHaveLength(1);
+        expect(parsed.installed).toHaveLength(skillCount);
+        expect(parsed.targets[0]).toContain(".claude");
       } finally {
         stdoutSpy.mockRestore();
-        process.chdir(originalCwd);
         process.env.HOME = originalHome;
       }
     });
 
-    it("falls back to .claude when no agents detected", async () => {
-      const tempDir = await mkdtemp(join(tmpdir(), "linear-cli-skills-empty-"));
+    it("json mode defaults to project scope without prompting", async () => {
+      const tempDir = await mkdtemp(join(tmpdir(), "linearctl-skills-json-"));
       const originalCwd = process.cwd();
-      const originalHome = process.env.HOME;
       process.chdir(tempDir);
-      process.env.HOME = tempDir;
 
       const { chunks, spy: stdoutSpy } = captureStdout();
 
@@ -152,12 +183,11 @@ describe("handleSkillsCommand", () => {
         expect(code).toBe(0);
 
         const parsed = JSON.parse(chunks.join(""));
-        expect(parsed.targets).toHaveLength(1);
-        expect(parsed.targets[0]).toContain(".claude");
+        // Defaults to project scope
+        expect(parsed.targets.some((t: string) => t.includes(".claude"))).toBe(true);
       } finally {
         stdoutSpy.mockRestore();
         process.chdir(originalCwd);
-        process.env.HOME = originalHome;
       }
     });
   });
