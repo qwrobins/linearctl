@@ -125,7 +125,12 @@ function printSearchResults(results: ApiCommandEntry[], term: string): void {
 
 function buildGraphQLOperation(entry: ApiCommandEntry, fields?: string): string {
   const isConnection = entry.returnTypeName?.endsWith("Connection") === true;
-  const defaultFields = isConnection ? "nodes { id }" : "id";
+  const isPayload = entry.returnTypeName?.endsWith("Payload") === true;
+  const defaultFields = isConnection
+    ? "nodes { id }"
+    : isPayload
+      ? "success"
+      : "id";
   const fieldSelection = fields ?? defaultFields;
   const argDefs: string[] = [];
   const argPasses: string[] = [];
@@ -300,10 +305,10 @@ export async function handleApiCommand(
     return ExitCode.ValidationError;
   }
 
-  if (
-    (entry.inputMode === "json" || entry.inputMode === "id-plus-json") &&
-    inputJson === null
-  ) {
+  const hasRequiredJsonArgs = entry.requiredArgs.some((a) =>
+    a.typeName.replace(/[!\[\]]/g, "").endsWith("Input")
+  );
+  if (hasRequiredJsonArgs && inputJson === null) {
     process.stderr.write(
       `Error: this command requires JSON input. Use --input-json, --input-file, or --input-stdin.\n`
     );
