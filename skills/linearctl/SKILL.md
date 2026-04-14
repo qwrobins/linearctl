@@ -34,10 +34,11 @@ Raw GraphQL should not be used merely because it is possible. It is the fallback
 
 ### Issues
 - `linearctl issue get <identifier> --json` — fetch a single issue by identifier (e.g. INF-2975) or UUID
-- `linearctl issue list [--state <name>] [--assignee <id>] [--team <id>] [--cycle <id>] [--project <id>] [--created-after <date>] [--updated-after <date>] [--completed-after <date>] [--all-teams] [--json]` — list issues with filters
-- `linearctl issue create --title <title> --team <id> [--description <text>] [--priority <0-4>] [--assignee <id>] [--label <id>] [--state <id>] --json` — create an issue
+- `linearctl issue list [--state <name>] [--assignee <id>] [--team <id>] [--label <name|id>] [--priority <0-4>] [--cycle <id>] [--project <id>] [--created-after <date>] [--updated-after <date>] [--completed-after <date>] [--order-by <field>] [--all-teams] [--all] [--json]` — list issues with filters
+- `linearctl issue search --query <text> [--all] --json` — full-text search across issues
+- `linearctl issue create --title <title> --team <id> [--description <text>] [--priority <0-4>] [--assignee <id>] [--label <id>] [--state <id>] [--cycle <id>] [--project <id>] --json` — create an issue
 - `linearctl issue update <identifier> [--title <text>] [--description <text>] [--priority <0-4>] [--assignee <id>] [--state <id>] --json` — update an issue
-- `linearctl issue close <identifier> --json` — close an issue (transitions to completed workflow state)
+- `linearctl issue close <identifier> [--state <name>] --json` — close an issue (transitions to completed workflow state; defaults to "Done", use --state to pick another)
 - `linearctl issue assign <identifier> <assignee-id> --json` — assign an issue
 - `linearctl issue comment <identifier> --body <text> --json` — add a comment to an issue
 
@@ -48,7 +49,7 @@ Raw GraphQL should not be used merely because it is possible. It is the fallback
 
 ### Projects
 - `linearctl project get <id> --json`
-- `linearctl project list [--team <id>] [--all-teams] --json`
+- `linearctl project list [--team <id>] [--state <name>] [--all-teams] --json`
 - `linearctl project create --name <name> [--description <text>] [--team <id>] --json`
 - `linearctl project update <id> [--name <text>] [--description <text>] [--state <state>] --json`
 - `linearctl project delete <id> --json`
@@ -62,6 +63,7 @@ Raw GraphQL should not be used merely because it is possible. It is the fallback
 ### Cycles
 - `linearctl cycle get <id> --json`
 - `linearctl cycle list [--team <id>] [--all-teams] --json`
+- `linearctl cycle current [--team <id>] --json` — get the currently active cycle for a team
 - `linearctl cycle create --team <id> [--name <text>] [--starts-at <date>] [--ends-at <date>] --json`
 - `linearctl cycle update <id> [--name <text>] [--starts-at <date>] [--ends-at <date>] --json`
 
@@ -169,6 +171,7 @@ Use `--dry-run` on any mutating command to preview what would happen without exe
 - **When results are truncated, a warning is emitted to stderr** — check stderr to know if you have incomplete data
 - Use `--all` to fetch all results (with `--max` to limit)
 - Use `--max <n>` to cap total results
+- Use `--quiet` / `-q` to suppress the truncation warning (useful when piping JSON)
 - Add filters before broad pagination whenever possible
 - Prefer `--jsonl` for large result sets — it streams and auto-paginates
 

@@ -8,6 +8,7 @@ export interface PaginationOptions {
   max?: number | undefined;
   pageSize?: number | undefined;
   after?: string | undefined;
+  quiet?: boolean | undefined;
 }
 
 const DEFAULT_PAGE_SIZE = 50;
@@ -111,7 +112,7 @@ export async function paginateGraphQL<TNode>(
     lastPageInfo = connection.pageInfo;
 
     if (!shouldAutopaginate) {
-      if (lastPageInfo.hasNextPage) {
+      if (lastPageInfo.hasNextPage && !options.quiet) {
         const guidance = options.after === undefined
           ? "Use --all to fetch all results, or --max <n> for a specific limit."
           : "Use --max <n> for a specific limit.";
@@ -123,7 +124,7 @@ export async function paginateGraphQL<TNode>(
     }
 
     if (limit !== undefined && items.length >= limit) {
-      if (options.all === true && options.max === undefined && items.length >= SAFETY_CAP) {
+      if (options.all === true && options.max === undefined && items.length >= SAFETY_CAP && !options.quiet) {
         process.stderr.write(
           `Warning: --all fetched ${SAFETY_CAP} items (safety cap). Use --max to fetch more.\n`
         );

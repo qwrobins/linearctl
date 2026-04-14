@@ -82,6 +82,8 @@ const CLI_OPTION_DEFINITIONS = {
   "oauth-client-id": { type: "string" },
   "callback-port": { type: "string" },
   "no-browser": { type: "boolean" },
+  query: { type: "string" },
+  quiet: { type: "boolean", short: "q" },
   "dry-run": { type: "boolean" },
   "state-type": { type: "string" },
   "status-type": { type: "string" },
@@ -149,6 +151,7 @@ const ISSUE_OPTION_DEFINITIONS = {
   json: CLI_OPTION_DEFINITIONS.json,
   "json-envelope": CLI_OPTION_DEFINITIONS["json-envelope"],
   jsonl: CLI_OPTION_DEFINITIONS.jsonl,
+  quiet: CLI_OPTION_DEFINITIONS.quiet,
   config: CLI_OPTION_DEFINITIONS.config,
   "config-file": CLI_OPTION_DEFINITIONS["config-file"],
   credentials: CLI_OPTION_DEFINITIONS.credentials,
@@ -167,6 +170,7 @@ const ISSUE_OPTION_DEFINITIONS = {
   "input-json": CLI_OPTION_DEFINITIONS["input-json"],
   ids: CLI_OPTION_DEFINITIONS.ids,
   body: CLI_OPTION_DEFINITIONS.body,
+  query: CLI_OPTION_DEFINITIONS.query,
   "filter-json": CLI_OPTION_DEFINITIONS["filter-json"],
   "created-after": CLI_OPTION_DEFINITIONS["created-after"],
   "updated-after": CLI_OPTION_DEFINITIONS["updated-after"],
@@ -188,6 +192,7 @@ const PROJECT_OPTION_DEFINITIONS = {
   json: CLI_OPTION_DEFINITIONS.json,
   "json-envelope": CLI_OPTION_DEFINITIONS["json-envelope"],
   jsonl: CLI_OPTION_DEFINITIONS.jsonl,
+  quiet: CLI_OPTION_DEFINITIONS.quiet,
   config: CLI_OPTION_DEFINITIONS.config,
   "config-file": CLI_OPTION_DEFINITIONS["config-file"],
   credentials: CLI_OPTION_DEFINITIONS.credentials,
@@ -213,6 +218,7 @@ const CYCLE_OPTION_DEFINITIONS = {
   json: CLI_OPTION_DEFINITIONS.json,
   "json-envelope": CLI_OPTION_DEFINITIONS["json-envelope"],
   jsonl: CLI_OPTION_DEFINITIONS.jsonl,
+  quiet: CLI_OPTION_DEFINITIONS.quiet,
   config: CLI_OPTION_DEFINITIONS.config,
   "config-file": CLI_OPTION_DEFINITIONS["config-file"],
   credentials: CLI_OPTION_DEFINITIONS.credentials,
@@ -239,6 +245,7 @@ const TEAM_OPTION_DEFINITIONS = {
   json: CLI_OPTION_DEFINITIONS.json,
   "json-envelope": CLI_OPTION_DEFINITIONS["json-envelope"],
   jsonl: CLI_OPTION_DEFINITIONS.jsonl,
+  quiet: CLI_OPTION_DEFINITIONS.quiet,
   config: CLI_OPTION_DEFINITIONS.config,
   "config-file": CLI_OPTION_DEFINITIONS["config-file"],
   credentials: CLI_OPTION_DEFINITIONS.credentials,
@@ -259,6 +266,7 @@ const USER_OPTION_DEFINITIONS = {
   json: CLI_OPTION_DEFINITIONS.json,
   "json-envelope": CLI_OPTION_DEFINITIONS["json-envelope"],
   jsonl: CLI_OPTION_DEFINITIONS.jsonl,
+  quiet: CLI_OPTION_DEFINITIONS.quiet,
   config: CLI_OPTION_DEFINITIONS.config,
   "config-file": CLI_OPTION_DEFINITIONS["config-file"],
   credentials: CLI_OPTION_DEFINITIONS.credentials,
@@ -278,6 +286,7 @@ const LABEL_OPTION_DEFINITIONS = {
   json: CLI_OPTION_DEFINITIONS.json,
   "json-envelope": CLI_OPTION_DEFINITIONS["json-envelope"],
   jsonl: CLI_OPTION_DEFINITIONS.jsonl,
+  quiet: CLI_OPTION_DEFINITIONS.quiet,
   config: CLI_OPTION_DEFINITIONS.config,
   "config-file": CLI_OPTION_DEFINITIONS["config-file"],
   credentials: CLI_OPTION_DEFINITIONS.credentials,
@@ -303,6 +312,7 @@ const STATE_OPTION_DEFINITIONS = {
   json: CLI_OPTION_DEFINITIONS.json,
   "json-envelope": CLI_OPTION_DEFINITIONS["json-envelope"],
   jsonl: CLI_OPTION_DEFINITIONS.jsonl,
+  quiet: CLI_OPTION_DEFINITIONS.quiet,
   config: CLI_OPTION_DEFINITIONS.config,
   "config-file": CLI_OPTION_DEFINITIONS["config-file"],
   credentials: CLI_OPTION_DEFINITIONS.credentials,
@@ -330,6 +340,7 @@ const PROJECT_STATUS_OPTION_DEFINITIONS = {
   json: CLI_OPTION_DEFINITIONS.json,
   "json-envelope": CLI_OPTION_DEFINITIONS["json-envelope"],
   jsonl: CLI_OPTION_DEFINITIONS.jsonl,
+  quiet: CLI_OPTION_DEFINITIONS.quiet,
   config: CLI_OPTION_DEFINITIONS.config,
   "config-file": CLI_OPTION_DEFINITIONS["config-file"],
   credentials: CLI_OPTION_DEFINITIONS.credentials,
@@ -355,6 +366,7 @@ const COMMENT_OPTION_DEFINITIONS = {
   json: CLI_OPTION_DEFINITIONS.json,
   "json-envelope": CLI_OPTION_DEFINITIONS["json-envelope"],
   jsonl: CLI_OPTION_DEFINITIONS.jsonl,
+  quiet: CLI_OPTION_DEFINITIONS.quiet,
   config: CLI_OPTION_DEFINITIONS.config,
   "config-file": CLI_OPTION_DEFINITIONS["config-file"],
   credentials: CLI_OPTION_DEFINITIONS.credentials,
@@ -377,6 +389,7 @@ const ATTACHMENT_OPTION_DEFINITIONS = {
   json: CLI_OPTION_DEFINITIONS.json,
   "json-envelope": CLI_OPTION_DEFINITIONS["json-envelope"],
   jsonl: CLI_OPTION_DEFINITIONS.jsonl,
+  quiet: CLI_OPTION_DEFINITIONS.quiet,
   config: CLI_OPTION_DEFINITIONS.config,
   "config-file": CLI_OPTION_DEFINITIONS["config-file"],
   credentials: CLI_OPTION_DEFINITIONS.credentials,
@@ -462,22 +475,24 @@ Layers:
 
 Commands:
   linearctl issue get <identifier> [--json]
-  linearctl issue create --title <title> --team <id> [--json]
-  linearctl issue list [--state <name>] [--assignee <id>] [--team <id>] [--cycle <id>] [--project <id>] [--created-after <date>] [--updated-after <date>] [--completed-after <date>] [--all-teams] [--json]
-  linearctl issue update <identifier> [--title ...] [--state ...] [--json]
-  linearctl issue close <identifier> [--json]
+  linearctl issue create --title <title> --team <id> [--description <text>] [--priority <0-4>] [--assignee <id>] [--label <id>] [--state <id>] [--cycle <id>] [--project <id>] [--json]
+  linearctl issue list [--state <name>] [--assignee <id>] [--team <id>] [--label <name|id>] [--priority <0-4>] [--cycle <id>] [--project <id>] [--created-after <date>] [--updated-after <date>] [--completed-after <date>] [--order-by <field>] [--all-teams] [--all] [--json]
+  linearctl issue search --query <text> [--all] [--json]
+  linearctl issue update <identifier> [--title <text>] [--description <text>] [--priority <0-4>] [--assignee <id>] [--state <id>] [--json]
+  linearctl issue close <identifier> [--state <name>] [--json]
   linearctl issue assign <identifier> <assignee-id> [--json]
   linearctl issue comment <identifier> --body <text> [--json]
   linearctl issue bulk-update --ids <id1,id2,...> [--state <id>] [--assignee <id>] [--priority <0-4>] [--label <id>] [--json]
   linearctl issue bulk-close --ids <id1,id2,...> [--json]
   linearctl issue bulk-assign --ids <id1,id2,...> --assignee <id> [--json]
   linearctl project get <id> [--json]
-  linearctl project list [--team <id>] [--all-teams] [--json]
+  linearctl project list [--team <id>] [--state <name>] [--all-teams] [--json]
   linearctl project create --name <name> [--description ...] [--team <id>] [--json]
   linearctl project update <id> [--name ...] [--state ...] [--json]
   linearctl project delete <id> [--json]
   linearctl cycle get <id> [--json]
   linearctl cycle list [--team <id>] [--all-teams] [--json]
+  linearctl cycle current [--team <id>] [--json]
   linearctl cycle create --team <id> [--name ...] [--starts-at ...] [--ends-at ...] [--json]
   linearctl cycle update <id> [--name ...] [--starts-at ...] [--ends-at ...] [--json]
   linearctl team get <id-or-key> [--set-default] [--json]
@@ -582,6 +597,7 @@ interface ParsedCliArguments {
   url?: string;
   output?: string;
   expiresIn?: string;
+  query?: string;
   filterJson?: string;
   createdAfter?: string;
   updatedAfter?: string;
@@ -595,6 +611,7 @@ interface ParsedCliArguments {
   pageSize?: number;
   after?: string;
   dryRun: boolean;
+  quiet: boolean;
   allTeams: boolean;
   scope?: string;
   noRetry: boolean;
@@ -752,7 +769,7 @@ function splitArgvAtFirstPositional(argv: string[]): [string[], string[]] {
       continue;
     }
 
-    if (token === "-h") {
+    if (token === "-h" || token === "-q") {
       index += 1;
       continue;
     }
@@ -873,6 +890,7 @@ function toParsedCliArguments(values: Record<string, unknown>, positionals: stri
     ...(typeof values.url === "string" ? { url: values.url } : {}),
     ...(typeof values.output === "string" ? { output: values.output } : {}),
     ...(typeof values["expires-in"] === "string" ? { expiresIn: values["expires-in"] } : {}),
+    ...(typeof values.query === "string" ? { query: values.query } : {}),
     ...(typeof values["filter-json"] === "string" ? { filterJson: values["filter-json"] } : {}),
     ...(typeof values["created-after"] === "string" ? { createdAfter: values["created-after"] } : {}),
     ...(typeof values["updated-after"] === "string" ? { updatedAfter: values["updated-after"] } : {}),
@@ -886,6 +904,7 @@ function toParsedCliArguments(values: Record<string, unknown>, positionals: stri
     ...(typeof values["page-size"] === "string" ? { pageSize: parsePositiveInt(values["page-size"], "page-size") } : {}),
     ...(typeof values.after === "string" ? { after: values.after } : {}),
     dryRun: values["dry-run"] === true,
+    quiet: values.quiet === true,
     allTeams: values["all-teams"] === true,
     ...(typeof values.scope === "string" ? { scope: values.scope } : {}),
     noRetry: values["no-retry"] === true,
@@ -1001,6 +1020,7 @@ async function main(argv: string[]): Promise<number> {
       return await handleIssueCommand(args.positionals.slice(1), {
         json: args.json,
         dryRun: args.dryRun,
+        quiet: args.quiet,
         allTeams: args.allTeams,
         jsonEnvelope: args.jsonEnvelope,
         jsonl: args.jsonl,
@@ -1018,6 +1038,7 @@ async function main(argv: string[]): Promise<number> {
         ...(args.inputJson === undefined ? {} : { inputJson: args.inputJson }),
         ...(args.ids === undefined ? {} : { ids: args.ids }),
         ...(args.body === undefined ? {} : { body: args.body }),
+        ...(args.query === undefined ? {} : { query: args.query }),
         ...(args.filterJson === undefined ? {} : { filterJson: args.filterJson }),
         ...(args.createdAfter === undefined ? {} : { createdAfter: args.createdAfter }),
         ...(args.updatedAfter === undefined ? {} : { updatedAfter: args.updatedAfter }),
@@ -1044,6 +1065,7 @@ async function main(argv: string[]): Promise<number> {
       return await handleProjectCommand(args.positionals.slice(1), {
         json: args.json,
         dryRun: args.dryRun,
+        quiet: args.quiet,
         allTeams: args.allTeams,
         jsonEnvelope: args.jsonEnvelope,
         jsonl: args.jsonl,
@@ -1073,6 +1095,7 @@ async function main(argv: string[]): Promise<number> {
       return await handleCycleCommand(args.positionals.slice(1), {
         json: args.json,
         dryRun: args.dryRun,
+        quiet: args.quiet,
         allTeams: args.allTeams,
         jsonEnvelope: args.jsonEnvelope,
         jsonl: args.jsonl,
@@ -1104,6 +1127,7 @@ async function main(argv: string[]): Promise<number> {
         json: args.json,
         jsonEnvelope: args.jsonEnvelope,
         jsonl: args.jsonl,
+        quiet: args.quiet,
         ...(args.profile === undefined ? {} : { profile: args.profile }),
         configFile: args.configFile,
         credentialsFile: args.credentialsFile,
@@ -1128,6 +1152,7 @@ async function main(argv: string[]): Promise<number> {
         json: args.json,
         jsonEnvelope: args.jsonEnvelope,
         jsonl: args.jsonl,
+        quiet: args.quiet,
         ...(args.profile === undefined ? {} : { profile: args.profile }),
         configFile: args.configFile,
         credentialsFile: args.credentialsFile,
@@ -1150,6 +1175,7 @@ async function main(argv: string[]): Promise<number> {
       return await handleLabelCommand(args.positionals.slice(1), {
         json: args.json,
         dryRun: args.dryRun,
+        quiet: args.quiet,
         allTeams: args.allTeams,
         jsonEnvelope: args.jsonEnvelope,
         jsonl: args.jsonl,
@@ -1179,6 +1205,7 @@ async function main(argv: string[]): Promise<number> {
       return await handleStateCommand(args.positionals.slice(1), {
         json: args.json,
         dryRun: args.dryRun,
+        quiet: args.quiet,
         allTeams: args.allTeams,
         jsonEnvelope: args.jsonEnvelope,
         jsonl: args.jsonl,
@@ -1210,6 +1237,7 @@ async function main(argv: string[]): Promise<number> {
       return await handleProjectStatusCommand(args.positionals.slice(1), {
         json: args.json,
         dryRun: args.dryRun,
+        quiet: args.quiet,
         jsonEnvelope: args.jsonEnvelope,
         jsonl: args.jsonl,
         ...(args.profile === undefined ? {} : { profile: args.profile }),
@@ -1239,6 +1267,7 @@ async function main(argv: string[]): Promise<number> {
       return await handleCommentCommand(args.positionals.slice(1), {
         json: args.json,
         dryRun: args.dryRun,
+        quiet: args.quiet,
         jsonEnvelope: args.jsonEnvelope,
         jsonl: args.jsonl,
         ...(args.profile === undefined ? {} : { profile: args.profile }),
@@ -1265,6 +1294,7 @@ async function main(argv: string[]): Promise<number> {
       return await handleAttachmentCommand(args.positionals.slice(1), {
         json: args.json,
         dryRun: args.dryRun,
+        quiet: args.quiet,
         jsonEnvelope: args.jsonEnvelope,
         jsonl: args.jsonl,
         ...(args.profile === undefined ? {} : { profile: args.profile }),

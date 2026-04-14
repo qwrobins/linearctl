@@ -29,6 +29,7 @@ export interface AttachmentCommandOptions {
   max?: number;
   pageSize?: number;
   after?: string;
+  quiet?: boolean;
 }
 
 interface RawAttachment {
@@ -135,7 +136,8 @@ async function handleAttachmentList(options: AttachmentCommandOptions): Promise<
     ...(options.all === true ? { all: true } : {}),
     ...(options.max === undefined ? {} : { max: options.max }),
     ...(options.pageSize === undefined ? {} : { pageSize: options.pageSize }),
-    ...(options.after === undefined ? {} : { after: options.after })
+    ...(options.after === undefined ? {} : { after: options.after }),
+    ...(options.quiet === true ? { quiet: true } : {})
   };
 
   const validationError = validatePaginationOptions(paginationOptions);

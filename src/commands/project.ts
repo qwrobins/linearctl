@@ -34,6 +34,7 @@ export interface ProjectCommandOptions {
   max?: number;
   pageSize?: number;
   after?: string;
+  quiet?: boolean;
 }
 
 const CURATED_PROJECT_FRAGMENT = `
@@ -248,7 +249,8 @@ async function handleProjectList(options: ProjectCommandOptions): Promise<number
     all: options.all,
     max: options.max,
     pageSize: options.pageSize,
-    after: options.after
+    after: options.after,
+    quiet: options.quiet
   };
 
   const validationError = validatePaginationOptions(paginationOptions);
@@ -278,6 +280,9 @@ async function handleProjectList(options: ProjectCommandOptions): Promise<number
       };
       const teamId = looksLikeId(effectiveTeam) ? effectiveTeam : await resolveTeamId(effectiveTeam, resolverOpts);
       filter = { accessibleTeams: { some: { id: { eq: teamId } } } };
+    }
+    if (options.state !== undefined) {
+      filter = { ...filter, state: { name: { eq: options.state } } };
     }
 
     const commonPaginateInput = {

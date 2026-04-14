@@ -54,11 +54,14 @@ export interface IssueCommandOptions {
   completedAfter?: string;
   orderBy?: string;
   orderDir?: string;
+  // issue search flags
+  query?: string;
   // pagination flags
   all?: boolean;
   max?: number;
   pageSize?: number;
   after?: string;
+  quiet?: boolean;
 }
 
 const CURATED_ISSUE_FRAGMENT = `
@@ -101,6 +104,20 @@ ${CURATED_ISSUE_FRAGMENT}`;
 const ISSUE_LIST_QUERY = `
 query IssueList($first: Int!, $after: String, $filter: IssueFilter, $orderBy: PaginationOrderBy) {
   issues(first: $first, after: $after, filter: $filter, orderBy: $orderBy) {
+    nodes {
+      ...CuratedIssue
+    }
+    pageInfo {
+      hasNextPage
+      endCursor
+    }
+  }
+}
+${CURATED_ISSUE_FRAGMENT}`;
+
+const ISSUE_SEARCH_QUERY = `
+query IssueSearch($first: Int!, $after: String, $query: String!) {
+  issueSearch(first: $first, after: $after, query: $query) {
     nodes {
       ...CuratedIssue
     }
@@ -350,6 +367,12 @@ async function handleIssueCreate(options: IssueCommandOptions): Promise<number> 
   if (options.state !== undefined) {
     input.stateId = options.state;
   }
+  if (options.cycle !== undefined) {
+    input.cycleId = options.cycle;
+  }
+  if (options.project !== undefined) {
+    input.projectId = options.project;
+  }
   input.teamId = teamId;
 
   if (options.dryRun === true) {
@@ -458,7 +481,8 @@ async function handleIssueList(options: IssueCommandOptions): Promise<number> {
     all: options.all,
     max: options.max,
     pageSize: options.pageSize,
-    after: options.after
+    after: options.after,
+    quiet: options.quiet
   };
 
   const validationError = validatePaginationOptions(paginationOptions);
@@ -571,6 +595,109 @@ async function handleIssueList(options: IssueCommandOptions): Promise<number> {
       extractConnection: (data: unknown) => {
         const d = data as { issues: { nodes: RawIssue[]; pageInfo: PageInfo } };
         return d.issues;
+      }
+    };
+
+    if (options.jsonl === true) {
+      const streamOptions: PaginationOptions = {
+        ...paginationOptions,
+        all: paginationOptions.all ?? true
+      };
+
+      await streamPaginateGraphQL<RawIssue>({
+        ...commonPaginateInput,
+        options: streamOptions,
+        onItem: (raw) => {
+          process.stdout.write(`${JSON.stringify(normalizeIssue(raw))}\n`);
+        }
+      });
+    } else {
+      const result = await paginateGraphQL<RawIssue>({
+        ...commonPaginateInput,
+        options: paginationOptions
+      });
+
+      const issues = result.items.map(normalizeIssue);
+
+      if (options.jsonEnvelope) {
+        const envelope = successEnvelope(issues, { sourceLayer: "curated", profile: profile.name }, result.pageInfo);
+        process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
+      } else if (options.json) {
+        process.stdout.write(`${JSON.stringify(issues, null, 2)}\n`);
+      } else {
+        if (issues.length === 0) {
+          process.stdout.write("No issues found.\n");
+        } else {
+          for (const issue of issues) {
+            const state = issue.state !== null ? issue.state.name : "";
+            const assignee = issue.assignee !== null ? issue.assignee.name : "";
+            process.stdout.write(`${issue.identifier}\t${issue.title}\t${state}\t${assignee}\n`);
+          }
+        }
+      }
+    }
+
+    return ExitCode.Success;
+  } catch (error) {
+    const failure = mapCommandFailure(error);
+
+    if (options.jsonEnvelope) {
+      const envelope = failureEnvelope([failure.error], {
+        sourceLayer: "curated",
+        ...(options.profile === undefined ? {} : { profile: options.profile })
+      });
+      process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
+    } else {
+      process.stderr.write(`Error: ${failure.error.message}\n`);
+    }
+
+    return failure.exitCode;
+  }
+}
+
+async function handleIssueSearch(options: IssueCommandOptions): Promise<number> {
+  if (options.query === undefined || options.query === "") {
+    return emitValidationError("usage: linearctl issue search --query <text>", options);
+  }
+
+  const paginationOptions: PaginationOptions = {
+    all: options.all,
+    max: options.max,
+    pageSize: options.pageSize,
+    after: options.after,
+    quiet: options.quiet
+  };
+
+  const validationError = validatePaginationOptions(paginationOptions);
+  if (validationError !== undefined) {
+    return emitValidationError(validationError, options);
+  }
+
+  try {
+    const profile = await resolveStoredProfile({
+      paths: {
+        configFile: options.configFile,
+        credentialsFile: options.credentialsFile
+      },
+      ...(options.profile === undefined ? {} : { explicitProfile: options.profile }),
+      env: options.env
+    });
+
+    const commonPaginateInput = {
+      query: ISSUE_SEARCH_QUERY,
+      variables: {
+        query: options.query
+      },
+      credentials: profile.credentials,
+      ...(options.apiUrl === undefined
+        ? profile.metadata.baseUrl === undefined
+          ? {}
+          : { apiUrl: profile.metadata.baseUrl }
+        : { apiUrl: options.apiUrl }),
+      ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl }),
+      extractConnection: (data: unknown) => {
+        const d = data as { issueSearch: { nodes: RawIssue[]; pageInfo: PageInfo } };
+        return d.issueSearch;
       }
     };
 
@@ -844,39 +971,56 @@ async function handleIssueClose(
       return emitError("Issue not found or has no team.", options, profile.name);
     }
 
-    // 2. Find a completed-type workflow state for the team
-    const statesData = await executeGraphQL<{
-      workflowStates: { nodes: Array<{ id: string; name: string; type: string; position: number }> }
-    }>({
-      query: `query CompletedStates($filter: WorkflowStateFilter!) {
-        workflowStates(first: 10, filter: $filter) {
-          nodes { id name type position }
-        }
-      }`,
-      variables: { filter: { team: { id: { eq: teamId } }, type: { eq: "completed" } } },
-      ...graphqlOpts
-    });
+    // 2. Resolve the target state
+    let targetStateId: string;
+    let targetStateName: string;
 
-    if (hasErrors(statesData.body.errors)) {
-      const msg = statesData.body.errors?.[0]?.message ?? "Failed to fetch workflow states";
-      return emitError(msg, options, profile.name);
+    if (options.state !== undefined) {
+      // User specified a state name — resolve it
+      const resolverOpts: ResolverOptions = {
+        ...graphqlOpts
+      };
+      targetStateId = looksLikeId(options.state)
+        ? options.state
+        : await resolveStateId(options.state, teamId, resolverOpts);
+      targetStateName = options.state;
+    } else {
+      // Default: find a completed-type workflow state for the team
+      const statesData = await executeGraphQL<{
+        workflowStates: { nodes: Array<{ id: string; name: string; type: string; position: number }> }
+      }>({
+        query: `query CompletedStates($filter: WorkflowStateFilter!) {
+          workflowStates(first: 10, filter: $filter) {
+            nodes { id name type position }
+          }
+        }`,
+        variables: { filter: { team: { id: { eq: teamId } }, type: { eq: "completed" } } },
+        ...graphqlOpts
+      });
+
+      if (hasErrors(statesData.body.errors)) {
+        const msg = statesData.body.errors?.[0]?.message ?? "Failed to fetch workflow states";
+        return emitError(msg, options, profile.name);
+      }
+
+      const candidates = statesData.body.data?.workflowStates?.nodes ?? [];
+      // Prefer "Done" by name, then lowest position
+      const completedState =
+        candidates.find((s) => s.name === "Done") ??
+        candidates.sort((a, b) => a.position - b.position)[0];
+      if (completedState === undefined) {
+        return emitError("No completed workflow state found for this team.", options, profile.name);
+      }
+      targetStateId = completedState.id;
+      targetStateName = completedState.name;
     }
 
-    const candidates = statesData.body.data?.workflowStates?.nodes ?? [];
-    // Prefer "Done" by name, then lowest position
-    const completedState =
-      candidates.find((s) => s.name === "Done") ??
-      candidates.sort((a, b) => a.position - b.position)[0];
-    if (completedState === undefined) {
-      return emitError("No completed workflow state found for this team.", options, profile.name);
-    }
-
-    // 3. Transition the issue to the completed state
+    // 3. Transition the issue to the target state
     const response = await executeGraphQL<{
       issueUpdate: { success: boolean; issue: RawIssue | null };
     }>({
       query: ISSUE_UPDATE_MUTATION,
-      variables: { id: identifier, input: { stateId: completedState.id } },
+      variables: { id: identifier, input: { stateId: targetStateId } },
       ...graphqlOpts
     });
 
@@ -902,7 +1046,7 @@ async function handleIssueClose(
     const result = {
       identifier,
       closed: true,
-      state: completedState.name,
+      state: targetStateName,
       ...(issue !== null ? { issue: normalizeIssue(issue) } : {})
     };
 
@@ -912,7 +1056,7 @@ async function handleIssueClose(
     } else if (options.json) {
       process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     } else {
-      process.stdout.write(`Closed ${identifier} → ${completedState.name}\n`);
+      process.stdout.write(`Closed ${identifier} → ${targetStateName}\n`);
     }
 
     return ExitCode.Success;
@@ -1521,6 +1665,13 @@ export async function handleIssueCommand(
     return handleIssueList(options);
   }
 
+  if (subcommand === "search") {
+    if (rest.length > 0) {
+      return emitValidationError("issue search does not accept positional arguments. Use --query.", options);
+    }
+    return handleIssueSearch(options);
+  }
+
   if (subcommand === "update") {
     const identifier = rest[0];
     if (identifier === undefined || identifier === "") {
@@ -1587,7 +1738,7 @@ export async function handleIssueCommand(
     return handleBulkAssign(options);
   }
 
-  return emitValidationError("unsupported issue command. Try: get, create, list, update, close, assign, comment, bulk-update, bulk-close, bulk-assign.", options);
+  return emitValidationError("unsupported issue command. Try: get, create, list, search, update, close, assign, comment, bulk-update, bulk-close, bulk-assign.", options);
 }
 
 function hasErrors(errors: GraphQLErrorPayload[] | undefined): boolean {

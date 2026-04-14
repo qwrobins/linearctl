@@ -25,6 +25,7 @@ export interface UserCommandOptions {
   max?: number;
   pageSize?: number;
   after?: string;
+  quiet?: boolean;
 }
 
 interface RawUser {
@@ -281,7 +282,8 @@ async function handleUserList(options: UserCommandOptions): Promise<number> {
     all: options.all,
     max: options.max,
     pageSize: options.pageSize,
-    after: options.after
+    after: options.after,
+    quiet: options.quiet
   };
 
   const validationError = validatePaginationOptions(paginationOptions);

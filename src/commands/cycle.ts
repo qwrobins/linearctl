@@ -35,6 +35,7 @@ export interface CycleCommandOptions {
   max?: number;
   pageSize?: number;
   after?: string;
+  quiet?: boolean;
 }
 
 const CURATED_CYCLE_FRAGMENT = `
@@ -68,6 +69,16 @@ query CycleList($first: Int!, $after: String, $filter: CycleFilter) {
     pageInfo {
       hasNextPage
       endCursor
+    }
+  }
+}
+${CURATED_CYCLE_FRAGMENT}`;
+
+const CYCLE_CURRENT_QUERY = `
+query CyclesCurrent($filter: CycleFilter!) {
+  cycles(first: 1, filter: $filter) {
+    nodes {
+      ...CuratedCycle
     }
   }
 }
@@ -238,7 +249,8 @@ async function handleCycleList(options: CycleCommandOptions): Promise<number> {
     all: options.all,
     max: options.max,
     pageSize: options.pageSize,
-    after: options.after
+    after: options.after,
+    quiet: options.quiet
   };
 
   const validationError = validatePaginationOptions(paginationOptions);
@@ -315,6 +327,104 @@ async function handleCycleList(options: CycleCommandOptions): Promise<number> {
           process.stdout.write("\n");
         }
       }
+    }
+
+    return ExitCode.Success;
+  } catch (error) {
+    const failure = mapCommandFailure(error);
+
+    if (options.jsonEnvelope) {
+      const envelope = failureEnvelope([failure.error], {
+        sourceLayer: "curated",
+        ...(options.profile === undefined ? {} : { profile: options.profile })
+      });
+      process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
+    } else {
+      process.stderr.write(`Error: ${failure.error.message}\n`);
+    }
+
+    return failure.exitCode;
+  }
+}
+
+async function handleCycleCurrent(options: CycleCommandOptions): Promise<number> {
+  try {
+    const profile = await resolveStoredProfile({
+      paths: {
+        configFile: options.configFile,
+        credentialsFile: options.credentialsFile
+      },
+      ...(options.profile === undefined ? {} : { explicitProfile: options.profile }),
+      env: options.env
+    });
+
+    const effectiveTeam = options.team ?? profile.metadata.defaultTeam;
+    if (effectiveTeam === undefined) {
+      return emitValidationError("cycle current requires --team or a default team set via 'linearctl team get <key> --set-default'.", options);
+    }
+
+    const resolverOpts: ResolverOptions = {
+      credentials: profile.credentials,
+      ...(options.apiUrl === undefined
+        ? profile.metadata.baseUrl === undefined
+          ? {}
+          : { apiUrl: profile.metadata.baseUrl }
+        : { apiUrl: options.apiUrl }),
+      ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl })
+    };
+
+    const teamIdResolved = looksLikeId(effectiveTeam) ? effectiveTeam : await resolveTeamId(effectiveTeam, resolverOpts);
+    const filter = { team: { id: { eq: teamIdResolved } }, isActive: { eq: true } };
+
+    const response = await executeGraphQL<{ cycles: { nodes: RawCycle[] } }>({
+      query: CYCLE_CURRENT_QUERY,
+      variables: { filter },
+      credentials: profile.credentials,
+      ...(options.apiUrl === undefined
+        ? profile.metadata.baseUrl === undefined
+          ? {}
+          : { apiUrl: profile.metadata.baseUrl }
+        : { apiUrl: options.apiUrl }),
+      ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl })
+    });
+
+    if (hasErrors(response.body.errors)) {
+      const errors = mapGraphQLErrors(response.body.errors);
+      if (options.jsonEnvelope) {
+        const envelope = failureEnvelope(errors, {
+          sourceLayer: "curated",
+          profile: profile.name
+        });
+        process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
+      } else {
+        process.stderr.write(`Error: ${errors[0]?.message ?? "Cycle query failed"}\n`);
+      }
+      return ExitCode.GeneralError;
+    }
+
+    const nodes = response.body.data?.cycles?.nodes ?? [];
+    if (nodes.length === 0) {
+      if (options.jsonEnvelope) {
+        const envelope = failureEnvelope(
+          [{ category: "not-found", message: "No active cycle found for this team" }],
+          { sourceLayer: "curated", profile: profile.name }
+        );
+        process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
+      } else {
+        process.stderr.write("Error: No active cycle found for this team\n");
+      }
+      return ExitCode.NotFound;
+    }
+
+    const cycle = normalizeCycle(nodes[0]!);
+
+    if (options.jsonEnvelope) {
+      const envelope = successEnvelope(cycle, { sourceLayer: "curated", profile: profile.name });
+      process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
+    } else if (options.json) {
+      process.stdout.write(`${JSON.stringify(cycle, null, 2)}\n`);
+    } else {
+      printHumanCycle(cycle);
     }
 
     return ExitCode.Success;
@@ -570,6 +680,13 @@ export async function handleCycleCommand(
     return handleCycleList(options);
   }
 
+  if (subcommand === "current") {
+    if (rest.length > 0) {
+      return emitValidationError("cycle current does not accept positional arguments.", options);
+    }
+    return handleCycleCurrent(options);
+  }
+
   if (subcommand === "create") {
     if (rest.length > 0) {
       return emitValidationError("cycle create does not accept positional arguments.", options);
@@ -588,7 +705,7 @@ export async function handleCycleCommand(
     return handleCycleUpdate(id, options);
   }
 
-  return emitValidationError("unsupported cycle command. Try linearctl cycle get, list, create, or update.", options);
+  return emitValidationError("unsupported cycle command. Try linearctl cycle get, list, current, create, or update.", options);
 }
 
 function hasErrors(errors: GraphQLErrorPayload[] | undefined): boolean {
