@@ -305,9 +305,9 @@ export async function handleApiCommand(
     return ExitCode.ValidationError;
   }
 
-  const hasRequiredJsonArgs = entry.requiredArgs.some((a) =>
-    a.typeName.replace(/[!\[\]]/g, "").endsWith("Input")
-  );
+  const hasRequiredJsonArgs = entry.requiredArgs.length > 0 &&
+    entry.inputMode !== "id" &&
+    !(entry.inputMode === "id-plus-json" && entry.requiredArgs.every((a) => a.name === "id"));
   if (hasRequiredJsonArgs && inputJson === null) {
     process.stderr.write(
       `Error: this command requires JSON input. Use --input-json, --input-file, or --input-stdin.\n`
