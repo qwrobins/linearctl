@@ -656,7 +656,8 @@ async function handleIssueList(options: IssueCommandOptions): Promise<number> {
 }
 
 async function handleIssueSearch(options: IssueCommandOptions): Promise<number> {
-  if (options.query === undefined || options.query === "") {
+  const trimmedQuery = options.query?.trim();
+  if (trimmedQuery === undefined || trimmedQuery === "") {
     return emitValidationError("usage: linearctl issue search --query <text>", options);
   }
 
@@ -686,7 +687,7 @@ async function handleIssueSearch(options: IssueCommandOptions): Promise<number> 
     const commonPaginateInput = {
       query: ISSUE_SEARCH_QUERY,
       variables: {
-        query: options.query
+        query: trimmedQuery
       },
       credentials: profile.credentials,
       ...(options.apiUrl === undefined
@@ -979,7 +980,7 @@ async function handleIssueClose(
     let targetStateName: string;
 
     if (options.state !== undefined) {
-      // User specified a state name — resolve it
+      // User specified a state — resolve and validate it is a completed type
       const resolverOpts: ResolverOptions = {
         ...graphqlOpts
       };
@@ -987,6 +988,23 @@ async function handleIssueClose(
         ? options.state
         : await resolveStateId(options.state, teamId, resolverOpts);
       targetStateName = options.state;
+
+      // Verify the state is a completed type
+      const stateCheck = await executeGraphQL<{
+        workflowState: { id: string; name: string; type: string } | null
+      }>({
+        query: `query StateCheck($id: String!) { workflowState(id: $id) { id name type } }`,
+        variables: { id: targetStateId },
+        ...graphqlOpts
+      });
+      const stateType = stateCheck.body.data?.workflowState?.type;
+      if (stateType !== "completed") {
+        return emitError(
+          `State "${stateCheck.body.data?.workflowState?.name ?? options.state}" is type "${stateType ?? "unknown"}", not "completed". Use a completed-type state for issue close.`,
+          options, profile.name
+        );
+      }
+      targetStateName = stateCheck.body.data?.workflowState?.name ?? options.state;
     } else {
       // Default: find a completed-type workflow state for the team
       const statesData = await executeGraphQL<{
@@ -1082,16 +1100,18 @@ async function handleIssueClose(
 }
 
 function emitError(message: string, options: IssueCommandOptions, profileName?: string, exitCode?: number): number {
+  const resolvedExitCode = exitCode ?? ExitCode.GeneralError;
+  const category = resolvedExitCode === ExitCode.NotFound ? "not-found" : "general";
   if (options.jsonEnvelope) {
     const envelope = failureEnvelope(
-      [{ category: "general", message }],
+      [{ category, message }],
       { sourceLayer: "curated", ...(profileName === undefined ? {} : { profile: profileName }) }
     );
     process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
   } else {
     process.stderr.write(`Error: ${message}\n`);
   }
-  return exitCode ?? ExitCode.GeneralError;
+  return resolvedExitCode;
 }
 
 async function handleIssueAssign(
