@@ -11,6 +11,9 @@ coverage/
 *.log
 *.tsbuildinfo
 
+# Large introspection schema — local build artifact from `linearctl schema pull`
+src/generated/manifest/schema.json
+
 .firecrawl/
 
 .codex
