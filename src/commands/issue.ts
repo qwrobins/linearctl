@@ -931,7 +931,10 @@ async function handleIssueClose(
   options: IssueCommandOptions
 ): Promise<number> {
   if (options.dryRun === true) {
-    return emitDryRunResult("close", "issue", { id: identifier }, options);
+    return emitDryRunResult("close", "issue", {
+      id: identifier,
+      ...(options.state === undefined ? {} : { state: options.state })
+    }, options);
   }
 
   try {
@@ -968,7 +971,7 @@ async function handleIssueClose(
 
     const teamId = issueData.body.data?.issue?.team?.id;
     if (teamId === undefined) {
-      return emitError("Issue not found or has no team.", options, profile.name);
+      return emitError("Issue not found or has no team.", options, profile.name, ExitCode.NotFound);
     }
 
     // 2. Resolve the target state
@@ -1078,7 +1081,7 @@ async function handleIssueClose(
   }
 }
 
-function emitError(message: string, options: IssueCommandOptions, profileName?: string): number {
+function emitError(message: string, options: IssueCommandOptions, profileName?: string, exitCode?: number): number {
   if (options.jsonEnvelope) {
     const envelope = failureEnvelope(
       [{ category: "general", message }],
@@ -1088,7 +1091,7 @@ function emitError(message: string, options: IssueCommandOptions, profileName?: 
   } else {
     process.stderr.write(`Error: ${message}\n`);
   }
-  return ExitCode.GeneralError;
+  return exitCode ?? ExitCode.GeneralError;
 }
 
 async function handleIssueAssign(
