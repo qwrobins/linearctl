@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.2] - 2026-04-14
+
+### Fixed
+
+- Generated API mutations returning HTTP 400 — Payload types now use `success` as default field selection instead of `id`
+- Generated API list commands no longer require `--input-json` when all args are optional
+- Generated API commands with required scalar args (e.g. `api application info`) correctly require `--input-json`
+- `linearctl gql` help text now shows `--var`, `--vars-file`, `--file`, `--stdin` options
+
 ## [0.3.1] - 2026-04-14
 
 ### Added
