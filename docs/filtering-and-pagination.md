@@ -4,7 +4,7 @@
 
 By default, list commands return the first page only (up to 50 items). When results are truncated, a warning is emitted to stderr:
 
-```
+```text
 Warning: results truncated at 50 items. Use --all to fetch all results, or --max <n> for a specific limit.
 ```
 

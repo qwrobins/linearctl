@@ -33,14 +33,14 @@ export async function handleGqlCommand(
 
   if (subcommand === undefined) {
     process.stderr.write(
-      "Usage: linearctl gql <subcommand> [query]\n\n" +
+      "Usage: linearctl gql <subcommand> [query] (--json | --json-envelope | --raw)\n\n" +
       "Subcommands:\n" +
       "  query        Execute a GraphQL query\n" +
       "  mutation     Execute a GraphQL mutation\n" +
       "  introspect   Fetch the full introspection schema\n\n" +
       "Examples:\n" +
-      "  linearctl gql query '{ viewer { id name } }'\n" +
-      "  linearctl gql query --file my-query.graphql\n" +
+      "  linearctl gql query '{ viewer { id name } }' --json\n" +
+      "  linearctl gql query --file my-query.graphql --json\n" +
       "  linearctl gql introspect --json\n"
     );
     return 5;

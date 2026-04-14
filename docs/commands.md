@@ -14,7 +14,7 @@ linearctl issue get <identifier> --json
 linearctl issue list [--team <name|key|id>] [--state <name|id>] [--assignee <email|"me"|id>] \
   [--label <name|id>] [--priority <0-4>] [--cycle <id>] [--project <id>] \
   [--created-after <date>] [--updated-after <date>] [--completed-after <date>] \
-  [--filter-json <json>] [--order-by <field>] \
+  [--all-teams] [--filter-json <json>] [--order-by <field>] \
   [--all] [--max <n>] [--page-size <n>] [--after <cursor>] --json
 
 # Create an issue

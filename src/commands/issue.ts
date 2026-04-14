@@ -834,6 +834,11 @@ async function handleIssueClose(
       ...graphqlOpts
     });
 
+    if (hasErrors(issueData.body.errors)) {
+      const msg = issueData.body.errors?.[0]?.message ?? "Failed to fetch issue";
+      return emitError(msg, options, profile.name);
+    }
+
     const teamId = issueData.body.data?.issue?.team?.id;
     if (teamId === undefined) {
       return emitError("Issue not found or has no team.", options, profile.name);
@@ -851,6 +856,11 @@ async function handleIssueClose(
       variables: { filter: { team: { id: { eq: teamId } }, type: { eq: "completed" } } },
       ...graphqlOpts
     });
+
+    if (hasErrors(statesData.body.errors)) {
+      const msg = statesData.body.errors?.[0]?.message ?? "Failed to fetch workflow states";
+      return emitError(msg, options, profile.name);
+    }
 
     const candidates = statesData.body.data?.workflowStates?.nodes ?? [];
     // Prefer "Done" by name, then lowest position

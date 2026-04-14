@@ -112,8 +112,11 @@ export async function paginateGraphQL<TNode>(
 
     if (!shouldAutopaginate) {
       if (lastPageInfo.hasNextPage) {
+        const guidance = options.after === undefined
+          ? "Use --all to fetch all results, or --max <n> for a specific limit."
+          : "Use --max <n> for a specific limit.";
         process.stderr.write(
-          `Warning: results truncated at ${items.length} items. Use --all to fetch all results, or --max <n> for a specific limit.\n`
+          `Warning: results truncated at ${items.length} items. ${guidance}\n`
         );
       }
       break;
