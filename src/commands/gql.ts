@@ -38,9 +38,15 @@ export async function handleGqlCommand(
       "  query        Execute a GraphQL query\n" +
       "  mutation     Execute a GraphQL mutation\n" +
       "  introspect   Fetch the full introspection schema\n\n" +
+      "Input options:\n" +
+      "  --var key=value     Set a variable (repeatable, values auto-parsed as JSON)\n" +
+      "  --vars-file <path>  Load variables from a JSON file\n" +
+      "  --file <path>       Load query/mutation from a file\n" +
+      "  --stdin             Read query/mutation from stdin\n\n" +
       "Examples:\n" +
       "  linearctl gql query '{ viewer { id name } }' --json\n" +
-      "  linearctl gql query --file my-query.graphql --json\n" +
+      "  linearctl gql query --file my-query.graphql --var teamId=abc123 --json\n" +
+      "  linearctl gql mutation 'mutation($input: IssueUpdateInput!) { issueUpdate(id: \"xxx\", input: $input) { success } }' --var 'input={\"estimate\":2}' --json\n" +
       "  linearctl gql introspect --json\n"
     );
     return 5;
