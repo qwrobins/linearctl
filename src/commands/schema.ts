@@ -277,9 +277,14 @@ async function handleSchemaCheck(positionals: string[], options: SchemaCommandOp
 }
 
 function defaultSchemaOutputDir(): string {
-  // Resolve relative to the source root (one level up from src/commands/ → src/).
-  // This ensures schema pull writes to src/generated/manifest/ regardless of CWD.
+  // In compiled binaries, import.meta.url resolves to a virtual path.
+  // Fall back to ~/.config/linear/schema/ for end users.
   const thisDir = dirname(fileURLToPath(import.meta.url));
+  if (thisDir.startsWith("/$bunfs") || thisDir.startsWith("/$")) {
+    const home = process.env.HOME ?? process.env.USERPROFILE ?? ".";
+    return join(home, ".config", "linear", "schema");
+  }
+  // Development: write to src/generated/manifest/ regardless of CWD.
   return join(thisDir, "..", "generated", "manifest");
 }
 

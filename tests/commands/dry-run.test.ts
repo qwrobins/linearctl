@@ -120,7 +120,7 @@ describe("--dry-run", () => {
 
         const parsed = JSON.parse(output.stdout.join(""));
         expect(parsed.dryRun).toBe(true);
-        expect(parsed.action).toBe("archive");
+        expect(parsed.action).toBe("close");
         expect(parsed.resource).toBe("issue");
         expect(parsed.input.id).toBe("INF-123");
       } finally {
@@ -559,7 +559,7 @@ describe("--dry-run", () => {
         expect(envelope.ok).toBe(true);
         expect(envelope.meta.sourceLayer).toBe("curated");
         expect(envelope.data.dryRun).toBe(true);
-        expect(envelope.data.action).toBe("archive");
+        expect(envelope.data.action).toBe("close");
       } finally {
         output.restore();
       }

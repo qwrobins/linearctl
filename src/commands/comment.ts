@@ -28,6 +28,7 @@ export interface CommentCommandOptions {
   max?: number;
   pageSize?: number;
   after?: string;
+  quiet?: boolean;
 }
 
 interface RawComment {
@@ -78,7 +79,7 @@ fragment CuratedComment on Comment {
 }`;
 
 const COMMENT_LIST_QUERY = `
-query CommentList($first: Int!, $after: String, $issueId: String!) {
+query CommentList($first: Int!, $after: String, $issueId: ID!) {
   comments(first: $first, after: $after, filter: { issue: { id: { eq: $issueId } } }) {
     nodes {
       ...CuratedComment
@@ -140,7 +141,8 @@ async function handleCommentList(options: CommentCommandOptions): Promise<number
     ...(options.all === true ? { all: true } : {}),
     ...(options.max === undefined ? {} : { max: options.max }),
     ...(options.pageSize === undefined ? {} : { pageSize: options.pageSize }),
-    ...(options.after === undefined ? {} : { after: options.after })
+    ...(options.after === undefined ? {} : { after: options.after }),
+    ...(options.quiet === true ? { quiet: true } : {})
   };
 
   const validationError = validatePaginationOptions(paginationOptions);

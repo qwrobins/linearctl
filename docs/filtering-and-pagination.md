@@ -2,7 +2,13 @@
 
 ## Pagination
 
-By default, list commands return the first page only (bounded).
+By default, list commands return the first page only (up to 50 items). When results are truncated, a warning is emitted to stderr:
+
+```text
+Warning: results truncated at 50 items. Use --all to fetch all results, or --max <n> for a specific limit.
+```
+
+This prevents silently incomplete data. Always check stderr or use `--all`/`--max` when you need complete results.
 
 ### Flags
 
@@ -47,6 +53,11 @@ Issue list supports these filter flags:
 | `--assignee <value>` | Filter by assignee | `"me"`, email, or UUID |
 | `--label <value>` | Filter by label | Name or UUID |
 | `--priority <n>` | Filter by priority | Integer 0-4 (0 = no priority, 1 = urgent, 4 = low) |
+| `--cycle <value>` | Filter by cycle | UUID |
+| `--project <value>` | Filter by project | UUID |
+| `--created-after <date>` | Issues created on or after date | ISO 8601 date (e.g. `2024-01-01`) |
+| `--updated-after <date>` | Issues updated on or after date | ISO 8601 date |
+| `--completed-after <date>` | Issues completed on or after date | ISO 8601 date |
 | `--filter-json <json>` | Full Linear filter object | JSON string |
 | `--order-by <field>` | Order results | Field name (e.g. `createdAt`, `updatedAt`) |
 
@@ -61,6 +72,12 @@ linearctl issue list --team INF --priority 1 --json
 
 # Issues with a specific label
 linearctl issue list --team INF --label "bug" --json
+
+# Issues completed in the last 30 days
+linearctl issue list --team INF --completed-after 2024-03-01 --all --json
+
+# Issues created this week
+linearctl issue list --team INF --created-after 2024-03-25 --json
 
 # Complex filter using JSON
 linearctl issue list --filter-json '{"state":{"name":{"in":["Todo","In Progress"]}},"priority":{"lte":2}}' --json

@@ -35,6 +35,7 @@ export interface ProjectStatusCommandOptions {
   max?: number;
   pageSize?: number;
   after?: string;
+  quiet?: boolean;
 }
 
 interface RawProjectStatus {
@@ -209,7 +210,8 @@ async function handleProjectStatusList(options: ProjectStatusCommandOptions): Pr
     all: options.all,
     max: options.max,
     pageSize: options.pageSize,
-    after: options.after
+    after: options.after,
+    quiet: options.quiet
   };
 
   const validationError = validatePaginationOptions(paginationOptions);

@@ -34,7 +34,7 @@ export interface IssueCommandOptions {
   // issue create/update flags
   title?: string;
   team?: string;
-  everything?: boolean;
+  allTeams?: boolean;
   description?: string;
   priority?: string;
   assignee?: string;
@@ -49,13 +49,19 @@ export interface IssueCommandOptions {
   cycle?: string;
   project?: string;
   filterJson?: string;
+  createdAfter?: string;
+  updatedAfter?: string;
+  completedAfter?: string;
   orderBy?: string;
   orderDir?: string;
+  // issue search flags
+  query?: string;
   // pagination flags
   all?: boolean;
   max?: number;
   pageSize?: number;
   after?: string;
+  quiet?: boolean;
 }
 
 const CURATED_ISSUE_FRAGMENT = `
@@ -98,6 +104,20 @@ ${CURATED_ISSUE_FRAGMENT}`;
 const ISSUE_LIST_QUERY = `
 query IssueList($first: Int!, $after: String, $filter: IssueFilter, $orderBy: PaginationOrderBy) {
   issues(first: $first, after: $after, filter: $filter, orderBy: $orderBy) {
+    nodes {
+      ...CuratedIssue
+    }
+    pageInfo {
+      hasNextPage
+      endCursor
+    }
+  }
+}
+${CURATED_ISSUE_FRAGMENT}`;
+
+const ISSUE_SEARCH_QUERY = `
+query IssueSearch($first: Int!, $after: String, $query: String!) {
+  issueSearch(first: $first, after: $after, query: $query) {
     nodes {
       ...CuratedIssue
     }
@@ -347,6 +367,12 @@ async function handleIssueCreate(options: IssueCommandOptions): Promise<number> 
   if (options.state !== undefined) {
     input.stateId = options.state;
   }
+  if (options.cycle !== undefined) {
+    input.cycleId = options.cycle;
+  }
+  if (options.project !== undefined) {
+    input.projectId = options.project;
+  }
   input.teamId = teamId;
 
   if (options.dryRun === true) {
@@ -455,7 +481,8 @@ async function handleIssueList(options: IssueCommandOptions): Promise<number> {
     all: options.all,
     max: options.max,
     pageSize: options.pageSize,
-    after: options.after
+    after: options.after,
+    quiet: options.quiet
   };
 
   const validationError = validatePaginationOptions(paginationOptions);
@@ -505,7 +532,7 @@ async function handleIssueList(options: IssueCommandOptions): Promise<number> {
     if (filter === undefined) {
       const buildFilter: Record<string, unknown> = {};
       let resolvedTeamId: string | undefined;
-      const effectiveTeam = options.everything ? undefined : (options.team ?? profile.metadata.defaultTeam);
+      const effectiveTeam = options.allTeams ? undefined : (options.team ?? profile.metadata.defaultTeam);
       if (effectiveTeam !== undefined) {
         resolvedTeamId = looksLikeId(effectiveTeam) ? effectiveTeam : await resolveTeamId(effectiveTeam, resolverOpts);
         buildFilter.team = { id: { eq: resolvedTeamId } };
@@ -538,6 +565,15 @@ async function handleIssueList(options: IssueCommandOptions): Promise<number> {
       if (options.project !== undefined) {
         buildFilter.project = { id: { eq: options.project } };
       }
+      if (options.createdAfter !== undefined) {
+        buildFilter.createdAt = { gte: options.createdAfter };
+      }
+      if (options.updatedAfter !== undefined) {
+        buildFilter.updatedAt = { gte: options.updatedAfter };
+      }
+      if (options.completedAfter !== undefined) {
+        buildFilter.completedAt = { gte: options.completedAfter };
+      }
       if (Object.keys(buildFilter).length > 0) {
         filter = buildFilter;
       }
@@ -559,6 +595,110 @@ async function handleIssueList(options: IssueCommandOptions): Promise<number> {
       extractConnection: (data: unknown) => {
         const d = data as { issues: { nodes: RawIssue[]; pageInfo: PageInfo } };
         return d.issues;
+      }
+    };
+
+    if (options.jsonl === true) {
+      const streamOptions: PaginationOptions = {
+        ...paginationOptions,
+        all: paginationOptions.all ?? true
+      };
+
+      await streamPaginateGraphQL<RawIssue>({
+        ...commonPaginateInput,
+        options: streamOptions,
+        onItem: (raw) => {
+          process.stdout.write(`${JSON.stringify(normalizeIssue(raw))}\n`);
+        }
+      });
+    } else {
+      const result = await paginateGraphQL<RawIssue>({
+        ...commonPaginateInput,
+        options: paginationOptions
+      });
+
+      const issues = result.items.map(normalizeIssue);
+
+      if (options.jsonEnvelope) {
+        const envelope = successEnvelope(issues, { sourceLayer: "curated", profile: profile.name }, result.pageInfo);
+        process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
+      } else if (options.json) {
+        process.stdout.write(`${JSON.stringify(issues, null, 2)}\n`);
+      } else {
+        if (issues.length === 0) {
+          process.stdout.write("No issues found.\n");
+        } else {
+          for (const issue of issues) {
+            const state = issue.state !== null ? issue.state.name : "";
+            const assignee = issue.assignee !== null ? issue.assignee.name : "";
+            process.stdout.write(`${issue.identifier}\t${issue.title}\t${state}\t${assignee}\n`);
+          }
+        }
+      }
+    }
+
+    return ExitCode.Success;
+  } catch (error) {
+    const failure = mapCommandFailure(error);
+
+    if (options.jsonEnvelope) {
+      const envelope = failureEnvelope([failure.error], {
+        sourceLayer: "curated",
+        ...(options.profile === undefined ? {} : { profile: options.profile })
+      });
+      process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
+    } else {
+      process.stderr.write(`Error: ${failure.error.message}\n`);
+    }
+
+    return failure.exitCode;
+  }
+}
+
+async function handleIssueSearch(options: IssueCommandOptions): Promise<number> {
+  const trimmedQuery = options.query?.trim();
+  if (trimmedQuery === undefined || trimmedQuery === "") {
+    return emitValidationError("usage: linearctl issue search --query <text>", options);
+  }
+
+  const paginationOptions: PaginationOptions = {
+    all: options.all,
+    max: options.max,
+    pageSize: options.pageSize,
+    after: options.after,
+    quiet: options.quiet
+  };
+
+  const validationError = validatePaginationOptions(paginationOptions);
+  if (validationError !== undefined) {
+    return emitValidationError(validationError, options);
+  }
+
+  try {
+    const profile = await resolveStoredProfile({
+      paths: {
+        configFile: options.configFile,
+        credentialsFile: options.credentialsFile
+      },
+      ...(options.profile === undefined ? {} : { explicitProfile: options.profile }),
+      env: options.env
+    });
+
+    const commonPaginateInput = {
+      query: ISSUE_SEARCH_QUERY,
+      variables: {
+        query: trimmedQuery
+      },
+      credentials: profile.credentials,
+      ...(options.apiUrl === undefined
+        ? profile.metadata.baseUrl === undefined
+          ? {}
+          : { apiUrl: profile.metadata.baseUrl }
+        : { apiUrl: options.apiUrl }),
+      ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl }),
+      extractConnection: (data: unknown) => {
+        const d = data as { issueSearch: { nodes: RawIssue[]; pageInfo: PageInfo } };
+        return d.issueSearch;
       }
     };
 
@@ -792,7 +932,10 @@ async function handleIssueClose(
   options: IssueCommandOptions
 ): Promise<number> {
   if (options.dryRun === true) {
-    return emitDryRunResult("archive", "issue", { id: identifier }, options);
+    return emitDryRunResult("close", "issue", {
+      id: identifier,
+      ...(options.state === undefined ? {} : { state: options.state })
+    }, options);
   }
 
   try {
@@ -805,11 +948,7 @@ async function handleIssueClose(
       env: options.env
     });
 
-    const response = await executeGraphQL<{
-      issueArchive: { success: boolean };
-    }>({
-      query: ISSUE_ARCHIVE_MUTATION,
-      variables: { id: identifier },
+    const graphqlOpts = {
       credentials: profile.credentials,
       ...(options.apiUrl === undefined
         ? profile.metadata.baseUrl === undefined
@@ -817,27 +956,121 @@ async function handleIssueClose(
           : { apiUrl: profile.metadata.baseUrl }
         : { apiUrl: options.apiUrl }),
       ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl })
+    };
+
+    // 1. Fetch the issue's team
+    const issueData = await executeGraphQL<{ issue: { team: { id: string } } | null }>({
+      query: `query IssueTeam($id: String!) { issue(id: $id) { team { id } } }`,
+      variables: { id: identifier },
+      ...graphqlOpts
+    });
+
+    if (hasErrors(issueData.body.errors)) {
+      const msg = issueData.body.errors?.[0]?.message ?? "Failed to fetch issue";
+      return emitError(msg, options, profile.name);
+    }
+
+    const teamId = issueData.body.data?.issue?.team?.id;
+    if (teamId === undefined) {
+      return emitError("Issue not found or has no team.", options, profile.name, ExitCode.NotFound);
+    }
+
+    // 2. Resolve the target state
+    let targetStateId: string;
+    let targetStateName: string;
+
+    if (options.state !== undefined) {
+      // User specified a state — resolve and validate it is a completed type
+      const resolverOpts: ResolverOptions = {
+        ...graphqlOpts
+      };
+      targetStateId = looksLikeId(options.state)
+        ? options.state
+        : await resolveStateId(options.state, teamId, resolverOpts);
+      targetStateName = options.state;
+
+      // Verify the state is a completed type
+      const stateCheck = await executeGraphQL<{
+        workflowState: { id: string; name: string; type: string } | null
+      }>({
+        query: `query StateCheck($id: String!) { workflowState(id: $id) { id name type } }`,
+        variables: { id: targetStateId },
+        ...graphqlOpts
+      });
+      const stateType = stateCheck.body.data?.workflowState?.type;
+      if (stateType !== "completed") {
+        return emitError(
+          `State "${stateCheck.body.data?.workflowState?.name ?? options.state}" is type "${stateType ?? "unknown"}", not "completed". Use a completed-type state for issue close.`,
+          options, profile.name
+        );
+      }
+      targetStateName = stateCheck.body.data?.workflowState?.name ?? options.state;
+    } else {
+      // Default: find a completed-type workflow state for the team
+      const statesData = await executeGraphQL<{
+        workflowStates: { nodes: Array<{ id: string; name: string; type: string; position: number }> }
+      }>({
+        query: `query CompletedStates($filter: WorkflowStateFilter!) {
+          workflowStates(first: 10, filter: $filter) {
+            nodes { id name type position }
+          }
+        }`,
+        variables: { filter: { team: { id: { eq: teamId } }, type: { eq: "completed" } } },
+        ...graphqlOpts
+      });
+
+      if (hasErrors(statesData.body.errors)) {
+        const msg = statesData.body.errors?.[0]?.message ?? "Failed to fetch workflow states";
+        return emitError(msg, options, profile.name);
+      }
+
+      const candidates = statesData.body.data?.workflowStates?.nodes ?? [];
+      // Prefer "Done" by name, then lowest position
+      const completedState =
+        candidates.find((s) => s.name === "Done") ??
+        candidates.sort((a, b) => a.position - b.position)[0];
+      if (completedState === undefined) {
+        return emitError("No completed workflow state found for this team.", options, profile.name);
+      }
+      targetStateId = completedState.id;
+      targetStateName = completedState.name;
+    }
+
+    // 3. Transition the issue to the target state
+    const response = await executeGraphQL<{
+      issueUpdate: { success: boolean; issue: RawIssue | null };
+    }>({
+      query: ISSUE_UPDATE_MUTATION,
+      variables: { id: identifier, input: { stateId: targetStateId } },
+      ...graphqlOpts
     });
 
     if (
       hasErrors(response.body.errors) ||
-      response.body.data?.issueArchive?.success !== true
+      response.body.data?.issueUpdate?.success !== true
     ) {
       if (options.jsonEnvelope) {
         const errors = mapGraphQLErrors(response.body.errors);
         const envelope = failureEnvelope(
-          errors.length > 0 ? errors : [{ category: "general", message: "Issue archive failed" }],
+          errors.length > 0 ? errors : [{ category: "general", message: "Issue close failed" }],
           { sourceLayer: "curated", profile: profile.name }
         );
         process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
       } else {
-        const errorMessage = response.body.errors?.[0]?.message ?? "Issue archive failed";
+        const errorMessage = response.body.errors?.[0]?.message ?? "Issue close failed";
         process.stderr.write(`Error: ${errorMessage}\n`);
       }
       return ExitCode.GeneralError;
     }
 
-    const result = { identifier, archived: true };
+    const issue = response.body.data.issueUpdate.issue;
+    const resolvedStateName = issue?.state?.name ?? targetStateName;
+    const result = {
+      identifier,
+      closed: true,
+      state: resolvedStateName,
+      ...(issue !== null ? { issue: normalizeIssue(issue) } : {})
+    };
 
     if (options.jsonEnvelope) {
       const envelope = successEnvelope(result, { sourceLayer: "curated", profile: profile.name });
@@ -845,7 +1078,7 @@ async function handleIssueClose(
     } else if (options.json) {
       process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     } else {
-      process.stdout.write(`Archived ${identifier}\n`);
+      process.stdout.write(`Closed ${identifier} → ${resolvedStateName}\n`);
     }
 
     return ExitCode.Success;
@@ -864,6 +1097,21 @@ async function handleIssueClose(
 
     return failure.exitCode;
   }
+}
+
+function emitError(message: string, options: IssueCommandOptions, profileName?: string, exitCode?: number): number {
+  const resolvedExitCode = exitCode ?? ExitCode.GeneralError;
+  const category = resolvedExitCode === ExitCode.NotFound ? "not-found" : "general";
+  if (options.jsonEnvelope) {
+    const envelope = failureEnvelope(
+      [{ category, message }],
+      { sourceLayer: "curated", ...(profileName === undefined ? {} : { profile: profileName }) }
+    );
+    process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
+  } else {
+    process.stderr.write(`Error: ${message}\n`);
+  }
+  return resolvedExitCode;
 }
 
 async function handleIssueAssign(
@@ -1441,6 +1689,13 @@ export async function handleIssueCommand(
     return handleIssueList(options);
   }
 
+  if (subcommand === "search") {
+    if (rest.length > 0) {
+      return emitValidationError("issue search does not accept positional arguments. Use --query.", options);
+    }
+    return handleIssueSearch(options);
+  }
+
   if (subcommand === "update") {
     const identifier = rest[0];
     if (identifier === undefined || identifier === "") {
@@ -1507,7 +1762,7 @@ export async function handleIssueCommand(
     return handleBulkAssign(options);
   }
 
-  return emitValidationError("unsupported issue command. Try: get, create, list, update, close, assign, comment, bulk-update, bulk-close, bulk-assign.", options);
+  return emitValidationError("unsupported issue command. Try: get, create, list, search, update, close, assign, comment, bulk-update, bulk-close, bulk-assign.", options);
 }
 
 function hasErrors(errors: GraphQLErrorPayload[] | undefined): boolean {

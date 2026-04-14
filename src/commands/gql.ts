@@ -31,8 +31,23 @@ export async function handleGqlCommand(
 ): Promise<number> {
   const [subcommand, ...rest] = positionals;
 
+  if (subcommand === undefined) {
+    process.stderr.write(
+      "Usage: linearctl gql <subcommand> [query] (--json | --json-envelope | --raw)\n\n" +
+      "Subcommands:\n" +
+      "  query        Execute a GraphQL query\n" +
+      "  mutation     Execute a GraphQL mutation\n" +
+      "  introspect   Fetch the full introspection schema\n\n" +
+      "Examples:\n" +
+      "  linearctl gql query '{ viewer { id name } }' --json\n" +
+      "  linearctl gql query --file my-query.graphql --json\n" +
+      "  linearctl gql introspect --json\n"
+    );
+    return 5;
+  }
+
   if (subcommand !== "query" && subcommand !== "mutation" && subcommand !== "introspect") {
-    process.stderr.write("Error: unsupported gql command. Try linearctl gql query, linearctl gql mutation, or linearctl gql introspect.\n");
+    process.stderr.write(`Error: unknown gql subcommand '${subcommand}'. Expected: query, mutation, or introspect.\n`);
     return 5;
   }
 

@@ -27,13 +27,14 @@ export interface ProjectCommandOptions {
   name?: string;
   description?: string;
   team?: string;
-  everything?: boolean;
+  allTeams?: boolean;
   state?: string;
   // pagination flags
   all?: boolean;
   max?: number;
   pageSize?: number;
   after?: string;
+  quiet?: boolean;
 }
 
 const CURATED_PROJECT_FRAGMENT = `
@@ -248,7 +249,8 @@ async function handleProjectList(options: ProjectCommandOptions): Promise<number
     all: options.all,
     max: options.max,
     pageSize: options.pageSize,
-    after: options.after
+    after: options.after,
+    quiet: options.quiet
   };
 
   const validationError = validatePaginationOptions(paginationOptions);
@@ -266,7 +268,7 @@ async function handleProjectList(options: ProjectCommandOptions): Promise<number
       env: options.env
     });
 
-    const effectiveTeam = options.everything ? undefined : (options.team ?? profile.metadata.defaultTeam);
+    const effectiveTeam = options.allTeams ? undefined : (options.team ?? profile.metadata.defaultTeam);
     let filter: Record<string, unknown> | undefined;
     if (effectiveTeam !== undefined) {
       const resolverOpts = {
@@ -278,6 +280,9 @@ async function handleProjectList(options: ProjectCommandOptions): Promise<number
       };
       const teamId = looksLikeId(effectiveTeam) ? effectiveTeam : await resolveTeamId(effectiveTeam, resolverOpts);
       filter = { accessibleTeams: { some: { id: { eq: teamId } } } };
+    }
+    if (options.state !== undefined) {
+      filter = { ...filter, state: { name: { eq: options.state } } };
     }
 
     const commonPaginateInput = {

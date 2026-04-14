@@ -12,20 +12,25 @@ linearctl issue get <identifier> --json
 
 # List issues with filters
 linearctl issue list [--team <name|key|id>] [--state <name|id>] [--assignee <email|"me"|id>] \
-  [--label <name|id>] [--priority <0-4>] [--filter-json <json>] [--order-by <field>] \
+  [--label <name|id>] [--priority <0-4>] [--cycle <id>] [--project <id>] \
+  [--created-after <date>] [--updated-after <date>] [--completed-after <date>] \
+  [--all-teams] [--filter-json <json>] [--order-by <field>] \
   [--all] [--max <n>] [--page-size <n>] [--after <cursor>] --json
+
+# Search issues by text
+linearctl issue search --query <text> [--all] --json
 
 # Create an issue
 linearctl issue create --title <title> --team <name|key|id> \
   [--description <text>] [--priority <0-4>] [--assignee <email|"me"|id>] \
-  [--label <name|id>] [--state <name|id>] --json
+  [--label <name|id>] [--state <name|id>] [--cycle <id>] [--project <id>] --json
 
 # Update an issue
 linearctl issue update <identifier> [--title <text>] [--description <text>] \
   [--priority <0-4>] [--assignee <email|"me"|id>] [--state <name|id>] --json
 
-# Close (archive) an issue [destructive]
-linearctl issue close <identifier> --json
+# Close an issue (transitions to completed state, defaults to "Done")
+linearctl issue close <identifier> [--state <name>] --json
 
 # Assign an issue
 linearctl issue assign <identifier> <assignee> --json
@@ -54,7 +59,7 @@ Bulk operations report partial success. Check the response for per-item results.
 
 ```bash
 linearctl project get <id> --json
-linearctl project list --json
+linearctl project list [--team <name|key|id>] [--state <name>] [--all-teams] --json
 linearctl project create --name <name> [--description <text>] [--team <name|key|id>] --json
 linearctl project update <id> [--name <text>] [--description <text>] [--state <state>] --json
 linearctl project delete <id> --json              # [destructive]
@@ -65,6 +70,7 @@ linearctl project delete <id> --json              # [destructive]
 ```bash
 linearctl cycle get <id> --json
 linearctl cycle list [--team <name|key|id>] --json
+linearctl cycle current [--team <name|key|id>] --json
 linearctl cycle create --team <name|key|id> [--name <text>] [--starts-at <date>] [--ends-at <date>] --json
 linearctl cycle update <id> [--name <text>] [--starts-at <date>] [--ends-at <date>] --json
 ```
@@ -97,7 +103,7 @@ linearctl label delete <id> --json                # [destructive]
 
 ```bash
 linearctl state get <id> --json
-linearctl state list [--team <name|key|id>] [--everything] --json
+linearctl state list [--team <name|key|id>] [--all-teams] --json
 linearctl state create --name <name> --team <name|key|id> --state-type <type> \
   [--description <text>] [--color <hex>] [--position <n>] --json
 ```

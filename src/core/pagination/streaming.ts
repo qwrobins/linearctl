@@ -74,7 +74,7 @@ export async function streamPaginateGraphQL<TNode>(
     lastPageInfo = connection.pageInfo;
 
     if (totalItems >= limit) {
-      if (options.max === undefined && totalItems >= SAFETY_CAP) {
+      if (options.max === undefined && totalItems >= SAFETY_CAP && !options.quiet) {
         process.stderr.write(
           `Warning: --jsonl fetched ${SAFETY_CAP} items (safety cap). Use --max to fetch more.\n`
         );

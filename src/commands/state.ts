@@ -33,12 +33,13 @@ export interface StateCommandOptions {
   color?: string;
   position?: string;
   team?: string;
-  everything?: boolean;
+  allTeams?: boolean;
   // pagination flags
   all?: boolean;
   max?: number;
   pageSize?: number;
   after?: string;
+  quiet?: boolean;
 }
 
 interface RawWorkflowState {
@@ -220,7 +221,8 @@ async function handleStateList(options: StateCommandOptions): Promise<number> {
     all: options.all,
     max: options.max,
     pageSize: options.pageSize,
-    after: options.after
+    after: options.after,
+    quiet: options.quiet
   };
 
   const validationError = validatePaginationOptions(paginationOptions);
@@ -245,7 +247,7 @@ async function handleStateList(options: StateCommandOptions): Promise<number> {
       : options.apiUrl;
 
     const variables: Record<string, unknown> = {};
-    const effectiveTeam = options.everything ? undefined : (options.team ?? profile.metadata.defaultTeam);
+    const effectiveTeam = options.allTeams ? undefined : (options.team ?? profile.metadata.defaultTeam);
     if (effectiveTeam !== undefined) {
       const resolverOpts: ResolverOptions = {
         credentials: profile.credentials,
