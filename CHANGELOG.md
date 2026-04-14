@@ -5,6 +5,42 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-04-14
+
+### Added
+
+- `issue search --query <text>` — full-text search across issues using Linear's issueSearch API
+- `cycle current [--team <id>]` — get the currently active cycle for a team
+- `--quiet` / `-q` flag on all list commands — suppress truncation warnings when piping JSON
+- `issue close --state <name>` — specify which completed state to transition to (validated as completed-type)
+- `issue create --cycle <id>` and `--project <id>` — set cycle and project on issue creation
+- `project list --state <name>` — filter projects by status
+- `--created-after`, `--updated-after`, `--completed-after` date filters on `issue list`
+- Truncation warning on stderr when list results are silently capped (the silent 50-item cap was the most dangerous agent usability issue)
+- `gql` without subcommand now shows usage help with valid examples
+
+### Changed
+
+- **Breaking:** `--everything` renamed to `--all-teams` for clarity (agents read "everything" as "all statuses" when it means "all teams")
+- `issue close` now transitions to a completed workflow state (prefers "Done") instead of calling `issueArchive` which silently hid issues without changing their state
+- Help text now shows complete flag lists — `issue create` was showing 2 of 9 flags, `issue list` was missing `--label`, `--priority`, `--order-by`
+- Skill doc updated with all new commands and complete signatures
+- API manifest now bundled via JSON import (works in compiled binaries)
+- Schema pull defaults to `~/.config/linear/schema/` in compiled binaries
+
+### Fixed
+
+- Compiled binary couldn't load API manifest (`import.meta.dirname` resolves to `/$bunfs` in Bun)
+- `comment list --issue <id>` and `attachment list --issue <id>` failed with GraphQL type error (`String!` → `ID!`)
+- Manifest generator produced scalar types for list args (`IssueSortInput` instead of `[IssueSortInput!]`)
+- API list commands used `id` as default field selection on connection types (now uses `nodes { id }`)
+- `issue close` defaulted to "WontFix" when team had multiple completed states (now prefers "Done", then lowest position)
+- Truncation warning suggested `--all` even when `--after` was in use (mutually exclusive)
+- `issue close --state` with a UUID showed the raw ID in output (now shows friendly name from API response)
+- `issue close --state` accepted non-completed states silently (now validates type)
+- `issue close` returned generic error code for not-found issues (now returns exit code 4 / `not-found` category)
+- Pre-existing `schema.test.ts` CI failure (case-sensitive assertion)
+
 ## [0.2.6] - 2026-04-13
 
 ### Added
