@@ -112,7 +112,7 @@ describe("handleStateCommand — state list", () => {
     try {
       const exitCode = await handleStateCommand(["list"], {
         ...baseOptions(paths),
-        everything: true,
+        allTeams: true,
         fetchImpl
       });
 

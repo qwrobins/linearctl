@@ -190,6 +190,16 @@ function namedTypeName(ref: IntrospectionTypeRef): string | null {
   return unwrapped.name ?? null;
 }
 
+function formatTypeName(ref: IntrospectionTypeRef): string {
+  if (ref.kind === "NON_NULL" && ref.ofType) {
+    return `${formatTypeName(ref.ofType)}!`;
+  }
+  if (ref.kind === "LIST" && ref.ofType) {
+    return `[${formatTypeName(ref.ofType)}]`;
+  }
+  return ref.name ?? "unknown";
+}
+
 function isNonNull(ref: IntrospectionTypeRef): boolean {
   return ref.kind === "NON_NULL";
 }
@@ -235,7 +245,7 @@ function fieldToEntry(
   for (const arg of args) {
     const descriptor: ArgDescriptor = {
       name: arg.name,
-      typeName: namedTypeName(arg.type) ?? "unknown",
+      typeName: formatTypeName(arg.type),
       description: arg.description ?? null
     };
     if (isNonNull(arg.type)) {

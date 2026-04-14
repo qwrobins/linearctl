@@ -34,10 +34,10 @@ Raw GraphQL should not be used merely because it is possible. It is the fallback
 
 ### Issues
 - `linearctl issue get <identifier> --json` — fetch a single issue by identifier (e.g. INF-2975) or UUID
-- `linearctl issue list [--state <name>] [--assignee <id>] [--team <id>] [--everything] [--json]` — list issues with filters
+- `linearctl issue list [--state <name>] [--assignee <id>] [--team <id>] [--cycle <id>] [--project <id>] [--created-after <date>] [--updated-after <date>] [--completed-after <date>] [--all-teams] [--json]` — list issues with filters
 - `linearctl issue create --title <title> --team <id> [--description <text>] [--priority <0-4>] [--assignee <id>] [--label <id>] [--state <id>] --json` — create an issue
 - `linearctl issue update <identifier> [--title <text>] [--description <text>] [--priority <0-4>] [--assignee <id>] [--state <id>] --json` — update an issue
-- `linearctl issue close <identifier> --json` — archive an issue
+- `linearctl issue close <identifier> --json` — close an issue (transitions to completed workflow state)
 - `linearctl issue assign <identifier> <assignee-id> --json` — assign an issue
 - `linearctl issue comment <identifier> --body <text> --json` — add a comment to an issue
 
@@ -48,7 +48,7 @@ Raw GraphQL should not be used merely because it is possible. It is the fallback
 
 ### Projects
 - `linearctl project get <id> --json`
-- `linearctl project list [--team <id>] [--everything] --json`
+- `linearctl project list [--team <id>] [--all-teams] --json`
 - `linearctl project create --name <name> [--description <text>] [--team <id>] --json`
 - `linearctl project update <id> [--name <text>] [--description <text>] [--state <state>] --json`
 - `linearctl project delete <id> --json`
@@ -61,7 +61,7 @@ Raw GraphQL should not be used merely because it is possible. It is the fallback
 
 ### Cycles
 - `linearctl cycle get <id> --json`
-- `linearctl cycle list [--team <id>] [--everything] --json`
+- `linearctl cycle list [--team <id>] [--all-teams] --json`
 - `linearctl cycle create --team <id> [--name <text>] [--starts-at <date>] [--ends-at <date>] --json`
 - `linearctl cycle update <id> [--name <text>] [--starts-at <date>] [--ends-at <date>] --json`
 
@@ -76,7 +76,7 @@ Raw GraphQL should not be used merely because it is possible. It is the fallback
 
 ### Labels
 - `linearctl label get <id> --json`
-- `linearctl label list [--team <id>] [--everything] --json`
+- `linearctl label list [--team <id>] [--all-teams] --json`
 - `linearctl label create --name <name> [--description <text>] [--color <hex>] [--team <id>] --json`
 - `linearctl label delete <id> --json`
 
@@ -97,7 +97,7 @@ Raw GraphQL should not be used merely because it is possible. It is the fallback
 - `linearctl file download <url> [--output <path>] --json`
 
 ### Workflow states
-- `linearctl state list [--team <id>] [--everything] --json` — list issue workflow states for a team
+- `linearctl state list [--team <id>] [--all-teams] --json` — list issue workflow states for a team
 - `linearctl state get <id> --json`
 - `linearctl state create --name <name> --team <id> --state-type <type> --json` (types: backlog, unstarted, started, completed, canceled)
 
@@ -142,8 +142,8 @@ Each profile can have a default team. When set, list commands (issue, project, c
 
 - Set it: `linearctl team get <key> --set-default`
 - Override per-command: `--team <other>`
-- Bypass and see everything: `--everything`
-- `--team` and `--everything` cannot be used together
+- Bypass and see all teams: `--all-teams`
+- `--team` and `--all-teams` cannot be used together
 
 ## Name resolution
 
@@ -165,11 +165,12 @@ Use `--dry-run` on any mutating command to preview what would happen without exe
 
 ## Pagination
 
-- Default list behavior is bounded (first page only)
-- Use `--max <n>` to cap results
-- Use `--all` for full autopagination (with `--max` to limit)
+- Default list behavior returns the first page only (up to 50 items)
+- **When results are truncated, a warning is emitted to stderr** — check stderr to know if you have incomplete data
+- Use `--all` to fetch all results (with `--max` to limit)
+- Use `--max <n>` to cap total results
 - Add filters before broad pagination whenever possible
-- Treat 200 as the default soft cap for large enumerations
+- Prefer `--jsonl` for large result sets — it streams and auto-paginates
 
 ## Profile selection
 

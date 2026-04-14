@@ -78,7 +78,7 @@ fragment CuratedComment on Comment {
 }`;
 
 const COMMENT_LIST_QUERY = `
-query CommentList($first: Int!, $after: String, $issueId: String!) {
+query CommentList($first: Int!, $after: String, $issueId: ID!) {
   comments(first: $first, after: $after, filter: { issue: { id: { eq: $issueId } } }) {
     nodes {
       ...CuratedComment

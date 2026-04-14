@@ -97,6 +97,7 @@ describe("paginateGraphQL", () => {
     const nodes = [{ id: "1" }, { id: "2" }];
     const pageInfo: PageInfo = { hasNextPage: true, endCursor: "cursor2" };
     const fetchImpl = vi.fn(async () => makeGraphQLResponse(nodes, pageInfo)) as FetchLike;
+    const stderrSpy = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
 
     const result = await paginateGraphQL({
       query: "query ($first: Int) { issues { nodes { id } pageInfo { hasNextPage endCursor } } }",
@@ -109,6 +110,30 @@ describe("paginateGraphQL", () => {
     expect(result.items).toEqual([{ id: "1" }, { id: "2" }]);
     expect(result.pageInfo).toEqual(pageInfo);
     expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(stderrSpy).toHaveBeenCalledWith(
+      "Warning: results truncated at 2 items. Use --all to fetch all results, or --max <n> for a specific limit.\n"
+    );
+
+    stderrSpy.mockRestore();
+  });
+
+  it("does not warn when all results fit in a single page", async () => {
+    const nodes = [{ id: "1" }, { id: "2" }];
+    const pageInfo: PageInfo = { hasNextPage: false, endCursor: "cursor2" };
+    const fetchImpl = vi.fn(async () => makeGraphQLResponse(nodes, pageInfo)) as FetchLike;
+    const stderrSpy = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+
+    await paginateGraphQL({
+      query: "query ($first: Int) { issues { nodes { id } pageInfo { hasNextPage endCursor } } }",
+      options: {},
+      credentials,
+      fetchImpl,
+      extractConnection: extractIssuesConnection
+    });
+
+    expect(stderrSpy).not.toHaveBeenCalled();
+
+    stderrSpy.mockRestore();
   });
 
   it("autopaginates with --all across multiple pages", async () => {

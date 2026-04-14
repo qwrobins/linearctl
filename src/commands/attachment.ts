@@ -83,7 +83,7 @@ fragment CuratedAttachment on Attachment {
 }`;
 
 const ATTACHMENT_LIST_QUERY = `
-query AttachmentList($first: Int!, $after: String, $issueId: String!) {
+query AttachmentList($first: Int!, $after: String, $issueId: ID!) {
   attachments(first: $first, after: $after, filter: { issue: { id: { eq: $issueId } } }) {
     nodes {
       ...CuratedAttachment

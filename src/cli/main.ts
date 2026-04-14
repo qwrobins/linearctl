@@ -56,6 +56,9 @@ const CLI_OPTION_DEFINITIONS = {
   fields: { type: "string" },
   body: { type: "string" },
   "filter-json": { type: "string" },
+  "created-after": { type: "string" },
+  "updated-after": { type: "string" },
+  "completed-after": { type: "string" },
   cycle: { type: "string" },
   project: { type: "string" },
   "order-by": { type: "string" },
@@ -70,7 +73,7 @@ const CLI_OPTION_DEFINITIONS = {
   color: { type: "string" },
   "no-retry": { type: "boolean" },
   "max-retries": { type: "string" },
-  everything: { type: "boolean" },
+  "all-teams": { type: "boolean" },
   issue: { type: "string" },
   url: { type: "string" },
   output: { type: "string" },
@@ -153,7 +156,7 @@ const ISSUE_OPTION_DEFINITIONS = {
   profile: CLI_OPTION_DEFINITIONS.profile,
   "api-url": CLI_OPTION_DEFINITIONS["api-url"],
   "dry-run": CLI_OPTION_DEFINITIONS["dry-run"],
-  everything: CLI_OPTION_DEFINITIONS.everything,
+  "all-teams": CLI_OPTION_DEFINITIONS["all-teams"],
   title: CLI_OPTION_DEFINITIONS.title,
   team: CLI_OPTION_DEFINITIONS.team,
   description: CLI_OPTION_DEFINITIONS.description,
@@ -165,6 +168,9 @@ const ISSUE_OPTION_DEFINITIONS = {
   ids: CLI_OPTION_DEFINITIONS.ids,
   body: CLI_OPTION_DEFINITIONS.body,
   "filter-json": CLI_OPTION_DEFINITIONS["filter-json"],
+  "created-after": CLI_OPTION_DEFINITIONS["created-after"],
+  "updated-after": CLI_OPTION_DEFINITIONS["updated-after"],
+  "completed-after": CLI_OPTION_DEFINITIONS["completed-after"],
   cycle: CLI_OPTION_DEFINITIONS.cycle,
   project: CLI_OPTION_DEFINITIONS.project,
   "order-by": CLI_OPTION_DEFINITIONS["order-by"],
@@ -189,7 +195,7 @@ const PROJECT_OPTION_DEFINITIONS = {
   profile: CLI_OPTION_DEFINITIONS.profile,
   "api-url": CLI_OPTION_DEFINITIONS["api-url"],
   "dry-run": CLI_OPTION_DEFINITIONS["dry-run"],
-  everything: CLI_OPTION_DEFINITIONS.everything,
+  "all-teams": CLI_OPTION_DEFINITIONS["all-teams"],
   name: CLI_OPTION_DEFINITIONS.name,
   description: CLI_OPTION_DEFINITIONS.description,
   team: CLI_OPTION_DEFINITIONS.team,
@@ -214,7 +220,7 @@ const CYCLE_OPTION_DEFINITIONS = {
   profile: CLI_OPTION_DEFINITIONS.profile,
   "api-url": CLI_OPTION_DEFINITIONS["api-url"],
   "dry-run": CLI_OPTION_DEFINITIONS["dry-run"],
-  everything: CLI_OPTION_DEFINITIONS.everything,
+  "all-teams": CLI_OPTION_DEFINITIONS["all-teams"],
   name: CLI_OPTION_DEFINITIONS.name,
   description: CLI_OPTION_DEFINITIONS.description,
   team: CLI_OPTION_DEFINITIONS.team,
@@ -279,7 +285,7 @@ const LABEL_OPTION_DEFINITIONS = {
   profile: CLI_OPTION_DEFINITIONS.profile,
   "api-url": CLI_OPTION_DEFINITIONS["api-url"],
   "dry-run": CLI_OPTION_DEFINITIONS["dry-run"],
-  everything: CLI_OPTION_DEFINITIONS.everything,
+  "all-teams": CLI_OPTION_DEFINITIONS["all-teams"],
   name: CLI_OPTION_DEFINITIONS.name,
   description: CLI_OPTION_DEFINITIONS.description,
   color: CLI_OPTION_DEFINITIONS.color,
@@ -304,7 +310,7 @@ const STATE_OPTION_DEFINITIONS = {
   profile: CLI_OPTION_DEFINITIONS.profile,
   "api-url": CLI_OPTION_DEFINITIONS["api-url"],
   "dry-run": CLI_OPTION_DEFINITIONS["dry-run"],
-  everything: CLI_OPTION_DEFINITIONS.everything,
+  "all-teams": CLI_OPTION_DEFINITIONS["all-teams"],
   name: CLI_OPTION_DEFINITIONS.name,
   "state-type": CLI_OPTION_DEFINITIONS["state-type"],
   description: CLI_OPTION_DEFINITIONS.description,
@@ -457,7 +463,7 @@ Layers:
 Commands:
   linearctl issue get <identifier> [--json]
   linearctl issue create --title <title> --team <id> [--json]
-  linearctl issue list [--state <name>] [--assignee <id>] [--team <id>] [--cycle <id>] [--project <id>] [--everything] [--json]
+  linearctl issue list [--state <name>] [--assignee <id>] [--team <id>] [--cycle <id>] [--project <id>] [--created-after <date>] [--updated-after <date>] [--completed-after <date>] [--all-teams] [--json]
   linearctl issue update <identifier> [--title ...] [--state ...] [--json]
   linearctl issue close <identifier> [--json]
   linearctl issue assign <identifier> <assignee-id> [--json]
@@ -466,12 +472,12 @@ Commands:
   linearctl issue bulk-close --ids <id1,id2,...> [--json]
   linearctl issue bulk-assign --ids <id1,id2,...> --assignee <id> [--json]
   linearctl project get <id> [--json]
-  linearctl project list [--team <id>] [--everything] [--json]
+  linearctl project list [--team <id>] [--all-teams] [--json]
   linearctl project create --name <name> [--description ...] [--team <id>] [--json]
   linearctl project update <id> [--name ...] [--state ...] [--json]
   linearctl project delete <id> [--json]
   linearctl cycle get <id> [--json]
-  linearctl cycle list [--team <id>] [--everything] [--json]
+  linearctl cycle list [--team <id>] [--all-teams] [--json]
   linearctl cycle create --team <id> [--name ...] [--starts-at ...] [--ends-at ...] [--json]
   linearctl cycle update <id> [--name ...] [--starts-at ...] [--ends-at ...] [--json]
   linearctl team get <id-or-key> [--set-default] [--json]
@@ -480,11 +486,11 @@ Commands:
   linearctl user me [--json]
   linearctl user list [--json]
   linearctl label get <id> [--json]
-  linearctl label list [--team <id>] [--everything] [--json]
+  linearctl label list [--team <id>] [--all-teams] [--json]
   linearctl label create --name <name> [--description ...] [--color ...] [--team <id>] [--json]
   linearctl label delete <id> [--json]
   linearctl state get <id> [--json]
-  linearctl state list [--team <id>] [--everything] [--json]
+  linearctl state list [--team <id>] [--all-teams] [--json]
   linearctl state create --name <name> --team <id> --state-type <type> [--json]
   linearctl project-status list [--json]
   linearctl project-status get <id> [--json]
@@ -577,6 +583,9 @@ interface ParsedCliArguments {
   output?: string;
   expiresIn?: string;
   filterJson?: string;
+  createdAfter?: string;
+  updatedAfter?: string;
+  completedAfter?: string;
   cycle?: string;
   project?: string;
   orderBy?: string;
@@ -586,7 +595,7 @@ interface ParsedCliArguments {
   pageSize?: number;
   after?: string;
   dryRun: boolean;
-  everything: boolean;
+  allTeams: boolean;
   scope?: string;
   noRetry: boolean;
   maxRetries?: number;
@@ -865,6 +874,9 @@ function toParsedCliArguments(values: Record<string, unknown>, positionals: stri
     ...(typeof values.output === "string" ? { output: values.output } : {}),
     ...(typeof values["expires-in"] === "string" ? { expiresIn: values["expires-in"] } : {}),
     ...(typeof values["filter-json"] === "string" ? { filterJson: values["filter-json"] } : {}),
+    ...(typeof values["created-after"] === "string" ? { createdAfter: values["created-after"] } : {}),
+    ...(typeof values["updated-after"] === "string" ? { updatedAfter: values["updated-after"] } : {}),
+    ...(typeof values["completed-after"] === "string" ? { completedAfter: values["completed-after"] } : {}),
     ...(typeof values.cycle === "string" ? { cycle: values.cycle } : {}),
     ...(typeof values.project === "string" ? { project: values.project } : {}),
     ...(typeof values["order-by"] === "string" ? { orderBy: values["order-by"] } : {}),
@@ -874,7 +886,7 @@ function toParsedCliArguments(values: Record<string, unknown>, positionals: stri
     ...(typeof values["page-size"] === "string" ? { pageSize: parsePositiveInt(values["page-size"], "page-size") } : {}),
     ...(typeof values.after === "string" ? { after: values.after } : {}),
     dryRun: values["dry-run"] === true,
-    everything: values.everything === true,
+    allTeams: values["all-teams"] === true,
     ...(typeof values.scope === "string" ? { scope: values.scope } : {}),
     noRetry: values["no-retry"] === true,
     ...(typeof values["max-retries"] === "string" ? { maxRetries: parsePositiveInt(values["max-retries"], "max-retries") } : {}),
@@ -898,8 +910,8 @@ async function main(argv: string[]): Promise<number> {
     return ExitCode.Success;
   }
 
-  if (args.team !== undefined && args.everything) {
-    process.stderr.write("Error: --team cannot be used with --everything\n");
+  if (args.team !== undefined && args.allTeams) {
+    process.stderr.write("Error: --team cannot be used with --all-teams\n");
     return ExitCode.ValidationError;
   }
 
@@ -989,7 +1001,7 @@ async function main(argv: string[]): Promise<number> {
       return await handleIssueCommand(args.positionals.slice(1), {
         json: args.json,
         dryRun: args.dryRun,
-        everything: args.everything,
+        allTeams: args.allTeams,
         jsonEnvelope: args.jsonEnvelope,
         jsonl: args.jsonl,
         ...(args.profile === undefined ? {} : { profile: args.profile }),
@@ -1007,6 +1019,9 @@ async function main(argv: string[]): Promise<number> {
         ...(args.ids === undefined ? {} : { ids: args.ids }),
         ...(args.body === undefined ? {} : { body: args.body }),
         ...(args.filterJson === undefined ? {} : { filterJson: args.filterJson }),
+        ...(args.createdAfter === undefined ? {} : { createdAfter: args.createdAfter }),
+        ...(args.updatedAfter === undefined ? {} : { updatedAfter: args.updatedAfter }),
+        ...(args.completedAfter === undefined ? {} : { completedAfter: args.completedAfter }),
         ...(args.cycle === undefined ? {} : { cycle: args.cycle }),
         ...(args.project === undefined ? {} : { project: args.project }),
         ...(args.orderBy === undefined ? {} : { orderBy: args.orderBy }),
@@ -1029,7 +1044,7 @@ async function main(argv: string[]): Promise<number> {
       return await handleProjectCommand(args.positionals.slice(1), {
         json: args.json,
         dryRun: args.dryRun,
-        everything: args.everything,
+        allTeams: args.allTeams,
         jsonEnvelope: args.jsonEnvelope,
         jsonl: args.jsonl,
         ...(args.profile === undefined ? {} : { profile: args.profile }),
@@ -1058,7 +1073,7 @@ async function main(argv: string[]): Promise<number> {
       return await handleCycleCommand(args.positionals.slice(1), {
         json: args.json,
         dryRun: args.dryRun,
-        everything: args.everything,
+        allTeams: args.allTeams,
         jsonEnvelope: args.jsonEnvelope,
         jsonl: args.jsonl,
         ...(args.profile === undefined ? {} : { profile: args.profile }),
@@ -1135,7 +1150,7 @@ async function main(argv: string[]): Promise<number> {
       return await handleLabelCommand(args.positionals.slice(1), {
         json: args.json,
         dryRun: args.dryRun,
-        everything: args.everything,
+        allTeams: args.allTeams,
         jsonEnvelope: args.jsonEnvelope,
         jsonl: args.jsonl,
         ...(args.profile === undefined ? {} : { profile: args.profile }),
@@ -1164,7 +1179,7 @@ async function main(argv: string[]): Promise<number> {
       return await handleStateCommand(args.positionals.slice(1), {
         json: args.json,
         dryRun: args.dryRun,
-        everything: args.everything,
+        allTeams: args.allTeams,
         jsonEnvelope: args.jsonEnvelope,
         jsonl: args.jsonl,
         ...(args.profile === undefined ? {} : { profile: args.profile }),

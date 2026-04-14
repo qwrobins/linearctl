@@ -110,7 +110,7 @@ linearctl team list --json
 linearctl team get <team-key> --set-default
 ```
 
-Now `linearctl issue list --json` returns only issues from that team. Override with `--team <other>` or bypass with `--everything`. Note that `--team` and `--everything` cannot be used together.
+Now `linearctl issue list --json` returns only issues from that team. Override with `--team <other>` or bypass with `--all-teams`. Note that `--team` and `--all-teams` cannot be used together.
 
 ## First commands
 
@@ -131,7 +131,7 @@ linearctl issue get INF-42 --json
 linearctl issue create --title "Update docs" --priority 1 --json
 
 # See all projects across teams
-linearctl project list --everything --json
+linearctl project list --all-teams --json
 ```
 
 All data commands support `--json` for machine-readable output. See [output modes](output-modes.md).

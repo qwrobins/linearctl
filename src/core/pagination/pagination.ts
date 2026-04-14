@@ -111,6 +111,11 @@ export async function paginateGraphQL<TNode>(
     lastPageInfo = connection.pageInfo;
 
     if (!shouldAutopaginate) {
+      if (lastPageInfo.hasNextPage) {
+        process.stderr.write(
+          `Warning: results truncated at ${items.length} items. Use --all to fetch all results, or --max <n> for a specific limit.\n`
+        );
+      }
       break;
     }
 

@@ -34,7 +34,7 @@ export interface IssueCommandOptions {
   // issue create/update flags
   title?: string;
   team?: string;
-  everything?: boolean;
+  allTeams?: boolean;
   description?: string;
   priority?: string;
   assignee?: string;
@@ -49,6 +49,9 @@ export interface IssueCommandOptions {
   cycle?: string;
   project?: string;
   filterJson?: string;
+  createdAfter?: string;
+  updatedAfter?: string;
+  completedAfter?: string;
   orderBy?: string;
   orderDir?: string;
   // pagination flags
@@ -505,7 +508,7 @@ async function handleIssueList(options: IssueCommandOptions): Promise<number> {
     if (filter === undefined) {
       const buildFilter: Record<string, unknown> = {};
       let resolvedTeamId: string | undefined;
-      const effectiveTeam = options.everything ? undefined : (options.team ?? profile.metadata.defaultTeam);
+      const effectiveTeam = options.allTeams ? undefined : (options.team ?? profile.metadata.defaultTeam);
       if (effectiveTeam !== undefined) {
         resolvedTeamId = looksLikeId(effectiveTeam) ? effectiveTeam : await resolveTeamId(effectiveTeam, resolverOpts);
         buildFilter.team = { id: { eq: resolvedTeamId } };
@@ -537,6 +540,15 @@ async function handleIssueList(options: IssueCommandOptions): Promise<number> {
       }
       if (options.project !== undefined) {
         buildFilter.project = { id: { eq: options.project } };
+      }
+      if (options.createdAfter !== undefined) {
+        buildFilter.createdAt = { gte: options.createdAfter };
+      }
+      if (options.updatedAfter !== undefined) {
+        buildFilter.updatedAt = { gte: options.updatedAfter };
+      }
+      if (options.completedAfter !== undefined) {
+        buildFilter.completedAt = { gte: options.completedAfter };
       }
       if (Object.keys(buildFilter).length > 0) {
         filter = buildFilter;
@@ -792,7 +804,7 @@ async function handleIssueClose(
   options: IssueCommandOptions
 ): Promise<number> {
   if (options.dryRun === true) {
-    return emitDryRunResult("archive", "issue", { id: identifier }, options);
+    return emitDryRunResult("close", "issue", { id: identifier }, options);
   }
 
   try {
@@ -805,11 +817,7 @@ async function handleIssueClose(
       env: options.env
     });
 
-    const response = await executeGraphQL<{
-      issueArchive: { success: boolean };
-    }>({
-      query: ISSUE_ARCHIVE_MUTATION,
-      variables: { id: identifier },
+    const graphqlOpts = {
       credentials: profile.credentials,
       ...(options.apiUrl === undefined
         ? profile.metadata.baseUrl === undefined
@@ -817,27 +825,76 @@ async function handleIssueClose(
           : { apiUrl: profile.metadata.baseUrl }
         : { apiUrl: options.apiUrl }),
       ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl })
+    };
+
+    // 1. Fetch the issue's team
+    const issueData = await executeGraphQL<{ issue: { team: { id: string } } | null }>({
+      query: `query IssueTeam($id: String!) { issue(id: $id) { team { id } } }`,
+      variables: { id: identifier },
+      ...graphqlOpts
+    });
+
+    const teamId = issueData.body.data?.issue?.team?.id;
+    if (teamId === undefined) {
+      return emitError("Issue not found or has no team.", options, profile.name);
+    }
+
+    // 2. Find a completed-type workflow state for the team
+    const statesData = await executeGraphQL<{
+      workflowStates: { nodes: Array<{ id: string; name: string; type: string; position: number }> }
+    }>({
+      query: `query CompletedStates($filter: WorkflowStateFilter!) {
+        workflowStates(first: 10, filter: $filter) {
+          nodes { id name type position }
+        }
+      }`,
+      variables: { filter: { team: { id: { eq: teamId } }, type: { eq: "completed" } } },
+      ...graphqlOpts
+    });
+
+    const candidates = statesData.body.data?.workflowStates?.nodes ?? [];
+    // Prefer "Done" by name, then lowest position
+    const completedState =
+      candidates.find((s) => s.name === "Done") ??
+      candidates.sort((a, b) => a.position - b.position)[0];
+    if (completedState === undefined) {
+      return emitError("No completed workflow state found for this team.", options, profile.name);
+    }
+
+    // 3. Transition the issue to the completed state
+    const response = await executeGraphQL<{
+      issueUpdate: { success: boolean; issue: RawIssue | null };
+    }>({
+      query: ISSUE_UPDATE_MUTATION,
+      variables: { id: identifier, input: { stateId: completedState.id } },
+      ...graphqlOpts
     });
 
     if (
       hasErrors(response.body.errors) ||
-      response.body.data?.issueArchive?.success !== true
+      response.body.data?.issueUpdate?.success !== true
     ) {
       if (options.jsonEnvelope) {
         const errors = mapGraphQLErrors(response.body.errors);
         const envelope = failureEnvelope(
-          errors.length > 0 ? errors : [{ category: "general", message: "Issue archive failed" }],
+          errors.length > 0 ? errors : [{ category: "general", message: "Issue close failed" }],
           { sourceLayer: "curated", profile: profile.name }
         );
         process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
       } else {
-        const errorMessage = response.body.errors?.[0]?.message ?? "Issue archive failed";
+        const errorMessage = response.body.errors?.[0]?.message ?? "Issue close failed";
         process.stderr.write(`Error: ${errorMessage}\n`);
       }
       return ExitCode.GeneralError;
     }
 
-    const result = { identifier, archived: true };
+    const issue = response.body.data.issueUpdate.issue;
+    const result = {
+      identifier,
+      closed: true,
+      state: completedState.name,
+      ...(issue !== null ? { issue: normalizeIssue(issue) } : {})
+    };
 
     if (options.jsonEnvelope) {
       const envelope = successEnvelope(result, { sourceLayer: "curated", profile: profile.name });
@@ -845,7 +902,7 @@ async function handleIssueClose(
     } else if (options.json) {
       process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     } else {
-      process.stdout.write(`Archived ${identifier}\n`);
+      process.stdout.write(`Closed ${identifier} → ${completedState.name}\n`);
     }
 
     return ExitCode.Success;
@@ -864,6 +921,19 @@ async function handleIssueClose(
 
     return failure.exitCode;
   }
+}
+
+function emitError(message: string, options: IssueCommandOptions, profileName?: string): number {
+  if (options.jsonEnvelope) {
+    const envelope = failureEnvelope(
+      [{ category: "general", message }],
+      { sourceLayer: "curated", ...(profileName === undefined ? {} : { profile: profileName }) }
+    );
+    process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
+  } else {
+    process.stderr.write(`Error: ${message}\n`);
+  }
+  return ExitCode.GeneralError;
 }
 
 async function handleIssueAssign(

@@ -1,5 +1,4 @@
 import { readFile } from "node:fs/promises";
-import { resolve } from "node:path";
 import { failureEnvelope, successEnvelope } from "../core/output/envelope.js";
 import { mapCommandFailure } from "../core/errors/command-failure.js";
 import { ExitCode } from "../core/errors/exit-codes.js";
@@ -8,6 +7,7 @@ import type { FetchLike, GraphQLErrorPayload } from "../core/transport/graphql.j
 import { resolveStoredProfile } from "../core/auth/runtime.js";
 import { readAllStdin, isTtyInput } from "../core/io/stdin.js";
 import type { ApiCommandEntry, ApiCommandManifest } from "../generated/generate-manifest.js";
+import bundledApiCommands from "../generated/manifest/api-commands.json" with { type: "json" };
 
 export type { ApiCommandEntry, ApiCommandManifest };
 
@@ -35,20 +35,25 @@ export interface ApiCommandOptions {
 // Manifest loading
 // ---------------------------------------------------------------------------
 
-function defaultManifestPath(): string {
-  return resolve(import.meta.dirname ?? ".", "../../generated/manifest/api-commands.json");
-}
-
 export async function loadManifest(manifestPath?: string): Promise<ApiCommandManifest | null> {
-  const path = manifestPath ?? defaultManifestPath();
-  let raw: string;
-  try {
-    raw = await readFile(path, "utf8");
-  } catch {
-    return null;
+  if (manifestPath !== undefined) {
+    // Load from explicit path (for testing or custom manifests)
+    let raw: string;
+    try {
+      raw = await readFile(manifestPath, "utf8");
+    } catch {
+      return null;
+    }
+    try {
+      return JSON.parse(raw) as ApiCommandManifest;
+    } catch {
+      return null;
+    }
   }
+
+  // Use bundled manifest (works in compiled binaries)
   try {
-    return JSON.parse(raw) as ApiCommandManifest;
+    return bundledApiCommands as unknown as ApiCommandManifest;
   } catch {
     return null;
   }
@@ -119,14 +124,14 @@ function printSearchResults(results: ApiCommandEntry[], term: string): void {
 // ---------------------------------------------------------------------------
 
 function buildGraphQLOperation(entry: ApiCommandEntry, fields?: string): string {
-  const fieldSelection = fields ?? "id";
+  const isConnection = entry.returnTypeName?.endsWith("Connection") === true;
+  const defaultFields = isConnection ? "nodes { id }" : "id";
+  const fieldSelection = fields ?? defaultFields;
   const argDefs: string[] = [];
   const argPasses: string[] = [];
 
   for (const arg of [...entry.requiredArgs, ...entry.optionalArgs]) {
-    const isRequired = entry.requiredArgs.some((r) => r.name === arg.name);
-    const typeSuffix = isRequired ? "!" : "";
-    argDefs.push(`$${arg.name}: ${arg.typeName}${typeSuffix}`);
+    argDefs.push(`$${arg.name}: ${arg.typeName}`);
     argPasses.push(`${arg.name}: $${arg.name}`);
   }
 
@@ -189,7 +194,7 @@ function buildVariables(
   if (inputJson !== null) {
     // Find the input-object argument name
     const inputArg = [...entry.requiredArgs, ...entry.optionalArgs].find((a) =>
-      a.typeName.endsWith("Input")
+      a.typeName.replace(/[!\[\]]/g, "").endsWith("Input")
     );
     if (inputArg !== undefined) {
       variables[inputArg.name] = inputJson;

@@ -12,7 +12,9 @@ linearctl issue get <identifier> --json
 
 # List issues with filters
 linearctl issue list [--team <name|key|id>] [--state <name|id>] [--assignee <email|"me"|id>] \
-  [--label <name|id>] [--priority <0-4>] [--filter-json <json>] [--order-by <field>] \
+  [--label <name|id>] [--priority <0-4>] [--cycle <id>] [--project <id>] \
+  [--created-after <date>] [--updated-after <date>] [--completed-after <date>] \
+  [--filter-json <json>] [--order-by <field>] \
   [--all] [--max <n>] [--page-size <n>] [--after <cursor>] --json
 
 # Create an issue
@@ -24,7 +26,7 @@ linearctl issue create --title <title> --team <name|key|id> \
 linearctl issue update <identifier> [--title <text>] [--description <text>] \
   [--priority <0-4>] [--assignee <email|"me"|id>] [--state <name|id>] --json
 
-# Close (archive) an issue [destructive]
+# Close an issue (transitions to completed state)
 linearctl issue close <identifier> --json
 
 # Assign an issue
@@ -97,7 +99,7 @@ linearctl label delete <id> --json                # [destructive]
 
 ```bash
 linearctl state get <id> --json
-linearctl state list [--team <name|key|id>] [--everything] --json
+linearctl state list [--team <name|key|id>] [--all-teams] --json
 linearctl state create --name <name> --team <name|key|id> --state-type <type> \
   [--description <text>] [--color <hex>] [--position <n>] --json
 ```

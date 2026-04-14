@@ -609,12 +609,29 @@ describe("handleIssueCommand — issue update", () => {
 });
 
 describe("handleIssueCommand — issue close", () => {
-  it("archives the issue", async () => {
+  it("transitions issue to completed state", async () => {
     const directory = await mkdtemp(join(tmpdir(), "linear-cli-issue-"));
     const paths = await writeProfileFiles(directory);
-    const fetchImpl = makeFetch({
-      data: { issueArchive: { success: true } }
-    });
+    let callCount = 0;
+    const fetchImpl = vi.fn(async () => {
+      callCount++;
+      if (callCount === 1) {
+        // Step 1: fetch issue team
+        return new Response(JSON.stringify({
+          data: { issue: { team: { id: "team-1" } } }
+        }), { status: 200 });
+      }
+      if (callCount === 2) {
+        // Step 2: fetch completed workflow states
+        return new Response(JSON.stringify({
+          data: { workflowStates: { nodes: [{ id: "state-done", name: "Done", type: "completed" }] } }
+        }), { status: 200 });
+      }
+      // Step 3: update issue state
+      return new Response(JSON.stringify({
+        data: { issueUpdate: { success: true, issue: makeRawIssue({ state: { id: "state-done", name: "Done", type: "completed" } }) } }
+      }), { status: 200 });
+    }) as FetchLike;
     const output = captureOutput();
 
     try {
@@ -625,8 +642,10 @@ describe("handleIssueCommand — issue close", () => {
 
       expect(exitCode).toBe(0);
       const parsed = JSON.parse(output.stdout.join(""));
-      expect(parsed.archived).toBe(true);
+      expect(parsed.closed).toBe(true);
+      expect(parsed.state).toBe("Done");
       expect(parsed.identifier).toBe("INF-2975");
+      expect(fetchImpl).toHaveBeenCalledTimes(3);
     } finally {
       output.restore();
     }
