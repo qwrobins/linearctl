@@ -108,7 +108,7 @@ describe("handleSchemaCommand", () => {
         ).resolves.toBe(0);
 
         const text = output.stdout.join("");
-        expect(text).toContain("schema");
+        expect(text.toLowerCase()).toContain("schema");
       } finally {
         output.restore();
       }

@@ -1043,10 +1043,11 @@ async function handleIssueClose(
     }
 
     const issue = response.body.data.issueUpdate.issue;
+    const resolvedStateName = issue?.state?.name ?? targetStateName;
     const result = {
       identifier,
       closed: true,
-      state: targetStateName,
+      state: resolvedStateName,
       ...(issue !== null ? { issue: normalizeIssue(issue) } : {})
     };
 
@@ -1056,7 +1057,7 @@ async function handleIssueClose(
     } else if (options.json) {
       process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     } else {
-      process.stdout.write(`Closed ${identifier} → ${targetStateName}\n`);
+      process.stdout.write(`Closed ${identifier} → ${resolvedStateName}\n`);
     }
 
     return ExitCode.Success;
