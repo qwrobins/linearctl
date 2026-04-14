@@ -22,12 +22,12 @@ linearctl issue search --query <text> [--all] --json
 
 # Create an issue
 linearctl issue create --title <title> --team <name|key|id> \
-  [--description <text>] [--priority <0-4>] [--assignee <email|"me"|id>] \
+  [--description <text>] [--priority <0-4>] [--estimate <n>] [--assignee <email|"me"|id>] \
   [--label <name|id>] [--state <name|id>] [--cycle <id>] [--project <id>] --json
 
 # Update an issue
 linearctl issue update <identifier> [--title <text>] [--description <text>] \
-  [--priority <0-4>] [--assignee <email|"me"|id>] [--state <name|id>] --json
+  [--priority <0-4>] [--estimate <n>] [--assignee <email|"me"|id>] [--state <name|id>] --json
 
 # Close an issue (transitions to completed state, defaults to "Done")
 linearctl issue close <identifier> [--state <name>] --json
@@ -44,7 +44,7 @@ linearctl issue comment <identifier> --body <text> --json
 ```bash
 # Bulk update fields on multiple issues
 linearctl issue bulk-update --ids <id1,id2,...> [--state <id>] [--assignee <id>] \
-  [--priority <0-4>] [--label <id>] --json
+  [--priority <0-4>] [--estimate <n>] [--label <id>] [--cycle <id>] --json
 
 # Bulk close multiple issues
 linearctl issue bulk-close --ids <id1,id2,...> --json

@@ -37,6 +37,7 @@ export interface IssueCommandOptions {
   allTeams?: boolean;
   description?: string;
   priority?: string;
+  estimate?: string;
   assignee?: string;
   label?: string;
   state?: string;
@@ -356,6 +357,13 @@ async function handleIssueCreate(options: IssueCommandOptions): Promise<number> 
       return emitValidationError("--priority must be an integer.", options);
     }
     input.priority = parsed;
+  }
+  if (options.estimate !== undefined) {
+    const parsed = Number(options.estimate);
+    if (!Number.isFinite(parsed) || parsed < 0) {
+      return emitValidationError("--estimate must be a non-negative number.", options);
+    }
+    input.estimate = parsed;
   }
 
   if (options.assignee !== undefined) {
@@ -791,6 +799,13 @@ async function handleIssueUpdate(
       return emitValidationError("--priority must be an integer.", options);
     }
     input.priority = parsed;
+  }
+  if (options.estimate !== undefined) {
+    const parsed = Number(options.estimate);
+    if (!Number.isFinite(parsed) || parsed < 0) {
+      return emitValidationError("--estimate must be a non-negative number.", options);
+    }
+    input.estimate = parsed;
   }
   if (options.assignee !== undefined) {
     input.assigneeId = options.assignee;
@@ -1425,9 +1440,19 @@ async function handleBulkUpdate(options: IssueCommandOptions): Promise<number> {
   if (options.label !== undefined) {
     input.labelIds = [options.label];
   }
+  if (options.estimate !== undefined) {
+    const parsed = Number(options.estimate);
+    if (!Number.isFinite(parsed) || parsed < 0) {
+      return emitValidationError("--estimate must be a non-negative number.", options);
+    }
+    input.estimate = parsed;
+  }
+  if (options.cycle !== undefined) {
+    input.cycleId = options.cycle;
+  }
 
   if (Object.keys(input).length === 0) {
-    return emitValidationError("bulk-update requires at least one field to update (--state, --assignee, --priority, --label).", options);
+    return emitValidationError("bulk-update requires at least one field to update (--state, --assignee, --priority, --label, --estimate, --cycle).", options);
   }
 
   if (options.dryRun) {

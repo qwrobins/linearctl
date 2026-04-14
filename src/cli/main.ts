@@ -18,9 +18,11 @@ import { handleStateCommand } from "../commands/state.js";
 import { handleWorkspaceCommand } from "../commands/workspace.js";
 import { handleSkillsCommand } from "../commands/skills.js";
 import { curatedCommandMetadata, defaultLinearConfigPaths, ExitCode } from "../index.js";
+import packageJson from "../../package.json" with { type: "json" };
 
 const CLI_OPTION_DEFINITIONS = {
   help: { type: "boolean", short: "h" },
+  version: { type: "boolean", short: "V" },
   json: { type: "boolean" },
   "json-envelope": { type: "boolean" },
   jsonl: { type: "boolean" },
@@ -46,6 +48,7 @@ const CLI_OPTION_DEFINITIONS = {
   team: { type: "string" },
   description: { type: "string" },
   priority: { type: "string" },
+  estimate: { type: "string" },
   assignee: { type: "string" },
   label: { type: "string" },
   state: { type: "string" },
@@ -164,6 +167,7 @@ const ISSUE_OPTION_DEFINITIONS = {
   team: CLI_OPTION_DEFINITIONS.team,
   description: CLI_OPTION_DEFINITIONS.description,
   priority: CLI_OPTION_DEFINITIONS.priority,
+  estimate: CLI_OPTION_DEFINITIONS.estimate,
   assignee: CLI_OPTION_DEFINITIONS.assignee,
   label: CLI_OPTION_DEFINITIONS.label,
   state: CLI_OPTION_DEFINITIONS.state,
@@ -475,14 +479,14 @@ Layers:
 
 Commands:
   linearctl issue get <identifier> [--json]
-  linearctl issue create --title <title> --team <id> [--description <text>] [--priority <0-4>] [--assignee <id>] [--label <id>] [--state <id>] [--cycle <id>] [--project <id>] [--json]
+  linearctl issue create --title <title> --team <id> [--description <text>] [--priority <0-4>] [--estimate <n>] [--assignee <id>] [--label <id>] [--state <id>] [--cycle <id>] [--project <id>] [--json]
   linearctl issue list [--state <name>] [--assignee <id>] [--team <id>] [--label <name|id>] [--priority <0-4>] [--cycle <id>] [--project <id>] [--created-after <date>] [--updated-after <date>] [--completed-after <date>] [--order-by <field>] [--all-teams] [--all] [--json]
   linearctl issue search --query <text> [--all] [--json]
-  linearctl issue update <identifier> [--title <text>] [--description <text>] [--priority <0-4>] [--assignee <id>] [--state <id>] [--json]
+  linearctl issue update <identifier> [--title <text>] [--description <text>] [--priority <0-4>] [--estimate <n>] [--assignee <id>] [--state <id>] [--json]
   linearctl issue close <identifier> [--state <name>] [--json]
   linearctl issue assign <identifier> <assignee-id> [--json]
   linearctl issue comment <identifier> --body <text> [--json]
-  linearctl issue bulk-update --ids <id1,id2,...> [--state <id>] [--assignee <id>] [--priority <0-4>] [--label <id>] [--json]
+  linearctl issue bulk-update --ids <id1,id2,...> [--state <id>] [--assignee <id>] [--priority <0-4>] [--estimate <n>] [--label <id>] [--cycle <id>] [--json]
   linearctl issue bulk-close --ids <id1,id2,...> [--json]
   linearctl issue bulk-assign --ids <id1,id2,...> --assignee <id> [--json]
   linearctl project get <id> [--json]
@@ -550,6 +554,7 @@ function printCuratedMetadata(): void {
 
 interface ParsedCliArguments {
   help: boolean;
+  version: boolean;
   json: boolean;
   jsonEnvelope: boolean;
   jsonl: boolean;
@@ -576,6 +581,7 @@ interface ParsedCliArguments {
   team?: string;
   description?: string;
   priority?: string;
+  estimate?: string;
   assignee?: string;
   label?: string;
   state?: string;
@@ -843,6 +849,7 @@ function toParsedCliArguments(values: Record<string, unknown>, positionals: stri
 
   return {
     help,
+    version: values.version === true,
     json,
     jsonEnvelope,
     jsonl,
@@ -869,6 +876,7 @@ function toParsedCliArguments(values: Record<string, unknown>, positionals: stri
     ...(typeof values.team === "string" ? { team: values.team } : {}),
     ...(typeof values.description === "string" ? { description: values.description } : {}),
     ...(typeof values.priority === "string" ? { priority: values.priority } : {}),
+    ...(typeof values.estimate === "string" ? { estimate: values.estimate } : {}),
     ...(typeof values.assignee === "string" ? { assignee: values.assignee } : {}),
     ...(typeof values.ids === "string" ? { ids: values.ids } : {}),
     ...(typeof values.label === "string" ? { label: values.label } : {}),
@@ -926,6 +934,11 @@ async function main(argv: string[]): Promise<number> {
 
   if (argv.length === 0 || args.help) {
     printTopLevelHelp();
+    return ExitCode.Success;
+  }
+
+  if (args.version) {
+    process.stdout.write(`linearctl ${packageJson.version}\n`);
     return ExitCode.Success;
   }
 
@@ -1032,6 +1045,7 @@ async function main(argv: string[]): Promise<number> {
         ...(args.team === undefined ? {} : { team: args.team }),
         ...(args.description === undefined ? {} : { description: args.description }),
         ...(args.priority === undefined ? {} : { priority: args.priority }),
+        ...(args.estimate === undefined ? {} : { estimate: args.estimate }),
         ...(args.assignee === undefined ? {} : { assignee: args.assignee }),
         ...(args.label === undefined ? {} : { label: args.label }),
         ...(args.state === undefined ? {} : { state: args.state }),
