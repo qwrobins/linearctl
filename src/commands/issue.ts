@@ -1762,6 +1762,11 @@ async function handleIssueAttachSlack(
         ...graphqlOpts
       });
 
+      if (hasErrors(issueData.body.errors)) {
+        const msg = issueData.body.errors?.[0]?.message ?? "Failed to resolve issue";
+        return emitError(msg, options, profile.name);
+      }
+
       if (issueData.body.data?.issue?.id === undefined) {
         return emitError(`Issue "${identifier}" not found.`, options, profile.name, ExitCode.NotFound);
       }

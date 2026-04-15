@@ -50,6 +50,7 @@ Completed — all composite operations from lp-linear MCP server now have curate
 
 - ~~`linearctl issue attach-slack`~~ — done (v0.4.0)
 - ~~`linearctl project create-with-issues`~~ — done (v0.4.0)
+
 ### Output and integration
 
 - JSONL streaming for generated API commands
