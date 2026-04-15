@@ -44,6 +44,12 @@
 - `linearctl issue move <identifier> --state <name>` as alias for update
 - Additional curated resources: initiatives, milestones, documents, webhooks
 
+### MCP server parity
+
+Completed — all composite operations from lp-linear MCP server now have curated command equivalents:
+
+- ~~`linearctl issue attach-slack`~~ — done (v0.4.0)
+- ~~`linearctl project create-with-issues`~~ — done (v0.4.0)
 ### Output and integration
 
 - JSONL streaming for generated API commands

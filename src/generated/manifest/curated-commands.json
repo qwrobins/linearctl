@@ -136,6 +136,18 @@
     "supportedOutputModes": ["human", "json", "json-envelope"]
   },
   {
+    "commandPath": "linearctl issue attach-slack",
+    "layer": "curated",
+    "resource": "issue",
+    "operation": "attach-slack",
+    "stability": "stable",
+    "preferredForAgents": true,
+    "safety": "safe",
+    "inputMode": "flags",
+    "outputShape": "object",
+    "supportedOutputModes": ["human", "json", "json-envelope"]
+  },
+  {
     "commandPath": "linearctl project list",
     "layer": "curated",
     "resource": "project",

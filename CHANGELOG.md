@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-04-14
+
+### Added
+
+- `issue attach-slack <identifier> --url <slack-url> [--sync] [--title <text>]` — link a Slack thread to an issue with optional bidirectional comment sync
+- `project create-with-issues --name <name> --team <id> --issues-json <json>` — atomically create a project and batch-create linked issues
+- Completes MCP server parity — all composite operations from `lp-linear-mcp` now have curated CLI equivalents
+
 ## [0.3.2] - 2026-04-14
 
 ### Fixed
