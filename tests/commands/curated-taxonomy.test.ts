@@ -16,6 +16,7 @@ describe("curated command taxonomy", () => {
       "linearctl issue close",
       "linearctl issue assign",
       "linearctl issue comment",
+      "linearctl issue attach-slack",
       "linearctl project list",
       "linearctl project get",
       "linearctl project create",

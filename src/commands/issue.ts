@@ -46,6 +46,9 @@ export interface IssueCommandOptions {
   ids?: string;
   // issue comment flags
   body?: string;
+  // issue attach-slack flags
+  url?: string;
+  sync?: boolean;
   // issue list flags
   cycle?: string;
   project?: string;
@@ -160,6 +163,30 @@ mutation CommentCreate($input: CommentCreateInput!) {
     }
   }
 }`;
+
+const ATTACHMENT_LINK_SLACK_MUTATION = `
+mutation AttachmentLinkSlack($issueId: String!, $url: String!, $syncToCommentThread: Boolean, $title: String) {
+  attachmentLinkSlack(issueId: $issueId, url: $url, syncToCommentThread: $syncToCommentThread, title: $title) {
+    success
+    attachment {
+      id
+      title
+      subtitle
+      url
+      issue { id identifier title }
+      createdAt
+    }
+  }
+}`;
+
+interface RawSlackAttachment {
+  id: string;
+  title: string | null;
+  subtitle: string | null;
+  url: string;
+  issue: { id: string; identifier: string; title: string };
+  createdAt: string;
+}
 
 interface RawIssue {
   id: string;
@@ -1683,6 +1710,138 @@ async function handleBulkAssign(options: IssueCommandOptions): Promise<number> {
   }
 }
 
+async function handleIssueAttachSlack(
+  identifier: string,
+  options: IssueCommandOptions
+): Promise<number> {
+  if (options.url === undefined || options.url.trim() === "") {
+    return emitValidationError("--url is required for issue attach-slack.", options);
+  }
+
+  const trimmedUrl = options.url.trim();
+  let parsedUrl: URL;
+  try {
+    parsedUrl = new URL(trimmedUrl);
+  } catch {
+    return emitValidationError("--url must be a valid Slack HTTPS URL.", options);
+  }
+  const hostname = parsedUrl.hostname.toLowerCase();
+  if (parsedUrl.protocol !== "https:" || (hostname !== "slack.com" && !hostname.endsWith(".slack.com"))) {
+    return emitValidationError("--url must be a valid Slack HTTPS URL.", options);
+  }
+
+  const variables: Record<string, unknown> = {
+    issueId: identifier,
+    url: trimmedUrl,
+    ...(options.sync === true ? { syncToCommentThread: true } : {}),
+    ...(options.title !== undefined ? { title: options.title } : {})
+  };
+
+  if (options.dryRun === true) {
+    return emitDryRunResult("attach-slack", "issue", variables, options);
+  }
+
+  try {
+    const profile = await resolveStoredProfile({
+      paths: {
+        configFile: options.configFile,
+        credentialsFile: options.credentialsFile
+      },
+      ...(options.profile === undefined ? {} : { explicitProfile: options.profile }),
+      env: options.env
+    });
+
+    const graphqlOpts = {
+      credentials: profile.credentials,
+      ...(options.apiUrl === undefined
+        ? profile.metadata.baseUrl === undefined
+          ? {}
+          : { apiUrl: profile.metadata.baseUrl }
+        : { apiUrl: options.apiUrl }),
+      ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl })
+    };
+
+    // Resolve identifier to UUID if it looks like a human-readable identifier (e.g. INF-2975)
+    let issueId = identifier;
+    if (!looksLikeId(identifier)) {
+      const issueData = await executeGraphQL<{ issue: { id: string } | null }>({
+        query: `query IssueResolve($id: String!) { issue(id: $id) { id } }`,
+        variables: { id: identifier },
+        ...graphqlOpts
+      });
+
+      if (hasErrors(issueData.body.errors)) {
+        const msg = issueData.body.errors?.[0]?.message ?? "Failed to resolve issue";
+        return emitError(msg, options, profile.name);
+      }
+
+      if (issueData.body.data?.issue?.id === undefined) {
+        return emitError(`Issue "${identifier}" not found.`, options, profile.name, ExitCode.NotFound);
+      }
+      issueId = issueData.body.data.issue.id;
+      variables.issueId = issueId;
+    }
+
+    const response = await executeGraphQL<{
+      attachmentLinkSlack: { success: boolean; attachment: RawSlackAttachment | null };
+    }>({
+      query: ATTACHMENT_LINK_SLACK_MUTATION,
+      variables,
+      ...graphqlOpts
+    });
+
+    if (
+      hasErrors(response.body.errors) ||
+      response.body.data?.attachmentLinkSlack?.attachment === null ||
+      response.body.data?.attachmentLinkSlack?.attachment === undefined
+    ) {
+      if (options.jsonEnvelope) {
+        const errors = mapGraphQLErrors(response.body.errors);
+        const envelope = failureEnvelope(
+          errors.length > 0 ? errors : [{ category: "general", message: "Slack attachment failed" }],
+          { sourceLayer: "curated", profile: profile.name }
+        );
+        process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
+      } else {
+        const errorMessage = response.body.errors?.[0]?.message ?? "Slack attachment failed";
+        process.stderr.write(`Error: ${errorMessage}\n`);
+      }
+      return ExitCode.GeneralError;
+    }
+
+    const attachment = response.body.data.attachmentLinkSlack.attachment;
+
+    if (options.jsonEnvelope) {
+      const envelope = successEnvelope(attachment, { sourceLayer: "curated", profile: profile.name });
+      process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
+    } else if (options.json) {
+      process.stdout.write(`${JSON.stringify(attachment, null, 2)}\n`);
+    } else {
+      process.stdout.write(`Linked Slack thread to ${attachment.issue.identifier}\n`);
+      if (attachment.title !== null) {
+        process.stdout.write(`  Title: ${attachment.title}\n`);
+      }
+      process.stdout.write(`  URL:   ${attachment.url}\n`);
+    }
+
+    return ExitCode.Success;
+  } catch (error) {
+    const failure = mapCommandFailure(error);
+
+    if (options.jsonEnvelope) {
+      const envelope = failureEnvelope([failure.error], {
+        sourceLayer: "curated",
+        ...(options.profile === undefined ? {} : { profile: options.profile })
+      });
+      process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
+    } else {
+      process.stderr.write(`Error: ${failure.error.message}\n`);
+    }
+
+    return failure.exitCode;
+  }
+}
+
 export async function handleIssueCommand(
   positionals: string[],
   options: IssueCommandOptions
@@ -1766,6 +1925,17 @@ export async function handleIssueCommand(
     return handleIssueComment(identifier, options);
   }
 
+  if (subcommand === "attach-slack") {
+    const identifier = rest[0];
+    if (identifier === undefined || identifier === "") {
+      return emitValidationError("usage: linearctl issue attach-slack <identifier> --url <slack-url> [--sync] [--title <text>]", options);
+    }
+    if (rest.length > 1) {
+      return emitValidationError("issue attach-slack accepts exactly one identifier.", options);
+    }
+    return handleIssueAttachSlack(identifier, options);
+  }
+
   if (subcommand === "bulk-update") {
     if (rest.length > 0) {
       return emitValidationError("issue bulk-update does not accept positional arguments. Use --ids.", options);
@@ -1787,7 +1957,7 @@ export async function handleIssueCommand(
     return handleBulkAssign(options);
   }
 
-  return emitValidationError("unsupported issue command. Try: get, create, list, search, update, close, assign, comment, bulk-update, bulk-close, bulk-assign.", options);
+  return emitValidationError("unsupported issue command. Try: get, create, list, search, update, close, assign, comment, attach-slack, bulk-update, bulk-close, bulk-assign.", options);
 }
 
 function hasErrors(errors: GraphQLErrorPayload[] | undefined): boolean {

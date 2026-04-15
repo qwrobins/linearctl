@@ -88,6 +88,8 @@ const CLI_OPTION_DEFINITIONS = {
   query: { type: "string" },
   quiet: { type: "boolean", short: "q" },
   "dry-run": { type: "boolean" },
+  sync: { type: "boolean" },
+  "issues-json": { type: "string" },
   "state-type": { type: "string" },
   "status-type": { type: "string" },
   position: { type: "string" },
@@ -174,6 +176,8 @@ const ISSUE_OPTION_DEFINITIONS = {
   "input-json": CLI_OPTION_DEFINITIONS["input-json"],
   ids: CLI_OPTION_DEFINITIONS.ids,
   body: CLI_OPTION_DEFINITIONS.body,
+  url: CLI_OPTION_DEFINITIONS.url,
+  sync: CLI_OPTION_DEFINITIONS.sync,
   query: CLI_OPTION_DEFINITIONS.query,
   "filter-json": CLI_OPTION_DEFINITIONS["filter-json"],
   "created-after": CLI_OPTION_DEFINITIONS["created-after"],
@@ -213,6 +217,7 @@ const PROJECT_OPTION_DEFINITIONS = {
   max: CLI_OPTION_DEFINITIONS.max,
   "page-size": CLI_OPTION_DEFINITIONS["page-size"],
   after: CLI_OPTION_DEFINITIONS.after,
+  "issues-json": CLI_OPTION_DEFINITIONS["issues-json"],
   "no-retry": CLI_OPTION_DEFINITIONS["no-retry"],
   "max-retries": CLI_OPTION_DEFINITIONS["max-retries"],
 } as const;
@@ -486,6 +491,7 @@ Commands:
   linearctl issue close <identifier> [--state <name>] [--json]
   linearctl issue assign <identifier> <assignee-id> [--json]
   linearctl issue comment <identifier> --body <text> [--json]
+  linearctl issue attach-slack <identifier> --url <slack-url> [--sync] [--title <text>] [--json]
   linearctl issue bulk-update --ids <id1,id2,...> [--state <id>] [--assignee <id>] [--priority <0-4>] [--estimate <n>] [--label <id>] [--cycle <id>] [--json]
   linearctl issue bulk-close --ids <id1,id2,...> [--json]
   linearctl issue bulk-assign --ids <id1,id2,...> --assignee <id> [--json]
@@ -493,6 +499,7 @@ Commands:
   linearctl project list [--team <id>] [--state <name>] [--all-teams] [--json]
   linearctl project create --name <name> [--description ...] [--team <id>] [--json]
   linearctl project update <id> [--name ...] [--state ...] [--json]
+  linearctl project create-with-issues --name <name> --team <id> --issues-json <json> [--description <text>] [--json]
   linearctl project delete <id> [--json]
   linearctl cycle get <id> [--json]
   linearctl cycle list [--team <id>] [--all-teams] [--json]
@@ -586,6 +593,7 @@ interface ParsedCliArguments {
   label?: string;
   state?: string;
   inputJson?: string;
+  issuesJson?: string;
   ids?: string;
   inputFile?: string;
   inputStdin: boolean;
@@ -616,6 +624,7 @@ interface ParsedCliArguments {
   max?: number;
   pageSize?: number;
   after?: string;
+  sync: boolean;
   dryRun: boolean;
   quiet: boolean;
   allTeams: boolean;
@@ -882,6 +891,7 @@ function toParsedCliArguments(values: Record<string, unknown>, positionals: stri
     ...(typeof values.label === "string" ? { label: values.label } : {}),
     ...(typeof values.state === "string" ? { state: values.state } : {}),
     ...(typeof values["input-json"] === "string" ? { inputJson: values["input-json"] } : {}),
+    ...(typeof values["issues-json"] === "string" ? { issuesJson: values["issues-json"] } : {}),
     ...(typeof values["input-file"] === "string" ? { inputFile: values["input-file"] } : {}),
     inputStdin: values["input-stdin"] === true,
     ...(typeof values.id === "string" ? { id: values.id } : {}),
@@ -911,6 +921,7 @@ function toParsedCliArguments(values: Record<string, unknown>, positionals: stri
     ...(typeof values.max === "string" ? { max: parsePositiveInt(values.max, "max") } : {}),
     ...(typeof values["page-size"] === "string" ? { pageSize: parsePositiveInt(values["page-size"], "page-size") } : {}),
     ...(typeof values.after === "string" ? { after: values.after } : {}),
+    sync: values.sync === true,
     dryRun: values["dry-run"] === true,
     quiet: values.quiet === true,
     allTeams: values["all-teams"] === true,
@@ -1032,6 +1043,7 @@ async function main(argv: string[]): Promise<number> {
     try {
       return await handleIssueCommand(args.positionals.slice(1), {
         json: args.json,
+        sync: args.sync,
         dryRun: args.dryRun,
         quiet: args.quiet,
         allTeams: args.allTeams,
@@ -1052,6 +1064,7 @@ async function main(argv: string[]): Promise<number> {
         ...(args.inputJson === undefined ? {} : { inputJson: args.inputJson }),
         ...(args.ids === undefined ? {} : { ids: args.ids }),
         ...(args.body === undefined ? {} : { body: args.body }),
+        ...(args.url === undefined ? {} : { url: args.url }),
         ...(args.query === undefined ? {} : { query: args.query }),
         ...(args.filterJson === undefined ? {} : { filterJson: args.filterJson }),
         ...(args.createdAfter === undefined ? {} : { createdAfter: args.createdAfter }),
@@ -1091,6 +1104,7 @@ async function main(argv: string[]): Promise<number> {
         ...(args.description === undefined ? {} : { description: args.description }),
         ...(args.team === undefined ? {} : { team: args.team }),
         ...(args.state === undefined ? {} : { state: args.state }),
+        ...(args.issuesJson === undefined ? {} : { issuesJson: args.issuesJson }),
         all: args.all,
         ...(args.max === undefined ? {} : { max: args.max }),
         ...(args.pageSize === undefined ? {} : { pageSize: args.pageSize }),

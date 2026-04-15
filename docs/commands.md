@@ -35,6 +35,9 @@ linearctl issue close <identifier> [--state <name>] --json
 # Assign an issue
 linearctl issue assign <identifier> <assignee> --json
 
+# Link a Slack thread to an issue
+linearctl issue attach-slack <identifier> --url <slack-url> [--sync] [--title <text>] --json
+
 # Add a comment
 linearctl issue comment <identifier> --body <text> --json
 ```
@@ -61,6 +64,8 @@ Bulk operations report partial success. Check the response for per-item results.
 linearctl project get <id> --json
 linearctl project list [--team <name|key|id>] [--state <name>] [--all-teams] --json
 linearctl project create --name <name> [--description <text>] [--team <name|key|id>] --json
+linearctl project create-with-issues --name <name> --team <name|key|id> \
+  --issues-json '[{"title":"...","teamId":"..."}]' [--description <text>] --json
 linearctl project update <id> [--name <text>] [--description <text>] [--state <state>] --json
 linearctl project delete <id> --json              # [destructive]
 ```

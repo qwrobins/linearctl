@@ -209,6 +209,340 @@ describe("handleProjectCommand — project delete", () => {
   });
 });
 
+describe("handleProjectCommand — project create-with-issues", () => {
+  const TEAM_UUID = "a1b2c3d4-e5f6-7890-abcd-ef1234567890";
+
+  it("creates project and batch-creates issues, returns combined result", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-project-"));
+    const paths = await writeProfileFiles(directory);
+    const createdProject = makeRawProject({ name: "Q1 Planning" });
+    const batchIssues = [
+      { id: "issue-1", identifier: "INF-1", title: "Task 1" },
+      { id: "issue-2", identifier: "INF-2", title: "Task 2" }
+    ];
+
+    let callCount = 0;
+    const fetchImpl = vi.fn(async () => {
+      callCount++;
+      if (callCount === 1) {
+        return new Response(JSON.stringify({
+          data: { projectCreate: { success: true, project: createdProject } }
+        }), { status: 200 });
+      }
+      return new Response(JSON.stringify({
+        data: { issueBatchCreate: { success: true, issues: batchIssues } }
+      }), { status: 200 });
+    }) as FetchLike;
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleProjectCommand(["create-with-issues"], {
+        ...baseOptions(paths),
+        name: "Q1 Planning",
+        team: TEAM_UUID,
+        issuesJson: `[{"title":"Task 1","teamId":"${TEAM_UUID}"},{"title":"Task 2","teamId":"${TEAM_UUID}"}]`,
+        fetchImpl
+      });
+
+      expect(exitCode).toBe(0);
+      const parsed = JSON.parse(output.stdout.join(""));
+      expect(parsed.project.name).toBe("Q1 Planning");
+      expect(parsed.issues).toHaveLength(2);
+      expect(parsed.issues[0].identifier).toBe("INF-1");
+      expect(parsed.issues[1].identifier).toBe("INF-2");
+    } finally {
+      output.restore();
+    }
+  });
+
+  it("injects projectId into each issue", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-project-"));
+    const paths = await writeProfileFiles(directory);
+    const createdProject = makeRawProject({ id: "a2b3c4d5-e6f7-8901-bcde-f12345678901", name: "Injected" });
+
+    let capturedBatchInput: unknown;
+    let callCount = 0;
+    const fetchImpl = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      callCount++;
+      if (callCount === 1) {
+        return new Response(JSON.stringify({
+          data: { projectCreate: { success: true, project: createdProject } }
+        }), { status: 200 });
+      }
+      const body = JSON.parse(typeof init?.body === "string" ? init.body : "{}");
+      capturedBatchInput = body.variables?.input;
+      return new Response(JSON.stringify({
+        data: { issueBatchCreate: { success: true, issues: [{ id: "i1", identifier: "INF-1", title: "T1" }] } }
+      }), { status: 200 });
+    }) as FetchLike;
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleProjectCommand(["create-with-issues"], {
+        ...baseOptions(paths),
+        name: "Injected",
+        team: TEAM_UUID,
+        issuesJson: `[{"title":"T1","teamId":"${TEAM_UUID}"}]`,
+        fetchImpl
+      });
+
+      expect(exitCode).toBe(0);
+      expect(capturedBatchInput).toBeDefined();
+      const batchInput = capturedBatchInput as { issues: Array<{ projectId: string }> };
+      expect(batchInput.issues).toHaveLength(1);
+      expect(batchInput.issues[0]!.projectId).toBe("a2b3c4d5-e6f7-8901-bcde-f12345678901");
+    } finally {
+      output.restore();
+    }
+  });
+
+  it("returns exit code 5 when --name is missing", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-project-"));
+    const paths = await writeProfileFiles(directory);
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleProjectCommand(["create-with-issues"], {
+        ...baseOptions(paths),
+        team: TEAM_UUID,
+        issuesJson: `[{"title":"T1","teamId":"${TEAM_UUID}"}]`
+      });
+
+      expect(exitCode).toBe(5);
+      expect(output.stderr.join("")).toContain("--name is required");
+    } finally {
+      output.restore();
+    }
+  });
+
+  it("returns exit code 5 when --team is missing", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-project-"));
+    const paths = await writeProfileFiles(directory);
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleProjectCommand(["create-with-issues"], {
+        ...baseOptions(paths),
+        name: "Test",
+        issuesJson: `[{"title":"T1","teamId":"${TEAM_UUID}"}]`
+      });
+
+      expect(exitCode).toBe(5);
+      expect(output.stderr.join("")).toContain("--team is required");
+    } finally {
+      output.restore();
+    }
+  });
+
+  it("returns exit code 5 when --issues-json is missing", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-project-"));
+    const paths = await writeProfileFiles(directory);
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleProjectCommand(["create-with-issues"], {
+        ...baseOptions(paths),
+        name: "Test",
+        team: TEAM_UUID
+      });
+
+      expect(exitCode).toBe(5);
+      expect(output.stderr.join("")).toContain("--issues-json is required");
+    } finally {
+      output.restore();
+    }
+  });
+
+  it("returns exit code 5 when --issues-json is not valid JSON", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-project-"));
+    const paths = await writeProfileFiles(directory);
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleProjectCommand(["create-with-issues"], {
+        ...baseOptions(paths),
+        name: "Test",
+        team: TEAM_UUID,
+        issuesJson: "not json"
+      });
+
+      expect(exitCode).toBe(5);
+      expect(output.stderr.join("")).toContain("--issues-json must be valid JSON");
+    } finally {
+      output.restore();
+    }
+  });
+
+  it("returns exit code 5 when --issues-json is not an array", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-project-"));
+    const paths = await writeProfileFiles(directory);
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleProjectCommand(["create-with-issues"], {
+        ...baseOptions(paths),
+        name: "Test",
+        team: TEAM_UUID,
+        issuesJson: '{"title":"T1"}'
+      });
+
+      expect(exitCode).toBe(5);
+      expect(output.stderr.join("")).toContain("--issues-json must be a JSON array");
+    } finally {
+      output.restore();
+    }
+  });
+
+  it("returns exit code 5 when an issue is missing title", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-project-"));
+    const paths = await writeProfileFiles(directory);
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleProjectCommand(["create-with-issues"], {
+        ...baseOptions(paths),
+        name: "Test",
+        team: TEAM_UUID,
+        issuesJson: `[{"teamId":"${TEAM_UUID}"}]`
+      });
+
+      expect(exitCode).toBe(5);
+      expect(output.stderr.join("")).toContain("--issues-json[0]");
+      expect(output.stderr.join("")).toContain("title");
+    } finally {
+      output.restore();
+    }
+  });
+
+  it("returns exit code 5 when an issue is missing teamId", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-project-"));
+    const paths = await writeProfileFiles(directory);
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleProjectCommand(["create-with-issues"], {
+        ...baseOptions(paths),
+        name: "Test",
+        team: TEAM_UUID,
+        issuesJson: '[{"title":"T1"}]'
+      });
+
+      expect(exitCode).toBe(5);
+      expect(output.stderr.join("")).toContain("--issues-json[0]");
+      expect(output.stderr.join("")).toContain("teamId");
+    } finally {
+      output.restore();
+    }
+  });
+
+  it("returns exit code 5 when --issues-json is an empty array", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-project-"));
+    const paths = await writeProfileFiles(directory);
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleProjectCommand(["create-with-issues"], {
+        ...baseOptions(paths),
+        name: "Test",
+        team: TEAM_UUID,
+        issuesJson: "[]"
+      });
+
+      expect(exitCode).toBe(5);
+      expect(output.stderr.join("")).toContain("--issues-json must contain at least one issue");
+    } finally {
+      output.restore();
+    }
+  });
+
+  it("supports --dry-run", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-project-"));
+    const paths = await writeProfileFiles(directory);
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleProjectCommand(["create-with-issues"], {
+        ...baseOptions(paths),
+        name: "Dry Run Project",
+        team: TEAM_UUID,
+        dryRun: true,
+        issuesJson: `[{"title":"T1","teamId":"${TEAM_UUID}"}]`
+      });
+
+      expect(exitCode).toBe(0);
+      const parsed = JSON.parse(output.stdout.join(""));
+      expect(parsed.dryRun).toBe(true);
+      expect(parsed.action).toBe("create-with-issues");
+      expect(parsed.resource).toBe("project");
+      expect(parsed.input.project.name).toBe("Dry Run Project");
+      expect(parsed.input.issues).toHaveLength(1);
+    } finally {
+      output.restore();
+    }
+  });
+
+  it("supports --json-envelope", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-project-"));
+    const paths = await writeProfileFiles(directory);
+    const createdProject = makeRawProject({ name: "Envelope Test" });
+    const batchIssues = [{ id: "i1", identifier: "INF-1", title: "T1" }];
+
+    let callCount = 0;
+    const fetchImpl = vi.fn(async () => {
+      callCount++;
+      if (callCount === 1) {
+        return new Response(JSON.stringify({
+          data: { projectCreate: { success: true, project: createdProject } }
+        }), { status: 200 });
+      }
+      return new Response(JSON.stringify({
+        data: { issueBatchCreate: { success: true, issues: batchIssues } }
+      }), { status: 200 });
+    }) as FetchLike;
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleProjectCommand(["create-with-issues"], {
+        ...baseOptions(paths),
+        json: false,
+        jsonEnvelope: true,
+        name: "Envelope Test",
+        team: TEAM_UUID,
+        issuesJson: `[{"title":"T1","teamId":"${TEAM_UUID}"}]`,
+        fetchImpl
+      });
+
+      expect(exitCode).toBe(0);
+      const parsed = JSON.parse(output.stdout.join(""));
+      expect(parsed.ok).toBe(true);
+      expect(parsed.data.project.name).toBe("Envelope Test");
+      expect(parsed.data.issues).toHaveLength(1);
+    } finally {
+      output.restore();
+    }
+  });
+
+  it("rejects positional arguments", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-project-"));
+    const paths = await writeProfileFiles(directory);
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleProjectCommand(["create-with-issues", "extra"], {
+        ...baseOptions(paths),
+        name: "Test",
+        team: TEAM_UUID,
+        issuesJson: `[{"title":"T1","teamId":"${TEAM_UUID}"}]`
+      });
+
+      expect(exitCode).toBe(5);
+      expect(output.stderr.join("")).toContain("does not accept positional arguments");
+    } finally {
+      output.restore();
+    }
+  });
+});
+
 describe("handleProjectCommand — project list", () => {
   it("returns array of projects", async () => {
     const directory = await mkdtemp(join(tmpdir(), "linear-cli-project-"));

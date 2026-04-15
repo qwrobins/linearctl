@@ -27,6 +27,7 @@ export interface ProjectCommandOptions {
   name?: string;
   description?: string;
   team?: string;
+  issuesJson?: string;
   allTeams?: boolean;
   state?: string;
   // pagination flags
@@ -102,6 +103,24 @@ mutation ProjectDelete($id: String!) {
     success
   }
 }`;
+
+const ISSUE_BATCH_CREATE_MUTATION = `
+mutation IssueBatchCreate($input: IssueBatchCreateInput!) {
+  issueBatchCreate(input: $input) {
+    success
+    issues {
+      id
+      identifier
+      title
+    }
+  }
+}`;
+
+interface RawBatchIssue {
+  id: string;
+  identifier: string;
+  title: string;
+}
 
 interface RawProject {
   id: string;
@@ -547,6 +566,199 @@ async function handleProjectUpdate(
   }
 }
 
+async function handleProjectCreateWithIssues(options: ProjectCommandOptions): Promise<number> {
+  if (options.name === undefined) {
+    return emitValidationError("--name is required for project create-with-issues.", options);
+  }
+
+  if (options.team === undefined) {
+    return emitValidationError("--team is required for project create-with-issues.", options);
+  }
+
+  if (options.issuesJson === undefined) {
+    return emitValidationError("--issues-json is required for project create-with-issues.", options);
+  }
+
+  let issuesArray: unknown[];
+  try {
+    const parsed = JSON.parse(options.issuesJson);
+    if (!Array.isArray(parsed)) {
+      return emitValidationError("--issues-json must be a JSON array.", options);
+    }
+    issuesArray = parsed;
+  } catch {
+    return emitValidationError("--issues-json must be valid JSON.", options);
+  }
+
+  if (issuesArray.length === 0) {
+    return emitValidationError("--issues-json must contain at least one issue.", options);
+  }
+
+  for (let i = 0; i < issuesArray.length; i++) {
+    const issue = issuesArray[i] as Record<string, unknown>;
+    if (typeof issue !== "object" || issue === null) {
+      return emitValidationError(`--issues-json[${i}] must be an object.`, options);
+    }
+    if (typeof issue.title !== "string" || issue.title === "") {
+      return emitValidationError(`--issues-json[${i}] must have a non-empty "title" string.`, options);
+    }
+    if (typeof issue.teamId !== "string" || issue.teamId === "") {
+      return emitValidationError(`--issues-json[${i}] must have a non-empty "teamId" string.`, options);
+    }
+  }
+
+  const projectInput: Record<string, unknown> = {
+    name: options.name
+  };
+
+  if (options.description !== undefined) {
+    projectInput.description = options.description;
+  }
+
+  try {
+    const profile = await resolveStoredProfile({
+      paths: {
+        configFile: options.configFile,
+        credentialsFile: options.credentialsFile
+      },
+      ...(options.profile === undefined ? {} : { explicitProfile: options.profile }),
+      env: options.env
+    });
+
+    const resolverOpts: ResolverOptions = {
+      credentials: profile.credentials,
+      ...(options.apiUrl === undefined
+        ? profile.metadata.baseUrl === undefined
+          ? {}
+          : { apiUrl: profile.metadata.baseUrl }
+        : { apiUrl: options.apiUrl }),
+      ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl })
+    };
+
+    const teamId = looksLikeId(options.team) ? options.team : await resolveTeamId(options.team, resolverOpts);
+    projectInput.teamIds = [teamId];
+
+    if (options.dryRun === true) {
+      return emitDryRunResult("create-with-issues", "project", {
+        project: projectInput,
+        issues: issuesArray.map((issue) => ({
+          ...(issue as Record<string, unknown>),
+          projectId: "<will-be-set-after-project-creation>"
+        }))
+      }, options);
+    }
+
+    // Step 1: Create the project
+    const projectResponse = await executeGraphQL<{
+      projectCreate: { success: boolean; project: RawProject | null };
+    }>({
+      query: PROJECT_CREATE_MUTATION,
+      variables: { input: projectInput },
+      credentials: profile.credentials,
+      ...(options.apiUrl === undefined
+        ? profile.metadata.baseUrl === undefined
+          ? {}
+          : { apiUrl: profile.metadata.baseUrl }
+        : { apiUrl: options.apiUrl }),
+      ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl })
+    });
+
+    if (
+      hasErrors(projectResponse.body.errors) ||
+      projectResponse.body.data?.projectCreate?.project === null ||
+      projectResponse.body.data?.projectCreate?.project === undefined
+    ) {
+      if (options.jsonEnvelope) {
+        const errors = mapGraphQLErrors(projectResponse.body.errors);
+        const envelope = failureEnvelope(
+          errors.length > 0 ? errors : [{ category: "general", message: "Project creation failed" }],
+          { sourceLayer: "curated", profile: profile.name }
+        );
+        process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
+      } else {
+        const errorMessage = projectResponse.body.errors?.[0]?.message ?? "Project creation failed";
+        process.stderr.write(`Error: ${errorMessage}\n`);
+      }
+      return ExitCode.GeneralError;
+    }
+
+    const project = normalizeProject(projectResponse.body.data.projectCreate.project);
+
+    // Step 2: Batch-create issues linked to the project
+    const issuesInput = {
+      issues: issuesArray.map((issue) => ({
+        ...(issue as Record<string, unknown>),
+        projectId: project.id
+      }))
+    };
+
+    const issuesResponse = await executeGraphQL<{
+      issueBatchCreate: { success: boolean; issues: RawBatchIssue[] | null };
+    }>({
+      query: ISSUE_BATCH_CREATE_MUTATION,
+      variables: { input: issuesInput },
+      credentials: profile.credentials,
+      ...(options.apiUrl === undefined
+        ? profile.metadata.baseUrl === undefined
+          ? {}
+          : { apiUrl: profile.metadata.baseUrl }
+        : { apiUrl: options.apiUrl }),
+      ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl })
+    });
+
+    if (
+      hasErrors(issuesResponse.body.errors) ||
+      !issuesResponse.body.data?.issueBatchCreate?.success
+    ) {
+      if (options.jsonEnvelope) {
+        const errors = mapGraphQLErrors(issuesResponse.body.errors);
+        const envelope = failureEnvelope(
+          errors.length > 0 ? errors : [{ category: "general", message: "Issue batch creation failed (project was created)" }],
+          { sourceLayer: "curated", profile: profile.name }
+        );
+        process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
+      } else {
+        const errorMessage = issuesResponse.body.errors?.[0]?.message ?? "Issue batch creation failed (project was created)";
+        process.stderr.write(`Error: ${errorMessage}\n`);
+      }
+      return ExitCode.GeneralError;
+    }
+
+    const issues = issuesResponse.body.data.issueBatchCreate.issues ?? [];
+    const result = { project, issues };
+
+    if (options.jsonEnvelope) {
+      const envelope = successEnvelope(result, { sourceLayer: "curated", profile: profile.name });
+      process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
+    } else if (options.json) {
+      process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+    } else {
+      process.stdout.write(`Created project: ${project.name}\n`);
+      process.stdout.write(`  URL: ${project.url}\n`);
+      process.stdout.write(`  Issues created: ${issues.length}\n`);
+      for (const issue of issues) {
+        process.stdout.write(`    ${issue.identifier}: ${issue.title}\n`);
+      }
+    }
+
+    return ExitCode.Success;
+  } catch (error) {
+    const failure = mapCommandFailure(error);
+
+    if (options.jsonEnvelope) {
+      const envelope = failureEnvelope([failure.error], {
+        sourceLayer: "curated",
+        ...(options.profile === undefined ? {} : { profile: options.profile })
+      });
+      process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
+    } else {
+      process.stderr.write(`Error: ${failure.error.message}\n`);
+    }
+
+    return failure.exitCode;
+  }
+}
+
 async function handleProjectDelete(id: string, options: ProjectCommandOptions): Promise<number> {
   if (options.dryRun === true) {
     return emitDryRunResult("delete", "project", { id }, options);
@@ -654,6 +866,13 @@ export async function handleProjectCommand(
     return handleProjectCreate(options);
   }
 
+  if (subcommand === "create-with-issues") {
+    if (rest.length > 0) {
+      return emitValidationError("project create-with-issues does not accept positional arguments.", options);
+    }
+    return handleProjectCreateWithIssues(options);
+  }
+
   if (subcommand === "update") {
     const id = rest[0];
     if (id === undefined || id === "") {
@@ -676,7 +895,7 @@ export async function handleProjectCommand(
     return handleProjectDelete(id, options);
   }
 
-  return emitValidationError("unsupported project command. Try linearctl project get, list, create, update, or delete.", options);
+  return emitValidationError("unsupported project command. Try linearctl project get, list, create, create-with-issues, update, or delete.", options);
 }
 
 function hasErrors(errors: GraphQLErrorPayload[] | undefined): boolean {

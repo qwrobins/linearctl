@@ -40,6 +40,7 @@ Raw GraphQL should not be used merely because it is possible. It is the fallback
 - `linearctl issue update <identifier> [--title <text>] [--description <text>] [--priority <0-4>] [--estimate <n>] [--assignee <id>] [--state <id>] --json` — update an issue
 - `linearctl issue close <identifier> [--state <name>] --json` — close an issue (transitions to completed workflow state; defaults to "Done", use --state to pick another)
 - `linearctl issue assign <identifier> <assignee-id> --json` — assign an issue
+- `linearctl issue attach-slack <identifier> --url <slack-url> [--sync] [--title <text>] --json` — link a Slack thread to an issue (--sync enables bidirectional comment sync)
 - `linearctl issue comment <identifier> --body <text> --json` — add a comment to an issue
 
 ### Bulk operations
@@ -51,6 +52,7 @@ Raw GraphQL should not be used merely because it is possible. It is the fallback
 - `linearctl project get <id> --json`
 - `linearctl project list [--team <id>] [--state <name>] [--all-teams] --json`
 - `linearctl project create --name <name> [--description <text>] [--team <id>] --json`
+- `linearctl project create-with-issues --name <name> --team <id> --issues-json <json> [--description <text>] --json` — create a project and batch-create linked issues atomically
 - `linearctl project update <id> [--name <text>] [--description <text>] [--state <state>] --json`
 - `linearctl project delete <id> --json`
 
