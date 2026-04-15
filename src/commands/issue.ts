@@ -1714,17 +1714,25 @@ async function handleIssueAttachSlack(
   identifier: string,
   options: IssueCommandOptions
 ): Promise<number> {
-  if (options.url === undefined || options.url === "") {
+  if (options.url === undefined || options.url.trim() === "") {
     return emitValidationError("--url is required for issue attach-slack.", options);
   }
 
-  if (!options.url.includes("slack.com")) {
-    return emitValidationError("--url must be a Slack URL (containing slack.com).", options);
+  const trimmedUrl = options.url.trim();
+  let parsedUrl: URL;
+  try {
+    parsedUrl = new URL(trimmedUrl);
+  } catch {
+    return emitValidationError("--url must be a valid Slack HTTPS URL.", options);
+  }
+  const hostname = parsedUrl.hostname.toLowerCase();
+  if (parsedUrl.protocol !== "https:" || (hostname !== "slack.com" && !hostname.endsWith(".slack.com"))) {
+    return emitValidationError("--url must be a valid Slack HTTPS URL.", options);
   }
 
   const variables: Record<string, unknown> = {
     issueId: identifier,
-    url: options.url,
+    url: trimmedUrl,
     ...(options.sync === true ? { syncToCommentThread: true } : {}),
     ...(options.title !== undefined ? { title: options.title } : {})
   };
