@@ -265,33 +265,27 @@ async function handleFileUrl(
     expiresIn = parsed;
   }
 
-  const ctx = buildContext(options);
+  // Wrap fetchImpl to inject the custom expires-in header, so ctx.graphql()
+  // and its retry logic still apply to this request.
+  const baseFetch = options.fetchImpl ?? fetch;
+  const wrappedFetch: FetchLike = async (input, init) => {
+    return baseFetch(input, {
+      ...init,
+      headers: {
+        ...(init?.headers as Record<string, string> ?? {}),
+        "public-file-urls-expire-in": String(expiresIn),
+      },
+    });
+  };
+  const ctx = buildContext({ ...options, fetchImpl: wrappedFetch });
 
   try {
-    const profile = await ctx.resolveProfile();
-    const fetchImpl = options.fetchImpl ?? fetch;
-    const apiUrl = options.apiUrl ?? profile.metadata.baseUrl ?? "https://api.linear.app/graphql";
+    const response = await ctx.graphql<AttachmentUrlResponse>(
+      ATTACHMENT_URL_QUERY,
+      { id: attachmentId }
+    );
 
-    // Custom fetch with special header — cannot use ctx.graphql() here
-    const response = await fetchImpl(apiUrl, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        authorization: authorizationHeader(profile.credentials),
-        "public-file-urls-expire-in": String(expiresIn)
-      },
-      body: JSON.stringify({
-        query: ATTACHMENT_URL_QUERY,
-        variables: { id: attachmentId }
-      })
-    });
-
-    const responseText = await response.text();
-    if (!response.ok) {
-      return ctx.emitFailure([{ category: "general", message: `GraphQL request failed with HTTP ${response.status}` }]);
-    }
-
-    const body = JSON.parse(responseText) as { data?: AttachmentUrlResponse; errors?: GraphQLErrorPayload[] };
+    const body = response.body as { data?: AttachmentUrlResponse; errors?: GraphQLErrorPayload[] };
 
     if (ctx.hasErrors(body.errors) || body.data?.attachment === null || body.data?.attachment === undefined) {
       const errors = ctx.mapGraphQLErrors(body.errors);

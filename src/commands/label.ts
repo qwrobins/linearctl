@@ -293,8 +293,6 @@ async function handleLabelCreate(options: LabelCommandOptions): Promise<number> 
   const ctx = buildContext(options);
 
   try {
-    const profile = await ctx.resolveProfile();
-
     if (options.team !== undefined) {
       const resolverOpts = await ctx.resolverOptions();
       input.teamId = looksLikeId(options.team) ? options.team : await resolveTeamId(options.team, resolverOpts);

@@ -9,14 +9,16 @@ import type { ParsedCliArguments } from "./types.js";
 
 /**
  * Pick non-undefined fields from ParsedCliArguments by name.
- * Returns an object with only the fields that have values.
+ * Returns a partial object preserving the original key/value types.
  */
-export function pickFields(args: ParsedCliArguments, ...keys: (keyof ParsedCliArguments)[]): Record<string, unknown> {
-  const result: Record<string, unknown> = {};
+export function pickFields<K extends keyof ParsedCliArguments>(
+  args: ParsedCliArguments,
+  ...keys: K[]
+): Partial<Pick<ParsedCliArguments, K>> {
+  const result = {} as Partial<Pick<ParsedCliArguments, K>>;
   for (const key of keys) {
-    const value = args[key];
-    if (value !== undefined) {
-      result[key as string] = value;
+    if (args[key] !== undefined) {
+      result[key] = args[key];
     }
   }
   return result;
