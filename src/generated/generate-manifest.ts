@@ -12,6 +12,7 @@
 
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
+import { namingOverrides } from "./naming-overrides.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -232,8 +233,12 @@ function fieldToEntry(
 ): ApiCommandEntry {
   const args = field.args ?? [];
 
-  const { resource, operation } =
-    operationType === "mutation"
+  // Check the override table before falling through to heuristic derivation.
+  const override = namingOverrides[field.name];
+
+  const { resource, operation } = override !== undefined
+    ? override
+    : operationType === "mutation"
       ? deriveMutationParts(field.name)
       : deriveQueryParts(field.name, args, field.type);
 

@@ -545,6 +545,58 @@
     "deprecation": null
   },
   {
+    "commandPath": "linearctl api attachment list-for-url",
+    "resource": "attachment",
+    "operation": "list-for-url",
+    "graphqlField": "attachmentsForURL",
+    "graphqlOperationType": "query",
+    "description": "Returns issue attachments for a given `url`.",
+    "inputMode": "json",
+    "requiredArgs": [
+      {
+        "name": "url",
+        "typeName": "String!",
+        "description": "The attachment URL."
+      }
+    ],
+    "optionalArgs": [
+      {
+        "name": "before",
+        "typeName": "String",
+        "description": "A cursor to be used with last for backward pagination."
+      },
+      {
+        "name": "after",
+        "typeName": "String",
+        "description": "A cursor to be used with first for forward pagination"
+      },
+      {
+        "name": "first",
+        "typeName": "Int",
+        "description": "The number of items to forward paginate (used with after). Defaults to 50."
+      },
+      {
+        "name": "last",
+        "typeName": "Int",
+        "description": "The number of items to backward paginate (used with before). Defaults to 50."
+      },
+      {
+        "name": "includeArchived",
+        "typeName": "Boolean",
+        "description": "Should archived resources be included (default: false)"
+      },
+      {
+        "name": "orderBy",
+        "typeName": "PaginationOrderBy",
+        "description": "By which field should the pagination order by. Available options are createdAt (default) and updatedAt."
+      }
+    ],
+    "inputTypeName": null,
+    "returnTypeName": "AttachmentConnection",
+    "supportsFields": true,
+    "deprecation": null
+  },
+  {
     "commandPath": "linearctl api attachment sources",
     "resource": "attachment",
     "operation": "sources",
@@ -1195,58 +1247,6 @@
     "inputTypeName": null,
     "returnTypeName": "AttachmentPayload",
     "supportsFields": false,
-    "deprecation": null
-  },
-  {
-    "commandPath": "linearctl api attachments-for-url list",
-    "resource": "attachments-for-url",
-    "operation": "list",
-    "graphqlField": "attachmentsForURL",
-    "graphqlOperationType": "query",
-    "description": "Returns issue attachments for a given `url`.",
-    "inputMode": "json",
-    "requiredArgs": [
-      {
-        "name": "url",
-        "typeName": "String!",
-        "description": "The attachment URL."
-      }
-    ],
-    "optionalArgs": [
-      {
-        "name": "before",
-        "typeName": "String",
-        "description": "A cursor to be used with last for backward pagination."
-      },
-      {
-        "name": "after",
-        "typeName": "String",
-        "description": "A cursor to be used with first for forward pagination"
-      },
-      {
-        "name": "first",
-        "typeName": "Int",
-        "description": "The number of items to forward paginate (used with after). Defaults to 50."
-      },
-      {
-        "name": "last",
-        "typeName": "Int",
-        "description": "The number of items to backward paginate (used with before). Defaults to 50."
-      },
-      {
-        "name": "includeArchived",
-        "typeName": "Boolean",
-        "description": "Should archived resources be included (default: false)"
-      },
-      {
-        "name": "orderBy",
-        "typeName": "PaginationOrderBy",
-        "description": "By which field should the pagination order by. Available options are createdAt (default) and updatedAt."
-      }
-    ],
-    "inputTypeName": null,
-    "returnTypeName": "AttachmentConnection",
-    "supportsFields": true,
     "deprecation": null
   },
   {
@@ -3810,9 +3810,9 @@
     "deprecation": null
   },
   {
-    "commandPath": "linearctl api image-upload-from url",
-    "resource": "image-upload-from",
-    "operation": "url",
+    "commandPath": "linearctl api image upload-from-url",
+    "resource": "image",
+    "operation": "upload-from-url",
     "graphqlField": "imageUploadFromUrl",
     "graphqlOperationType": "mutation",
     "description": "Upload an image from an URL to Linear.",
@@ -6881,6 +6881,53 @@
     "deprecation": null
   },
   {
+    "commandPath": "linearctl api issue-import create-csv-jira",
+    "resource": "issue-import",
+    "operation": "create-csv-jira",
+    "graphqlField": "issueImportCreateCSVJira",
+    "graphqlOperationType": "mutation",
+    "description": "Kicks off a Jira import job from a CSV.",
+    "inputMode": "json",
+    "requiredArgs": [
+      {
+        "name": "csvUrl",
+        "typeName": "String!",
+        "description": "URL for the CSV."
+      }
+    ],
+    "optionalArgs": [
+      {
+        "name": "teamId",
+        "typeName": "String",
+        "description": "ID of the team into which to import data. Empty to create new team."
+      },
+      {
+        "name": "teamName",
+        "typeName": "String",
+        "description": "Name of new team. When teamId is not set."
+      },
+      {
+        "name": "jiraHostname",
+        "typeName": "String",
+        "description": "Jira installation or cloud hostname."
+      },
+      {
+        "name": "jiraToken",
+        "typeName": "String",
+        "description": "Jira personal access token to access Jira REST API."
+      },
+      {
+        "name": "jiraEmail",
+        "typeName": "String",
+        "description": "Jira user account email."
+      }
+    ],
+    "inputTypeName": null,
+    "returnTypeName": "IssueImportPayload",
+    "supportsFields": false,
+    "deprecation": null
+  },
+  {
     "commandPath": "linearctl api issue-import delete",
     "resource": "issue-import",
     "operation": "delete",
@@ -7163,53 +7210,6 @@
         "name": "id",
         "typeName": "String",
         "description": "ID of issue import. If not provided it will be generated."
-      }
-    ],
-    "inputTypeName": null,
-    "returnTypeName": "IssueImportPayload",
-    "supportsFields": false,
-    "deprecation": null
-  },
-  {
-    "commandPath": "linearctl api issue-import-create-csv jira",
-    "resource": "issue-import-create-csv",
-    "operation": "jira",
-    "graphqlField": "issueImportCreateCSVJira",
-    "graphqlOperationType": "mutation",
-    "description": "Kicks off a Jira import job from a CSV.",
-    "inputMode": "json",
-    "requiredArgs": [
-      {
-        "name": "csvUrl",
-        "typeName": "String!",
-        "description": "URL for the CSV."
-      }
-    ],
-    "optionalArgs": [
-      {
-        "name": "teamId",
-        "typeName": "String",
-        "description": "ID of the team into which to import data. Empty to create new team."
-      },
-      {
-        "name": "teamName",
-        "typeName": "String",
-        "description": "Name of new team. When teamId is not set."
-      },
-      {
-        "name": "jiraHostname",
-        "typeName": "String",
-        "description": "Jira installation or cloud hostname."
-      },
-      {
-        "name": "jiraToken",
-        "typeName": "String",
-        "description": "Jira personal access token to access Jira REST API."
-      },
-      {
-        "name": "jiraEmail",
-        "typeName": "String",
-        "description": "Jira user account email."
       }
     ],
     "inputTypeName": null,
