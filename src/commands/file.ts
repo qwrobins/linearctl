@@ -174,7 +174,7 @@ async function handleFileUpload(
       { contentType, filename: fileName, size }
     );
 
-    if (ctx.hasErrors(uploadResponse.body.errors) || uploadResponse.body.data?.fileUpload === undefined) {
+    if (ctx.hasErrors(uploadResponse.body.errors) || uploadResponse.body.data?.fileUpload == null) {
       const errors = ctx.mapGraphQLErrors(uploadResponse.body.errors);
       return ctx.emitFailure(
         errors.length > 0 ? errors : [{ category: "general", message: "File upload request failed" }]
@@ -233,17 +233,15 @@ async function handleFileUpload(
       result.issue = { id: options.issue };
     }
 
-    if (options.jsonEnvelope) {
+    if (options.json || options.jsonEnvelope) {
       return ctx.emitSuccess(result);
-    } else if (options.json) {
-      process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
-    } else {
-      process.stdout.write(`Uploaded ${fileName} (${size} bytes)\n`);
-      process.stdout.write(`  Asset URL: ${assetUrl}\n`);
-      if (result.attachment !== undefined) {
-        const att = result.attachment as { id: string; title: string; url: string };
-        process.stdout.write(`  Attachment: ${att.id}\n`);
-      }
+    }
+
+    process.stdout.write(`Uploaded ${fileName} (${size} bytes)\n`);
+    process.stdout.write(`  Asset URL: ${assetUrl}\n`);
+    if (result.attachment !== undefined) {
+      const att = result.attachment as { id: string; title: string; url: string };
+      process.stdout.write(`  Attachment: ${att.id}\n`);
     }
 
     return ExitCode.Success;
@@ -269,12 +267,12 @@ async function handleFileUrl(
   // and its retry logic still apply to this request.
   const baseFetch = options.fetchImpl ?? fetch;
   const wrappedFetch: FetchLike = async (input, init) => {
+    // executeGraphQL always passes headers as a plain Record<string, string>,
+    // so spreading is safe here. We merge the custom header on top.
+    const existing = (init?.headers ?? {}) as Record<string, string>;
     return baseFetch(input, {
       ...init,
-      headers: {
-        ...(init?.headers as Record<string, string> ?? {}),
-        "public-file-urls-expire-in": String(expiresIn),
-      },
+      headers: { ...existing, "public-file-urls-expire-in": String(expiresIn) },
     });
   };
   const ctx = buildContext({ ...options, fetchImpl: wrappedFetch });
@@ -295,14 +293,11 @@ async function handleFileUrl(
 
     const result = { url: response.body.data.attachment.url, expiresIn };
 
-    if (options.jsonEnvelope) {
+    if (options.json || options.jsonEnvelope) {
       return ctx.emitSuccess(result);
-    } else if (options.json) {
-      process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
-    } else {
-      process.stdout.write(`${result.url}\n`);
     }
 
+    process.stdout.write(`${result.url}\n`);
     return ExitCode.Success;
   } catch (error) {
     return ctx.emitCaughtError(error);
@@ -353,14 +348,11 @@ async function handleFileDownload(
 
     const result = { path: outputPath, size: bytes.length };
 
-    if (options.jsonEnvelope) {
+    if (options.json || options.jsonEnvelope) {
       return ctx.emitSuccess(result);
-    } else if (options.json) {
-      process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
-    } else {
-      process.stdout.write(`Downloaded ${outputPath} (${bytes.length} bytes)\n`);
     }
 
+    process.stdout.write(`Downloaded ${outputPath} (${bytes.length} bytes)\n`);
     return ExitCode.Success;
   } catch (error) {
     return ctx.emitCaughtError(error);
