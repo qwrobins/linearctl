@@ -1,15 +1,12 @@
 import { emitValidationError } from "../core/output/validation-error.js";
-import { failureEnvelope, successEnvelope } from "../core/output/envelope.js";
 import type { PageInfo } from "../core/output/envelope.js";
-import { mapCommandFailure } from "../core/errors/command-failure.js";
 import { ExitCode } from "../core/errors/exit-codes.js";
-import { executeGraphQL } from "../core/transport/graphql.js";
 import type { FetchLike, GraphQLErrorPayload } from "../core/transport/graphql.js";
-import { resolveStoredProfile } from "../core/auth/runtime.js";
 import { paginateGraphQL, validatePaginationOptions } from "../core/pagination/pagination.js";
 import type { PaginationOptions } from "../core/pagination/pagination.js";
 import { streamPaginateGraphQL } from "../core/pagination/streaming.js";
 import { emitDryRunResult } from "../core/output/dry-run.js";
+import { CommandContext } from "../core/runtime/command-context.js";
 
 export interface CommentCommandOptions {
   json: boolean;
@@ -29,6 +26,9 @@ export interface CommentCommandOptions {
   pageSize?: number;
   after?: string;
   quiet?: boolean;
+  // retry flags
+  noRetry?: boolean;
+  maxRetries?: number;
 }
 
 interface RawComment {
@@ -132,6 +132,28 @@ function printHumanComment(comment: NormalizedCommentFull): void {
   process.stdout.write(`  URL: ${comment.url}\n`);
 }
 
+/** Build a CommandContext from comment handler options */
+function buildContext(options: CommentCommandOptions): CommandContext {
+  return new CommandContext({
+    json: options.json,
+    jsonEnvelope: options.jsonEnvelope,
+    ...(options.profile === undefined ? {} : { profile: options.profile }),
+    configFile: options.configFile,
+    credentialsFile: options.credentialsFile,
+    ...(options.apiUrl === undefined ? {} : { apiUrl: options.apiUrl }),
+    env: options.env,
+    ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl }),
+    ...(options.noRetry === true || options.maxRetries !== undefined
+      ? {
+          retry: {
+            ...(options.noRetry === true ? { noRetry: true } : {}),
+            ...(options.maxRetries !== undefined ? { maxRetries: options.maxRetries } : {}),
+          },
+        }
+      : {}),
+  });
+}
+
 async function handleCommentList(options: CommentCommandOptions): Promise<number> {
   if (options.issue === undefined) {
     return emitValidationError("--issue is required for comment list.", options);
@@ -150,15 +172,10 @@ async function handleCommentList(options: CommentCommandOptions): Promise<number
     return emitValidationError(validationError, options);
   }
 
+  const ctx = buildContext(options);
+
   try {
-    const profile = await resolveStoredProfile({
-      paths: {
-        configFile: options.configFile,
-        credentialsFile: options.credentialsFile
-      },
-      ...(options.profile === undefined ? {} : { explicitProfile: options.profile }),
-      env: options.env
-    });
+    const profile = await ctx.resolveProfile();
 
     const commonPaginateInput = {
       query: COMMENT_LIST_QUERY,
@@ -198,11 +215,7 @@ async function handleCommentList(options: CommentCommandOptions): Promise<number
       const comments = result.items.map(normalizeCommentFull);
 
       if (options.jsonEnvelope) {
-        const envelope = successEnvelope(comments, {
-          sourceLayer: "curated",
-          profile: profile.name
-        }, result.pageInfo);
-        process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
+        return ctx.emitSuccess(comments, result.pageInfo);
       } else if (options.json) {
         process.stdout.write(`${JSON.stringify(comments, null, 2)}\n`);
       } else {
@@ -217,19 +230,7 @@ async function handleCommentList(options: CommentCommandOptions): Promise<number
 
     return ExitCode.Success;
   } catch (error) {
-    const failure = mapCommandFailure(error);
-
-    if (options.jsonEnvelope) {
-      const envelope = failureEnvelope([failure.error], {
-        sourceLayer: "curated",
-        ...(options.profile === undefined ? {} : { profile: options.profile })
-      });
-      process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
-    } else {
-      process.stderr.write(`Error: ${failure.error.message}\n`);
-    }
-
-    return failure.exitCode;
+    return ctx.emitCaughtError(error);
   }
 }
 
@@ -246,54 +247,28 @@ async function handleCommentCreate(options: CommentCommandOptions): Promise<numb
     return emitDryRunResult("create", "comment", { issueId: options.issue, body: options.body }, options);
   }
 
-  try {
-    const profile = await resolveStoredProfile({
-      paths: {
-        configFile: options.configFile,
-        credentialsFile: options.credentialsFile
-      },
-      ...(options.profile === undefined ? {} : { explicitProfile: options.profile }),
-      env: options.env
-    });
+  const ctx = buildContext(options);
 
-    const response = await executeGraphQL<{
+  try {
+    const response = await ctx.graphql<{
       commentCreate: { success: boolean; comment: RawComment | null };
-    }>({
-      query: COMMENT_CREATE_MUTATION,
-      variables: { input: { issueId: options.issue, body: options.body } },
-      credentials: profile.credentials,
-      ...(options.apiUrl === undefined
-        ? profile.metadata.baseUrl === undefined
-          ? {}
-          : { apiUrl: profile.metadata.baseUrl }
-        : { apiUrl: options.apiUrl }),
-      ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl })
-    });
+    }>(COMMENT_CREATE_MUTATION, { input: { issueId: options.issue, body: options.body } });
 
     if (
-      hasErrors(response.body.errors) ||
+      ctx.hasErrors(response.body.errors) ||
       response.body.data?.commentCreate?.comment === null ||
       response.body.data?.commentCreate?.comment === undefined
     ) {
-      if (options.jsonEnvelope) {
-        const errors = mapGraphQLErrors(response.body.errors);
-        const envelope = failureEnvelope(
-          errors.length > 0 ? errors : [{ category: "general", message: "Comment creation failed" }],
-          { sourceLayer: "curated", profile: profile.name }
-        );
-        process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
-      } else {
-        const errorMessage = response.body.errors?.[0]?.message ?? "Comment creation failed";
-        process.stderr.write(`Error: ${errorMessage}\n`);
-      }
-      return ExitCode.GeneralError;
+      const errors = ctx.mapGraphQLErrors(response.body.errors);
+      return ctx.emitFailure(
+        errors.length > 0 ? errors : [{ category: "general", message: "Comment creation failed" }]
+      );
     }
 
     const comment = normalizeCommentFull(response.body.data.commentCreate.comment);
 
     if (options.jsonEnvelope) {
-      const envelope = successEnvelope(comment, { sourceLayer: "curated", profile: profile.name });
-      process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
+      return ctx.emitSuccess(comment);
     } else if (options.json) {
       process.stdout.write(`${JSON.stringify(comment, null, 2)}\n`);
     } else {
@@ -303,19 +278,7 @@ async function handleCommentCreate(options: CommentCommandOptions): Promise<numb
 
     return ExitCode.Success;
   } catch (error) {
-    const failure = mapCommandFailure(error);
-
-    if (options.jsonEnvelope) {
-      const envelope = failureEnvelope([failure.error], {
-        sourceLayer: "curated",
-        ...(options.profile === undefined ? {} : { profile: options.profile })
-      });
-      process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
-    } else {
-      process.stderr.write(`Error: ${failure.error.message}\n`);
-    }
-
-    return failure.exitCode;
+    return ctx.emitCaughtError(error);
   }
 }
 
@@ -328,54 +291,28 @@ async function handleCommentUpdate(commentId: string, options: CommentCommandOpt
     return emitDryRunResult("update", "comment", { id: commentId, body: options.body }, options);
   }
 
-  try {
-    const profile = await resolveStoredProfile({
-      paths: {
-        configFile: options.configFile,
-        credentialsFile: options.credentialsFile
-      },
-      ...(options.profile === undefined ? {} : { explicitProfile: options.profile }),
-      env: options.env
-    });
+  const ctx = buildContext(options);
 
-    const response = await executeGraphQL<{
+  try {
+    const response = await ctx.graphql<{
       commentUpdate: { success: boolean; comment: RawComment | null };
-    }>({
-      query: COMMENT_UPDATE_MUTATION,
-      variables: { id: commentId, input: { body: options.body } },
-      credentials: profile.credentials,
-      ...(options.apiUrl === undefined
-        ? profile.metadata.baseUrl === undefined
-          ? {}
-          : { apiUrl: profile.metadata.baseUrl }
-        : { apiUrl: options.apiUrl }),
-      ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl })
-    });
+    }>(COMMENT_UPDATE_MUTATION, { id: commentId, input: { body: options.body } });
 
     if (
-      hasErrors(response.body.errors) ||
+      ctx.hasErrors(response.body.errors) ||
       response.body.data?.commentUpdate?.comment === null ||
       response.body.data?.commentUpdate?.comment === undefined
     ) {
-      if (options.jsonEnvelope) {
-        const errors = mapGraphQLErrors(response.body.errors);
-        const envelope = failureEnvelope(
-          errors.length > 0 ? errors : [{ category: "general", message: "Comment update failed" }],
-          { sourceLayer: "curated", profile: profile.name }
-        );
-        process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
-      } else {
-        const errorMessage = response.body.errors?.[0]?.message ?? "Comment update failed";
-        process.stderr.write(`Error: ${errorMessage}\n`);
-      }
-      return ExitCode.GeneralError;
+      const errors = ctx.mapGraphQLErrors(response.body.errors);
+      return ctx.emitFailure(
+        errors.length > 0 ? errors : [{ category: "general", message: "Comment update failed" }]
+      );
     }
 
     const comment = normalizeCommentFull(response.body.data.commentUpdate.comment);
 
     if (options.jsonEnvelope) {
-      const envelope = successEnvelope(comment, { sourceLayer: "curated", profile: profile.name });
-      process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
+      return ctx.emitSuccess(comment);
     } else if (options.json) {
       process.stdout.write(`${JSON.stringify(comment, null, 2)}\n`);
     } else {
@@ -385,19 +322,7 @@ async function handleCommentUpdate(commentId: string, options: CommentCommandOpt
 
     return ExitCode.Success;
   } catch (error) {
-    const failure = mapCommandFailure(error);
-
-    if (options.jsonEnvelope) {
-      const envelope = failureEnvelope([failure.error], {
-        sourceLayer: "curated",
-        ...(options.profile === undefined ? {} : { profile: options.profile })
-      });
-      process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
-    } else {
-      process.stderr.write(`Error: ${failure.error.message}\n`);
-    }
-
-    return failure.exitCode;
+    return ctx.emitCaughtError(error);
   }
 }
 
@@ -406,53 +331,27 @@ async function handleCommentDelete(commentId: string, options: CommentCommandOpt
     return emitDryRunResult("delete", "comment", { id: commentId }, options);
   }
 
-  try {
-    const profile = await resolveStoredProfile({
-      paths: {
-        configFile: options.configFile,
-        credentialsFile: options.credentialsFile
-      },
-      ...(options.profile === undefined ? {} : { explicitProfile: options.profile }),
-      env: options.env
-    });
+  const ctx = buildContext(options);
 
-    const response = await executeGraphQL<{
+  try {
+    const response = await ctx.graphql<{
       commentDelete: { success: boolean };
-    }>({
-      query: COMMENT_DELETE_MUTATION,
-      variables: { id: commentId },
-      credentials: profile.credentials,
-      ...(options.apiUrl === undefined
-        ? profile.metadata.baseUrl === undefined
-          ? {}
-          : { apiUrl: profile.metadata.baseUrl }
-        : { apiUrl: options.apiUrl }),
-      ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl })
-    });
+    }>(COMMENT_DELETE_MUTATION, { id: commentId });
 
     if (
-      hasErrors(response.body.errors) ||
+      ctx.hasErrors(response.body.errors) ||
       !response.body.data?.commentDelete?.success
     ) {
-      if (options.jsonEnvelope) {
-        const errors = mapGraphQLErrors(response.body.errors);
-        const envelope = failureEnvelope(
-          errors.length > 0 ? errors : [{ category: "general", message: "Comment deletion failed" }],
-          { sourceLayer: "curated", profile: profile.name }
-        );
-        process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
-      } else {
-        const errorMessage = response.body.errors?.[0]?.message ?? "Comment deletion failed";
-        process.stderr.write(`Error: ${errorMessage}\n`);
-      }
-      return ExitCode.GeneralError;
+      const errors = ctx.mapGraphQLErrors(response.body.errors);
+      return ctx.emitFailure(
+        errors.length > 0 ? errors : [{ category: "general", message: "Comment deletion failed" }]
+      );
     }
 
     const result = { id: commentId, deleted: true };
 
     if (options.jsonEnvelope) {
-      const envelope = successEnvelope(result, { sourceLayer: "curated", profile: profile.name });
-      process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
+      return ctx.emitSuccess(result);
     } else if (options.json) {
       process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     } else {
@@ -461,19 +360,7 @@ async function handleCommentDelete(commentId: string, options: CommentCommandOpt
 
     return ExitCode.Success;
   } catch (error) {
-    const failure = mapCommandFailure(error);
-
-    if (options.jsonEnvelope) {
-      const envelope = failureEnvelope([failure.error], {
-        sourceLayer: "curated",
-        ...(options.profile === undefined ? {} : { profile: options.profile })
-      });
-      process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
-    } else {
-      process.stderr.write(`Error: ${failure.error.message}\n`);
-    }
-
-    return failure.exitCode;
+    return ctx.emitCaughtError(error);
   }
 }
 

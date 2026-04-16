@@ -1,15 +1,13 @@
 import { emitValidationError } from "../core/output/validation-error.js";
-import { failureEnvelope, successEnvelope } from "../core/output/envelope.js";
 import type { PageInfo } from "../core/output/envelope.js";
-import { mapCommandFailure } from "../core/errors/command-failure.js";
 import { ExitCode } from "../core/errors/exit-codes.js";
-import { executeGraphQL } from "../core/transport/graphql.js";
-import type { FetchLike, GraphQLErrorPayload } from "../core/transport/graphql.js";
-import { loadOptionalConfig, resolveStoredProfile } from "../core/auth/runtime.js";
+import type { FetchLike } from "../core/transport/graphql.js";
+import { loadOptionalConfig } from "../core/auth/runtime.js";
 import { setProfileMetadata, writeLinearConfigFile } from "../core/config/config-file.js";
 import { paginateGraphQL, validatePaginationOptions } from "../core/pagination/pagination.js";
 import type { PaginationOptions } from "../core/pagination/pagination.js";
 import { streamPaginateGraphQL } from "../core/pagination/streaming.js";
+import { CommandContext } from "../core/runtime/command-context.js";
 
 export interface TeamCommandOptions {
   json: boolean;
@@ -28,6 +26,9 @@ export interface TeamCommandOptions {
   pageSize?: number;
   after?: string;
   quiet?: boolean;
+  // retry flags
+  noRetry?: boolean;
+  maxRetries?: number;
 }
 
 interface RawTeam {
@@ -98,62 +99,52 @@ function printHumanTeam(team: NormalizedTeam): void {
   }
 }
 
+/** Build a CommandContext from team handler options */
+function buildContext(options: TeamCommandOptions): CommandContext {
+  return new CommandContext({
+    json: options.json,
+    jsonEnvelope: options.jsonEnvelope,
+    ...(options.profile === undefined ? {} : { profile: options.profile }),
+    configFile: options.configFile,
+    credentialsFile: options.credentialsFile,
+    ...(options.apiUrl === undefined ? {} : { apiUrl: options.apiUrl }),
+    env: options.env,
+    ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl }),
+    ...(options.noRetry === true || options.maxRetries !== undefined
+      ? {
+          retry: {
+            ...(options.noRetry === true ? { noRetry: true } : {}),
+            ...(options.maxRetries !== undefined ? { maxRetries: options.maxRetries } : {}),
+          },
+        }
+      : {}),
+  });
+}
+
 async function handleTeamGet(
   identifier: string,
   options: TeamCommandOptions
 ): Promise<number> {
+  const ctx = buildContext(options);
+
   try {
-    const profile = await resolveStoredProfile({
-      paths: {
-        configFile: options.configFile,
-        credentialsFile: options.credentialsFile
-      },
-      ...(options.profile === undefined ? {} : { explicitProfile: options.profile }),
-      env: options.env
-    });
+    const response = await ctx.graphql<{ team: RawTeam | null }>(
+      TEAM_GET_QUERY,
+      { id: identifier }
+    );
 
-    const response = await executeGraphQL<{ team: RawTeam | null }>({
-      query: TEAM_GET_QUERY,
-      variables: { id: identifier },
-      credentials: profile.credentials,
-      ...(options.apiUrl === undefined
-        ? profile.metadata.baseUrl === undefined
-          ? {}
-          : { apiUrl: profile.metadata.baseUrl }
-        : { apiUrl: options.apiUrl }),
-      ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl })
-    });
-
-    if (hasErrors(response.body.errors)) {
-      const errors = mapGraphQLErrors(response.body.errors);
-      if (options.jsonEnvelope) {
-        const envelope = failureEnvelope(errors, {
-          sourceLayer: "curated",
-          profile: profile.name
-        });
-        process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
-      } else {
-        process.stderr.write(`Error: ${errors[0]?.message ?? "Team query failed"}\n`);
-      }
-      return ExitCode.GeneralError;
+    if (ctx.hasErrors(response.body.errors)) {
+      return ctx.emitFailure(ctx.mapGraphQLErrors(response.body.errors));
     }
 
     if (response.body.data?.team === null || response.body.data?.team === undefined) {
-      if (options.jsonEnvelope) {
-        const envelope = failureEnvelope(
-          [{ category: "not-found", message: "Team not found" }],
-          { sourceLayer: "curated", profile: profile.name }
-        );
-        process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
-      } else {
-        process.stderr.write("Error: Team not found\n");
-      }
-      return ExitCode.NotFound;
+      return ctx.emitNotFound("Team not found");
     }
 
     const team = normalizeTeam(response.body.data.team);
 
     if (options.setDefault) {
+      const profile = await ctx.resolveProfile();
       const config = await loadOptionalConfig(options.configFile);
       const existingMetadata = config.profiles[profile.name] ?? {};
       const updatedConfig = setProfileMetadata(config, profile.name, {
@@ -167,8 +158,7 @@ async function handleTeamGet(
     }
 
     if (options.jsonEnvelope) {
-      const envelope = successEnvelope(team, { sourceLayer: "curated", profile: profile.name });
-      process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
+      return ctx.emitSuccess(team);
     } else if (options.json) {
       process.stdout.write(`${JSON.stringify(team, null, 2)}\n`);
     } else {
@@ -177,19 +167,7 @@ async function handleTeamGet(
 
     return ExitCode.Success;
   } catch (error) {
-    const failure = mapCommandFailure(error);
-
-    if (options.jsonEnvelope) {
-      const envelope = failureEnvelope([failure.error], {
-        sourceLayer: "curated",
-        ...(options.profile === undefined ? {} : { profile: options.profile })
-      });
-      process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
-    } else {
-      process.stderr.write(`Error: ${failure.error.message}\n`);
-    }
-
-    return failure.exitCode;
+    return ctx.emitCaughtError(error);
   }
 }
 
@@ -207,15 +185,10 @@ async function handleTeamList(options: TeamCommandOptions): Promise<number> {
     return emitValidationError(validationError, options);
   }
 
+  const ctx = buildContext(options);
+
   try {
-    const profile = await resolveStoredProfile({
-      paths: {
-        configFile: options.configFile,
-        credentialsFile: options.credentialsFile
-      },
-      ...(options.profile === undefined ? {} : { explicitProfile: options.profile }),
-      env: options.env
-    });
+    const profile = await ctx.resolveProfile();
 
     const commonPaginateInput = {
       query: TEAM_LIST_QUERY,
@@ -249,8 +222,7 @@ async function handleTeamList(options: TeamCommandOptions): Promise<number> {
       const teams = items.map(normalizeTeam);
 
       if (options.jsonEnvelope) {
-        const envelope = successEnvelope(teams, { sourceLayer: "curated", profile: profile.name }, pageInfo);
-        process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
+        return ctx.emitSuccess(teams, pageInfo);
       } else if (options.json) {
         process.stdout.write(`${JSON.stringify(teams, null, 2)}\n`);
       } else {
@@ -263,19 +235,7 @@ async function handleTeamList(options: TeamCommandOptions): Promise<number> {
 
     return ExitCode.Success;
   } catch (error) {
-    const failure = mapCommandFailure(error);
-
-    if (options.jsonEnvelope) {
-      const envelope = failureEnvelope([failure.error], {
-        sourceLayer: "curated",
-        ...(options.profile === undefined ? {} : { profile: options.profile })
-      });
-      process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
-    } else {
-      process.stderr.write(`Error: ${failure.error.message}\n`);
-    }
-
-    return failure.exitCode;
+    return ctx.emitCaughtError(error);
   }
 }
 
@@ -307,19 +267,4 @@ export async function handleTeamCommand(
   }
 
   return emitValidationError("unsupported team command. Try linearctl team get or linearctl team list.", options);
-}
-
-function hasErrors(errors: GraphQLErrorPayload[] | undefined): boolean {
-  return Array.isArray(errors) && errors.length > 0;
-}
-
-function mapGraphQLErrors(errors: GraphQLErrorPayload[] | undefined): Array<{ category: "general"; message: string; details: Record<string, unknown> }> {
-  return (errors ?? []).map((error) => ({
-    category: "general" as const,
-    message: error.message,
-    details: {
-      ...(error.path === undefined ? {} : { path: error.path }),
-      ...(error.extensions === undefined ? {} : { extensions: error.extensions })
-    }
-  }));
 }

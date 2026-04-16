@@ -1,17 +1,13 @@
 import { emitValidationError } from "../core/output/validation-error.js";
-import { failureEnvelope, successEnvelope } from "../core/output/envelope.js";
 import type { PageInfo } from "../core/output/envelope.js";
-import { mapCommandFailure } from "../core/errors/command-failure.js";
 import { ExitCode } from "../core/errors/exit-codes.js";
-import { executeGraphQL } from "../core/transport/graphql.js";
 import type { FetchLike, GraphQLErrorPayload } from "../core/transport/graphql.js";
-import { resolveStoredProfile } from "../core/auth/runtime.js";
 import { paginateGraphQL, validatePaginationOptions } from "../core/pagination/pagination.js";
 import type { PaginationOptions } from "../core/pagination/pagination.js";
 import { streamPaginateGraphQL } from "../core/pagination/streaming.js";
 import { emitDryRunResult } from "../core/output/dry-run.js";
 import { resolveTeamId, looksLikeId } from "../core/resolution/resolve.js";
-import type { ResolverOptions } from "../core/resolution/resolve.js";
+import { CommandContext } from "../core/runtime/command-context.js";
 
 export interface LabelCommandOptions {
   json: boolean;
@@ -36,6 +32,9 @@ export interface LabelCommandOptions {
   pageSize?: number;
   after?: string;
   quiet?: boolean;
+  // retry flags
+  noRetry?: boolean;
+  maxRetries?: number;
 }
 
 interface RawLabel {
@@ -138,64 +137,52 @@ function printHumanLabel(label: NormalizedLabel): void {
   }
 }
 
+/** Build a CommandContext from label handler options */
+function buildContext(options: LabelCommandOptions): CommandContext {
+  return new CommandContext({
+    json: options.json,
+    jsonEnvelope: options.jsonEnvelope,
+    ...(options.profile === undefined ? {} : { profile: options.profile }),
+    configFile: options.configFile,
+    credentialsFile: options.credentialsFile,
+    ...(options.apiUrl === undefined ? {} : { apiUrl: options.apiUrl }),
+    env: options.env,
+    ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl }),
+    ...(options.noRetry === true || options.maxRetries !== undefined
+      ? {
+          retry: {
+            ...(options.noRetry === true ? { noRetry: true } : {}),
+            ...(options.maxRetries !== undefined ? { maxRetries: options.maxRetries } : {}),
+          },
+        }
+      : {}),
+  });
+}
+
 async function handleLabelGet(
   identifier: string,
   options: LabelCommandOptions
 ): Promise<number> {
+  const ctx = buildContext(options);
+
   try {
-    const profile = await resolveStoredProfile({
-      paths: {
-        configFile: options.configFile,
-        credentialsFile: options.credentialsFile
-      },
-      ...(options.profile === undefined ? {} : { explicitProfile: options.profile }),
-      env: options.env
-    });
+    const response = await ctx.graphql<{ issueLabel: RawLabel | null }>(
+      LABEL_GET_QUERY,
+      { id: identifier }
+    );
 
-    const response = await executeGraphQL<{ issueLabel: RawLabel | null }>({
-      query: LABEL_GET_QUERY,
-      variables: { id: identifier },
-      credentials: profile.credentials,
-      ...(options.apiUrl === undefined
-        ? profile.metadata.baseUrl === undefined
-          ? {}
-          : { apiUrl: profile.metadata.baseUrl }
-        : { apiUrl: options.apiUrl }),
-      ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl })
-    });
-
-    if (hasErrors(response.body.errors)) {
-      const errors = mapGraphQLErrors(response.body.errors);
-      if (options.jsonEnvelope) {
-        const envelope = failureEnvelope(errors, {
-          sourceLayer: "curated",
-          profile: profile.name
-        });
-        process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
-      } else {
-        process.stderr.write(`Error: ${errors[0]?.message ?? "Label query failed"}\n`);
-      }
-      return ExitCode.GeneralError;
+    if (ctx.hasErrors(response.body.errors)) {
+      return ctx.emitFailure(ctx.mapGraphQLErrors(response.body.errors));
     }
 
     if (response.body.data?.issueLabel === null || response.body.data?.issueLabel === undefined) {
-      if (options.jsonEnvelope) {
-        const envelope = failureEnvelope(
-          [{ category: "not-found", message: "Label not found" }],
-          { sourceLayer: "curated", profile: profile.name }
-        );
-        process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
-      } else {
-        process.stderr.write("Error: Label not found\n");
-      }
-      return ExitCode.NotFound;
+      return ctx.emitNotFound("Label not found");
     }
 
     const label = normalizeLabel(response.body.data.issueLabel);
 
     if (options.jsonEnvelope) {
-      const envelope = successEnvelope(label, { sourceLayer: "curated", profile: profile.name });
-      process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
+      return ctx.emitSuccess(label);
     } else if (options.json) {
       process.stdout.write(`${JSON.stringify(label, null, 2)}\n`);
     } else {
@@ -204,19 +191,7 @@ async function handleLabelGet(
 
     return ExitCode.Success;
   } catch (error) {
-    const failure = mapCommandFailure(error);
-
-    if (options.jsonEnvelope) {
-      const envelope = failureEnvelope([failure.error], {
-        sourceLayer: "curated",
-        ...(options.profile === undefined ? {} : { profile: options.profile })
-      });
-      process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
-    } else {
-      process.stderr.write(`Error: ${failure.error.message}\n`);
-    }
-
-    return failure.exitCode;
+    return ctx.emitCaughtError(error);
   }
 }
 
@@ -234,15 +209,10 @@ async function handleLabelList(options: LabelCommandOptions): Promise<number> {
     return emitValidationError(validationError, options);
   }
 
+  const ctx = buildContext(options);
+
   try {
-    const profile = await resolveStoredProfile({
-      paths: {
-        configFile: options.configFile,
-        credentialsFile: options.credentialsFile
-      },
-      ...(options.profile === undefined ? {} : { explicitProfile: options.profile }),
-      env: options.env
-    });
+    const profile = await ctx.resolveProfile();
 
     const apiUrl = options.apiUrl === undefined
       ? profile.metadata.baseUrl === undefined
@@ -253,11 +223,7 @@ async function handleLabelList(options: LabelCommandOptions): Promise<number> {
     const variables: Record<string, unknown> = {};
     const effectiveTeam = options.allTeams ? undefined : (options.team ?? profile.metadata.defaultTeam);
     if (effectiveTeam !== undefined) {
-      const resolverOpts: ResolverOptions = {
-        credentials: profile.credentials,
-        ...(apiUrl === undefined ? {} : { apiUrl }),
-        ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl })
-      };
+      const resolverOpts = await ctx.resolverOptions();
       const teamIdResolved = looksLikeId(effectiveTeam) ? effectiveTeam : await resolveTeamId(effectiveTeam, resolverOpts);
       variables.filter = { team: { id: { eq: teamIdResolved } } };
     }
@@ -291,8 +257,7 @@ async function handleLabelList(options: LabelCommandOptions): Promise<number> {
       const labels = items.map(normalizeLabel);
 
       if (options.jsonEnvelope) {
-        const envelope = successEnvelope(labels, { sourceLayer: "curated", profile: profile.name }, pageInfo);
-        process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
+        return ctx.emitSuccess(labels, pageInfo);
       } else if (options.json) {
         process.stdout.write(`${JSON.stringify(labels, null, 2)}\n`);
       } else {
@@ -305,19 +270,7 @@ async function handleLabelList(options: LabelCommandOptions): Promise<number> {
 
     return ExitCode.Success;
   } catch (error) {
-    const failure = mapCommandFailure(error);
-
-    if (options.jsonEnvelope) {
-      const envelope = failureEnvelope([failure.error], {
-        sourceLayer: "curated",
-        ...(options.profile === undefined ? {} : { profile: options.profile })
-      });
-      process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
-    } else {
-      process.stderr.write(`Error: ${failure.error.message}\n`);
-    }
-
-    return failure.exitCode;
+    return ctx.emitCaughtError(error);
   }
 }
 
@@ -336,26 +289,14 @@ async function handleLabelCreate(options: LabelCommandOptions): Promise<number> 
   if (options.color !== undefined) {
     input.color = options.color;
   }
+
+  const ctx = buildContext(options);
+
   try {
-    const profile = await resolveStoredProfile({
-      paths: {
-        configFile: options.configFile,
-        credentialsFile: options.credentialsFile
-      },
-      ...(options.profile === undefined ? {} : { explicitProfile: options.profile }),
-      env: options.env
-    });
+    const profile = await ctx.resolveProfile();
 
     if (options.team !== undefined) {
-      const resolverOpts: ResolverOptions = {
-        credentials: profile.credentials,
-        ...(options.apiUrl === undefined
-          ? profile.metadata.baseUrl === undefined
-            ? {}
-            : { apiUrl: profile.metadata.baseUrl }
-          : { apiUrl: options.apiUrl }),
-        ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl })
-      };
+      const resolverOpts = await ctx.resolverOptions();
       input.teamId = looksLikeId(options.team) ? options.team : await resolveTeamId(options.team, resolverOpts);
     }
 
@@ -363,44 +304,25 @@ async function handleLabelCreate(options: LabelCommandOptions): Promise<number> 
       return emitDryRunResult("create", "label", input, options);
     }
 
-    const response = await executeGraphQL<{
+    const response = await ctx.graphql<{
       issueLabelCreate: { success: boolean; issueLabel: RawLabel | null };
-    }>({
-      query: LABEL_CREATE_MUTATION,
-      variables: { input },
-      credentials: profile.credentials,
-      ...(options.apiUrl === undefined
-        ? profile.metadata.baseUrl === undefined
-          ? {}
-          : { apiUrl: profile.metadata.baseUrl }
-        : { apiUrl: options.apiUrl }),
-      ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl })
-    });
+    }>(LABEL_CREATE_MUTATION, { input });
 
     if (
-      hasErrors(response.body.errors) ||
+      ctx.hasErrors(response.body.errors) ||
       response.body.data?.issueLabelCreate?.issueLabel === null ||
       response.body.data?.issueLabelCreate?.issueLabel === undefined
     ) {
-      if (options.jsonEnvelope) {
-        const errors = mapGraphQLErrors(response.body.errors);
-        const envelope = failureEnvelope(
-          errors.length > 0 ? errors : [{ category: "general", message: "Label creation failed" }],
-          { sourceLayer: "curated", profile: profile.name }
-        );
-        process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
-      } else {
-        const errorMessage = response.body.errors?.[0]?.message ?? "Label creation failed";
-        process.stderr.write(`Error: ${errorMessage}\n`);
-      }
-      return ExitCode.GeneralError;
+      const errors = ctx.mapGraphQLErrors(response.body.errors);
+      return ctx.emitFailure(
+        errors.length > 0 ? errors : [{ category: "general", message: "Label creation failed" }]
+      );
     }
 
     const label = normalizeLabel(response.body.data.issueLabelCreate.issueLabel);
 
     if (options.jsonEnvelope) {
-      const envelope = successEnvelope(label, { sourceLayer: "curated", profile: profile.name });
-      process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
+      return ctx.emitSuccess(label);
     } else if (options.json) {
       process.stdout.write(`${JSON.stringify(label, null, 2)}\n`);
     } else {
@@ -409,19 +331,7 @@ async function handleLabelCreate(options: LabelCommandOptions): Promise<number> 
 
     return ExitCode.Success;
   } catch (error) {
-    const failure = mapCommandFailure(error);
-
-    if (options.jsonEnvelope) {
-      const envelope = failureEnvelope([failure.error], {
-        sourceLayer: "curated",
-        ...(options.profile === undefined ? {} : { profile: options.profile })
-      });
-      process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
-    } else {
-      process.stderr.write(`Error: ${failure.error.message}\n`);
-    }
-
-    return failure.exitCode;
+    return ctx.emitCaughtError(error);
   }
 }
 
@@ -430,53 +340,27 @@ async function handleLabelDelete(labelId: string, options: LabelCommandOptions):
     return emitDryRunResult("delete", "label", { id: labelId }, options);
   }
 
-  try {
-    const profile = await resolveStoredProfile({
-      paths: {
-        configFile: options.configFile,
-        credentialsFile: options.credentialsFile
-      },
-      ...(options.profile === undefined ? {} : { explicitProfile: options.profile }),
-      env: options.env
-    });
+  const ctx = buildContext(options);
 
-    const response = await executeGraphQL<{
+  try {
+    const response = await ctx.graphql<{
       issueLabelDelete: { success: boolean };
-    }>({
-      query: LABEL_DELETE_MUTATION,
-      variables: { id: labelId },
-      credentials: profile.credentials,
-      ...(options.apiUrl === undefined
-        ? profile.metadata.baseUrl === undefined
-          ? {}
-          : { apiUrl: profile.metadata.baseUrl }
-        : { apiUrl: options.apiUrl }),
-      ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl })
-    });
+    }>(LABEL_DELETE_MUTATION, { id: labelId });
 
     if (
-      hasErrors(response.body.errors) ||
+      ctx.hasErrors(response.body.errors) ||
       !response.body.data?.issueLabelDelete?.success
     ) {
-      if (options.jsonEnvelope) {
-        const errors = mapGraphQLErrors(response.body.errors);
-        const envelope = failureEnvelope(
-          errors.length > 0 ? errors : [{ category: "general", message: "Label deletion failed" }],
-          { sourceLayer: "curated", profile: profile.name }
-        );
-        process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
-      } else {
-        const errorMessage = response.body.errors?.[0]?.message ?? "Label deletion failed";
-        process.stderr.write(`Error: ${errorMessage}\n`);
-      }
-      return ExitCode.GeneralError;
+      const errors = ctx.mapGraphQLErrors(response.body.errors);
+      return ctx.emitFailure(
+        errors.length > 0 ? errors : [{ category: "general", message: "Label deletion failed" }]
+      );
     }
 
     const result = { id: labelId, deleted: true };
 
     if (options.jsonEnvelope) {
-      const envelope = successEnvelope(result, { sourceLayer: "curated", profile: profile.name });
-      process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
+      return ctx.emitSuccess(result);
     } else if (options.json) {
       process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     } else {
@@ -485,19 +369,7 @@ async function handleLabelDelete(labelId: string, options: LabelCommandOptions):
 
     return ExitCode.Success;
   } catch (error) {
-    const failure = mapCommandFailure(error);
-
-    if (options.jsonEnvelope) {
-      const envelope = failureEnvelope([failure.error], {
-        sourceLayer: "curated",
-        ...(options.profile === undefined ? {} : { profile: options.profile })
-      });
-      process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
-    } else {
-      process.stderr.write(`Error: ${failure.error.message}\n`);
-    }
-
-    return failure.exitCode;
+    return ctx.emitCaughtError(error);
   }
 }
 

@@ -1,17 +1,13 @@
 import { emitValidationError } from "../core/output/validation-error.js";
-import { failureEnvelope, successEnvelope } from "../core/output/envelope.js";
 import type { PageInfo } from "../core/output/envelope.js";
-import { mapCommandFailure } from "../core/errors/command-failure.js";
 import { ExitCode } from "../core/errors/exit-codes.js";
-import { executeGraphQL } from "../core/transport/graphql.js";
 import type { FetchLike, GraphQLErrorPayload } from "../core/transport/graphql.js";
-import { resolveStoredProfile } from "../core/auth/runtime.js";
 import { paginateGraphQL, validatePaginationOptions } from "../core/pagination/pagination.js";
 import type { PaginationOptions } from "../core/pagination/pagination.js";
 import { streamPaginateGraphQL } from "../core/pagination/streaming.js";
 import { emitDryRunResult } from "../core/output/dry-run.js";
 import { resolveTeamId, looksLikeId } from "../core/resolution/resolve.js";
-import type { ResolverOptions } from "../core/resolution/resolve.js";
+import { CommandContext } from "../core/runtime/command-context.js";
 
 const VALID_STATE_TYPES = ["backlog", "unstarted", "started", "completed", "canceled"] as const;
 
@@ -40,6 +36,9 @@ export interface StateCommandOptions {
   pageSize?: number;
   after?: string;
   quiet?: boolean;
+  // retry flags
+  noRetry?: boolean;
+  maxRetries?: number;
 }
 
 interface RawWorkflowState {
@@ -134,64 +133,52 @@ function printHumanState(state: NormalizedWorkflowState): void {
   process.stdout.write(`  Team:        ${state.team.name}\n`);
 }
 
+/** Build a CommandContext from state handler options */
+function buildContext(options: StateCommandOptions): CommandContext {
+  return new CommandContext({
+    json: options.json,
+    jsonEnvelope: options.jsonEnvelope,
+    ...(options.profile === undefined ? {} : { profile: options.profile }),
+    configFile: options.configFile,
+    credentialsFile: options.credentialsFile,
+    ...(options.apiUrl === undefined ? {} : { apiUrl: options.apiUrl }),
+    env: options.env,
+    ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl }),
+    ...(options.noRetry === true || options.maxRetries !== undefined
+      ? {
+          retry: {
+            ...(options.noRetry === true ? { noRetry: true } : {}),
+            ...(options.maxRetries !== undefined ? { maxRetries: options.maxRetries } : {}),
+          },
+        }
+      : {}),
+  });
+}
+
 async function handleStateGet(
   identifier: string,
   options: StateCommandOptions
 ): Promise<number> {
+  const ctx = buildContext(options);
+
   try {
-    const profile = await resolveStoredProfile({
-      paths: {
-        configFile: options.configFile,
-        credentialsFile: options.credentialsFile
-      },
-      ...(options.profile === undefined ? {} : { explicitProfile: options.profile }),
-      env: options.env
-    });
+    const response = await ctx.graphql<{ workflowState: RawWorkflowState | null }>(
+      STATE_GET_QUERY,
+      { id: identifier }
+    );
 
-    const response = await executeGraphQL<{ workflowState: RawWorkflowState | null }>({
-      query: STATE_GET_QUERY,
-      variables: { id: identifier },
-      credentials: profile.credentials,
-      ...(options.apiUrl === undefined
-        ? profile.metadata.baseUrl === undefined
-          ? {}
-          : { apiUrl: profile.metadata.baseUrl }
-        : { apiUrl: options.apiUrl }),
-      ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl })
-    });
-
-    if (hasErrors(response.body.errors)) {
-      const errors = mapGraphQLErrors(response.body.errors);
-      if (options.jsonEnvelope) {
-        const envelope = failureEnvelope(errors, {
-          sourceLayer: "curated",
-          profile: profile.name
-        });
-        process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
-      } else {
-        process.stderr.write(`Error: ${errors[0]?.message ?? "Workflow state query failed"}\n`);
-      }
-      return ExitCode.GeneralError;
+    if (ctx.hasErrors(response.body.errors)) {
+      return ctx.emitFailure(ctx.mapGraphQLErrors(response.body.errors));
     }
 
     if (response.body.data?.workflowState === null || response.body.data?.workflowState === undefined) {
-      if (options.jsonEnvelope) {
-        const envelope = failureEnvelope(
-          [{ category: "not-found", message: "Workflow state not found" }],
-          { sourceLayer: "curated", profile: profile.name }
-        );
-        process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
-      } else {
-        process.stderr.write("Error: Workflow state not found\n");
-      }
-      return ExitCode.NotFound;
+      return ctx.emitNotFound("Workflow state not found");
     }
 
     const state = normalizeWorkflowState(response.body.data.workflowState);
 
     if (options.jsonEnvelope) {
-      const envelope = successEnvelope(state, { sourceLayer: "curated", profile: profile.name });
-      process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
+      return ctx.emitSuccess(state);
     } else if (options.json) {
       process.stdout.write(`${JSON.stringify(state, null, 2)}\n`);
     } else {
@@ -200,19 +187,7 @@ async function handleStateGet(
 
     return ExitCode.Success;
   } catch (error) {
-    const failure = mapCommandFailure(error);
-
-    if (options.jsonEnvelope) {
-      const envelope = failureEnvelope([failure.error], {
-        sourceLayer: "curated",
-        ...(options.profile === undefined ? {} : { profile: options.profile })
-      });
-      process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
-    } else {
-      process.stderr.write(`Error: ${failure.error.message}\n`);
-    }
-
-    return failure.exitCode;
+    return ctx.emitCaughtError(error);
   }
 }
 
@@ -230,15 +205,10 @@ async function handleStateList(options: StateCommandOptions): Promise<number> {
     return emitValidationError(validationError, options);
   }
 
+  const ctx = buildContext(options);
+
   try {
-    const profile = await resolveStoredProfile({
-      paths: {
-        configFile: options.configFile,
-        credentialsFile: options.credentialsFile
-      },
-      ...(options.profile === undefined ? {} : { explicitProfile: options.profile }),
-      env: options.env
-    });
+    const profile = await ctx.resolveProfile();
 
     const apiUrl = options.apiUrl === undefined
       ? profile.metadata.baseUrl === undefined
@@ -249,11 +219,7 @@ async function handleStateList(options: StateCommandOptions): Promise<number> {
     const variables: Record<string, unknown> = {};
     const effectiveTeam = options.allTeams ? undefined : (options.team ?? profile.metadata.defaultTeam);
     if (effectiveTeam !== undefined) {
-      const resolverOpts: ResolverOptions = {
-        credentials: profile.credentials,
-        ...(apiUrl === undefined ? {} : { apiUrl }),
-        ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl })
-      };
+      const resolverOpts = await ctx.resolverOptions();
       const teamIdResolved = looksLikeId(effectiveTeam) ? effectiveTeam : await resolveTeamId(effectiveTeam, resolverOpts);
       variables.filter = { team: { id: { eq: teamIdResolved } } };
     }
@@ -287,8 +253,7 @@ async function handleStateList(options: StateCommandOptions): Promise<number> {
       const states = items.map(normalizeWorkflowState);
 
       if (options.jsonEnvelope) {
-        const envelope = successEnvelope(states, { sourceLayer: "curated", profile: profile.name }, pageInfo);
-        process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
+        return ctx.emitSuccess(states, pageInfo);
       } else if (options.json) {
         process.stdout.write(`${JSON.stringify(states, null, 2)}\n`);
       } else {
@@ -301,19 +266,7 @@ async function handleStateList(options: StateCommandOptions): Promise<number> {
 
     return ExitCode.Success;
   } catch (error) {
-    const failure = mapCommandFailure(error);
-
-    if (options.jsonEnvelope) {
-      const envelope = failureEnvelope([failure.error], {
-        sourceLayer: "curated",
-        ...(options.profile === undefined ? {} : { profile: options.profile })
-      });
-      process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
-    } else {
-      process.stderr.write(`Error: ${failure.error.message}\n`);
-    }
-
-    return failure.exitCode;
+    return ctx.emitCaughtError(error);
   }
 }
 
@@ -356,69 +309,35 @@ async function handleStateCreate(options: StateCommandOptions): Promise<number> 
     input.position = pos;
   }
 
-  try {
-    const profile = await resolveStoredProfile({
-      paths: {
-        configFile: options.configFile,
-        credentialsFile: options.credentialsFile
-      },
-      ...(options.profile === undefined ? {} : { explicitProfile: options.profile }),
-      env: options.env
-    });
+  const ctx = buildContext(options);
 
-    const resolverOpts: ResolverOptions = {
-      credentials: profile.credentials,
-      ...(options.apiUrl === undefined
-        ? profile.metadata.baseUrl === undefined
-          ? {}
-          : { apiUrl: profile.metadata.baseUrl }
-        : { apiUrl: options.apiUrl }),
-      ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl })
-    };
+  try {
+    const resolverOpts = await ctx.resolverOptions();
     input.teamId = looksLikeId(options.team) ? options.team : await resolveTeamId(options.team, resolverOpts);
 
     if (options.dryRun === true) {
       return emitDryRunResult("create", "state", input, options);
     }
 
-    const response = await executeGraphQL<{
+    const response = await ctx.graphql<{
       workflowStateCreate: { success: boolean; workflowState: RawWorkflowState | null };
-    }>({
-      query: STATE_CREATE_MUTATION,
-      variables: { input },
-      credentials: profile.credentials,
-      ...(options.apiUrl === undefined
-        ? profile.metadata.baseUrl === undefined
-          ? {}
-          : { apiUrl: profile.metadata.baseUrl }
-        : { apiUrl: options.apiUrl }),
-      ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl })
-    });
+    }>(STATE_CREATE_MUTATION, { input });
 
     if (
-      hasErrors(response.body.errors) ||
+      ctx.hasErrors(response.body.errors) ||
       response.body.data?.workflowStateCreate?.workflowState === null ||
       response.body.data?.workflowStateCreate?.workflowState === undefined
     ) {
-      if (options.jsonEnvelope) {
-        const errors = mapGraphQLErrors(response.body.errors);
-        const envelope = failureEnvelope(
-          errors.length > 0 ? errors : [{ category: "general", message: "Workflow state creation failed" }],
-          { sourceLayer: "curated", profile: profile.name }
-        );
-        process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
-      } else {
-        const errorMessage = response.body.errors?.[0]?.message ?? "Workflow state creation failed";
-        process.stderr.write(`Error: ${errorMessage}\n`);
-      }
-      return ExitCode.GeneralError;
+      const errors = ctx.mapGraphQLErrors(response.body.errors);
+      return ctx.emitFailure(
+        errors.length > 0 ? errors : [{ category: "general", message: "Workflow state creation failed" }]
+      );
     }
 
     const state = normalizeWorkflowState(response.body.data.workflowStateCreate.workflowState);
 
     if (options.jsonEnvelope) {
-      const envelope = successEnvelope(state, { sourceLayer: "curated", profile: profile.name });
-      process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
+      return ctx.emitSuccess(state);
     } else if (options.json) {
       process.stdout.write(`${JSON.stringify(state, null, 2)}\n`);
     } else {
@@ -427,19 +346,7 @@ async function handleStateCreate(options: StateCommandOptions): Promise<number> 
 
     return ExitCode.Success;
   } catch (error) {
-    const failure = mapCommandFailure(error);
-
-    if (options.jsonEnvelope) {
-      const envelope = failureEnvelope([failure.error], {
-        sourceLayer: "curated",
-        ...(options.profile === undefined ? {} : { profile: options.profile })
-      });
-      process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
-    } else {
-      process.stderr.write(`Error: ${failure.error.message}\n`);
-    }
-
-    return failure.exitCode;
+    return ctx.emitCaughtError(error);
   }
 }
 

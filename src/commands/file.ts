@@ -1,13 +1,11 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { basename, resolve } from "node:path";
-import { failureEnvelope, successEnvelope } from "../core/output/envelope.js";
-import { mapCommandFailure } from "../core/errors/command-failure.js";
 import { ExitCode } from "../core/errors/exit-codes.js";
 import { emitValidationError } from "../core/output/validation-error.js";
-import { executeGraphQL, authorizationHeader } from "../core/transport/graphql.js";
+import { authorizationHeader } from "../core/transport/graphql.js";
 import type { FetchLike, GraphQLErrorPayload } from "../core/transport/graphql.js";
-import { resolveStoredProfile } from "../core/auth/runtime.js";
 import { emitDryRunResult } from "../core/output/dry-run.js";
+import { CommandContext } from "../core/runtime/command-context.js";
 
 export interface FileCommandOptions {
   json: boolean;
@@ -22,6 +20,9 @@ export interface FileCommandOptions {
   issue?: string;
   output?: string;
   expiresIn?: string;
+  // retry flags
+  noRetry?: boolean;
+  maxRetries?: number;
 }
 
 const CONTENT_TYPE_MAP: Record<string, string> = {
@@ -116,17 +117,26 @@ interface AttachmentUrlResponse {
   } | null;
 }
 
-function hasErrors(errors: GraphQLErrorPayload[] | undefined): boolean {
-  return Array.isArray(errors) && errors.length > 0;
-}
-
-function mapGraphQLErrors(
-  errors: GraphQLErrorPayload[] | undefined
-): Array<{ category: "general"; message: string }> {
-  if (!Array.isArray(errors)) {
-    return [];
-  }
-  return errors.map((e) => ({ category: "general" as const, message: e.message }));
+/** Build a CommandContext from file handler options */
+function buildContext(options: FileCommandOptions): CommandContext {
+  return new CommandContext({
+    json: options.json,
+    jsonEnvelope: options.jsonEnvelope,
+    ...(options.profile === undefined ? {} : { profile: options.profile }),
+    configFile: options.configFile,
+    credentialsFile: options.credentialsFile,
+    ...(options.apiUrl === undefined ? {} : { apiUrl: options.apiUrl }),
+    env: options.env,
+    ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl }),
+    ...(options.noRetry === true || options.maxRetries !== undefined
+      ? {
+          retry: {
+            ...(options.noRetry === true ? { noRetry: true } : {}),
+            ...(options.maxRetries !== undefined ? { maxRetries: options.maxRetries } : {}),
+          },
+        }
+      : {}),
+  });
 }
 
 async function handleFileUpload(
@@ -154,42 +164,21 @@ async function handleFileUpload(
 
   const size = fileBytes.length;
 
-  try {
-    const profile = await resolveStoredProfile({
-      paths: {
-        configFile: options.configFile,
-        credentialsFile: options.credentialsFile
-      },
-      ...(options.profile === undefined ? {} : { explicitProfile: options.profile }),
-      env: options.env
-    });
+  const ctx = buildContext(options);
 
+  try {
     const fetchImpl = options.fetchImpl ?? fetch;
 
-    const uploadResponse = await executeGraphQL<FileUploadResponse>({
-      query: FILE_UPLOAD_MUTATION,
-      variables: { contentType, filename: fileName, size },
-      credentials: profile.credentials,
-      ...(options.apiUrl === undefined
-        ? profile.metadata.baseUrl === undefined
-          ? {}
-          : { apiUrl: profile.metadata.baseUrl }
-        : { apiUrl: options.apiUrl }),
-      ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl })
-    });
+    const uploadResponse = await ctx.graphql<FileUploadResponse>(
+      FILE_UPLOAD_MUTATION,
+      { contentType, filename: fileName, size }
+    );
 
-    if (hasErrors(uploadResponse.body.errors) || uploadResponse.body.data?.fileUpload === undefined) {
-      const errors = mapGraphQLErrors(uploadResponse.body.errors);
-      if (options.jsonEnvelope) {
-        const envelope = failureEnvelope(
-          errors.length > 0 ? errors : [{ category: "general", message: "File upload request failed" }],
-          { sourceLayer: "curated", profile: profile.name }
-        );
-        process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
-      } else {
-        process.stderr.write(`Error: ${errors[0]?.message ?? "File upload request failed"}\n`);
-      }
-      return ExitCode.GeneralError;
+    if (ctx.hasErrors(uploadResponse.body.errors) || uploadResponse.body.data?.fileUpload === undefined) {
+      const errors = ctx.mapGraphQLErrors(uploadResponse.body.errors);
+      return ctx.emitFailure(
+        errors.length > 0 ? errors : [{ category: "general", message: "File upload request failed" }]
+      );
     }
 
     const { uploadUrl, assetUrl, headers } = uploadResponse.body.data.fileUpload;
@@ -206,17 +195,7 @@ async function handleFileUpload(
     });
 
     if (!putResponse.ok) {
-      const message = `File PUT failed with HTTP ${putResponse.status}`;
-      if (options.jsonEnvelope) {
-        const envelope = failureEnvelope(
-          [{ category: "general", message }],
-          { sourceLayer: "curated", profile: profile.name }
-        );
-        process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
-      } else {
-        process.stderr.write(`Error: ${message}\n`);
-      }
-      return ExitCode.GeneralError;
+      return ctx.emitFailure([{ category: "general", message: `File PUT failed with HTTP ${putResponse.status}` }]);
     }
 
     const result: Record<string, unknown> = {
@@ -227,40 +206,26 @@ async function handleFileUpload(
     };
 
     if (options.issue !== undefined) {
-      const attachResponse = await executeGraphQL<AttachmentCreateResponse>({
-        query: ATTACHMENT_CREATE_MUTATION,
-        variables: {
+      const attachResponse = await ctx.graphql<AttachmentCreateResponse>(
+        ATTACHMENT_CREATE_MUTATION,
+        {
           input: {
             issueId: options.issue,
             url: assetUrl,
             title: fileName
           }
-        },
-        credentials: profile.credentials,
-        ...(options.apiUrl === undefined
-          ? profile.metadata.baseUrl === undefined
-            ? {}
-            : { apiUrl: profile.metadata.baseUrl }
-          : { apiUrl: options.apiUrl }),
-        ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl })
-      });
+        }
+      );
 
       if (
-        hasErrors(attachResponse.body.errors) ||
+        ctx.hasErrors(attachResponse.body.errors) ||
         attachResponse.body.data?.attachmentCreate?.attachment === null ||
         attachResponse.body.data?.attachmentCreate?.attachment === undefined
       ) {
-        const errors = mapGraphQLErrors(attachResponse.body.errors);
-        if (options.jsonEnvelope) {
-          const envelope = failureEnvelope(
-            errors.length > 0 ? errors : [{ category: "general", message: "Attachment creation failed" }],
-            { sourceLayer: "curated", profile: profile.name }
-          );
-          process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
-        } else {
-          process.stderr.write(`Error: ${errors[0]?.message ?? "Attachment creation failed"}\n`);
-        }
-        return ExitCode.GeneralError;
+        const errors = ctx.mapGraphQLErrors(attachResponse.body.errors);
+        return ctx.emitFailure(
+          errors.length > 0 ? errors : [{ category: "general", message: "Attachment creation failed" }]
+        );
       }
 
       const att = attachResponse.body.data.attachmentCreate.attachment;
@@ -269,8 +234,7 @@ async function handleFileUpload(
     }
 
     if (options.jsonEnvelope) {
-      const envelope = successEnvelope(result, { sourceLayer: "curated", profile: profile.name });
-      process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
+      return ctx.emitSuccess(result);
     } else if (options.json) {
       process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     } else {
@@ -284,19 +248,7 @@ async function handleFileUpload(
 
     return ExitCode.Success;
   } catch (error) {
-    const failure = mapCommandFailure(error);
-
-    if (options.jsonEnvelope) {
-      const envelope = failureEnvelope([failure.error], {
-        sourceLayer: "curated",
-        ...(options.profile === undefined ? {} : { profile: options.profile })
-      });
-      process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
-    } else {
-      process.stderr.write(`Error: ${failure.error.message}\n`);
-    }
-
-    return failure.exitCode;
+    return ctx.emitCaughtError(error);
   }
 }
 
@@ -313,20 +265,14 @@ async function handleFileUrl(
     expiresIn = parsed;
   }
 
+  const ctx = buildContext(options);
+
   try {
-    const profile = await resolveStoredProfile({
-      paths: {
-        configFile: options.configFile,
-        credentialsFile: options.credentialsFile
-      },
-      ...(options.profile === undefined ? {} : { explicitProfile: options.profile }),
-      env: options.env
-    });
-
+    const profile = await ctx.resolveProfile();
     const fetchImpl = options.fetchImpl ?? fetch;
-
     const apiUrl = options.apiUrl ?? profile.metadata.baseUrl ?? "https://api.linear.app/graphql";
 
+    // Custom fetch with special header — cannot use ctx.graphql() here
     const response = await fetchImpl(apiUrl, {
       method: "POST",
       headers: {
@@ -342,40 +288,23 @@ async function handleFileUrl(
 
     const responseText = await response.text();
     if (!response.ok) {
-      const message = `GraphQL request failed with HTTP ${response.status}`;
-      if (options.jsonEnvelope) {
-        const envelope = failureEnvelope(
-          [{ category: "general", message }],
-          { sourceLayer: "curated", profile: profile.name }
-        );
-        process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
-      } else {
-        process.stderr.write(`Error: ${message}\n`);
-      }
-      return ExitCode.GeneralError;
+      return ctx.emitFailure([{ category: "general", message: `GraphQL request failed with HTTP ${response.status}` }]);
     }
 
     const body = JSON.parse(responseText) as { data?: AttachmentUrlResponse; errors?: GraphQLErrorPayload[] };
 
-    if (hasErrors(body.errors) || body.data?.attachment === null || body.data?.attachment === undefined) {
-      const errors = mapGraphQLErrors(body.errors);
-      if (options.jsonEnvelope) {
-        const envelope = failureEnvelope(
-          errors.length > 0 ? errors : [{ category: "not-found", message: "Attachment not found" }],
-          { sourceLayer: "curated", profile: profile.name }
-        );
-        process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
-      } else {
-        process.stderr.write(`Error: ${errors[0]?.message ?? "Attachment not found"}\n`);
+    if (ctx.hasErrors(body.errors) || body.data?.attachment === null || body.data?.attachment === undefined) {
+      const errors = ctx.mapGraphQLErrors(body.errors);
+      if (errors.length > 0) {
+        return ctx.emitFailure(errors);
       }
-      return hasErrors(body.errors) ? ExitCode.GeneralError : ExitCode.NotFound;
+      return ctx.emitNotFound("Attachment not found");
     }
 
     const result = { url: body.data.attachment.url, expiresIn };
 
     if (options.jsonEnvelope) {
-      const envelope = successEnvelope(result, { sourceLayer: "curated", profile: profile.name });
-      process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
+      return ctx.emitSuccess(result);
     } else if (options.json) {
       process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     } else {
@@ -384,19 +313,7 @@ async function handleFileUrl(
 
     return ExitCode.Success;
   } catch (error) {
-    const failure = mapCommandFailure(error);
-
-    if (options.jsonEnvelope) {
-      const envelope = failureEnvelope([failure.error], {
-        sourceLayer: "curated",
-        ...(options.profile === undefined ? {} : { profile: options.profile })
-      });
-      process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
-    } else {
-      process.stderr.write(`Error: ${failure.error.message}\n`);
-    }
-
-    return failure.exitCode;
+    return ctx.emitCaughtError(error);
   }
 }
 
@@ -416,16 +333,10 @@ async function handleFileDownload(
     return emitValidationError("invalid URL.", options);
   }
 
-  try {
-    const profile = await resolveStoredProfile({
-      paths: {
-        configFile: options.configFile,
-        credentialsFile: options.credentialsFile
-      },
-      ...(options.profile === undefined ? {} : { explicitProfile: options.profile }),
-      env: options.env
-    });
+  const ctx = buildContext(options);
 
+  try {
+    const profile = await ctx.resolveProfile();
     const fetchImpl = options.fetchImpl ?? fetch;
 
     const response = await fetchImpl(downloadUrl, {
@@ -436,17 +347,7 @@ async function handleFileDownload(
     });
 
     if (!response.ok) {
-      const message = `Download failed with HTTP ${response.status}`;
-      if (options.jsonEnvelope) {
-        const envelope = failureEnvelope(
-          [{ category: "general", message }],
-          { sourceLayer: "curated", profile: profile.name }
-        );
-        process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
-      } else {
-        process.stderr.write(`Error: ${message}\n`);
-      }
-      return ExitCode.GeneralError;
+      return ctx.emitFailure([{ category: "general", message: `Download failed with HTTP ${response.status}` }]);
     }
 
     const arrayBuffer = await response.arrayBuffer();
@@ -461,8 +362,7 @@ async function handleFileDownload(
     const result = { path: outputPath, size: bytes.length };
 
     if (options.jsonEnvelope) {
-      const envelope = successEnvelope(result, { sourceLayer: "curated", profile: profile.name });
-      process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
+      return ctx.emitSuccess(result);
     } else if (options.json) {
       process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     } else {
@@ -471,19 +371,7 @@ async function handleFileDownload(
 
     return ExitCode.Success;
   } catch (error) {
-    const failure = mapCommandFailure(error);
-
-    if (options.jsonEnvelope) {
-      const envelope = failureEnvelope([failure.error], {
-        sourceLayer: "curated",
-        ...(options.profile === undefined ? {} : { profile: options.profile })
-      });
-      process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
-    } else {
-      process.stderr.write(`Error: ${failure.error.message}\n`);
-    }
-
-    return failure.exitCode;
+    return ctx.emitCaughtError(error);
   }
 }
 
