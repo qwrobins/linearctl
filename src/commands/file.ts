@@ -3,7 +3,7 @@ import { basename, resolve } from "node:path";
 import { ExitCode } from "../core/errors/exit-codes.js";
 import { emitValidationError } from "../core/output/validation-error.js";
 import { authorizationHeader } from "../core/transport/graphql.js";
-import type { FetchLike, GraphQLErrorPayload } from "../core/transport/graphql.js";
+import type { FetchLike } from "../core/transport/graphql.js";
 import { emitDryRunResult } from "../core/output/dry-run.js";
 import { CommandContext } from "../core/runtime/command-context.js";
 
@@ -285,17 +285,15 @@ async function handleFileUrl(
       { id: attachmentId }
     );
 
-    const body = response.body as { data?: AttachmentUrlResponse; errors?: GraphQLErrorPayload[] };
-
-    if (ctx.hasErrors(body.errors) || body.data?.attachment === null || body.data?.attachment === undefined) {
-      const errors = ctx.mapGraphQLErrors(body.errors);
+    if (ctx.hasErrors(response.body.errors) || response.body.data?.attachment === null || response.body.data?.attachment === undefined) {
+      const errors = ctx.mapGraphQLErrors(response.body.errors);
       if (errors.length > 0) {
         return ctx.emitFailure(errors);
       }
       return ctx.emitNotFound("Attachment not found");
     }
 
-    const result = { url: body.data.attachment.url, expiresIn };
+    const result = { url: response.body.data.attachment.url, expiresIn };
 
     if (options.jsonEnvelope) {
       return ctx.emitSuccess(result);

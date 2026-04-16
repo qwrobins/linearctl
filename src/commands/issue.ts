@@ -2,7 +2,7 @@ import { emitValidationError } from "../core/output/validation-error.js";
 import { failureEnvelope, successEnvelope } from "../core/output/envelope.js";
 import type { PageInfo } from "../core/output/envelope.js";
 import { ExitCode } from "../core/errors/exit-codes.js";
-import type { FetchLike, GraphQLErrorPayload } from "../core/transport/graphql.js";
+import type { FetchLike } from "../core/transport/graphql.js";
 import { paginateGraphQL, validatePaginationOptions } from "../core/pagination/pagination.js";
 import type { PaginationOptions } from "../core/pagination/pagination.js";
 import { streamPaginateGraphQL } from "../core/pagination/streaming.js";
@@ -1186,7 +1186,7 @@ async function handleBulkUpdate(options: IssueCommandOptions): Promise<number> {
         }>(ISSUE_UPDATE_MUTATION, { id, input });
 
         if (
-          hasErrors(response.body.errors) ||
+          ctx.hasErrors(response.body.errors) ||
           response.body.data?.issueUpdate?.issue === null ||
           response.body.data?.issueUpdate?.issue === undefined
         ) {
@@ -1224,7 +1224,7 @@ async function handleBulkClose(options: IssueCommandOptions): Promise<number> {
         }>(ISSUE_ARCHIVE_MUTATION, { id });
 
         if (
-          hasErrors(response.body.errors) ||
+          ctx.hasErrors(response.body.errors) ||
           response.body.data?.issueArchive?.success !== true
         ) {
           throw new Error(response.body.errors?.[0]?.message ?? "Issue archive failed");
@@ -1269,7 +1269,7 @@ async function handleBulkAssign(options: IssueCommandOptions): Promise<number> {
         }>(ISSUE_UPDATE_MUTATION, { id, input: { assigneeId } });
 
         if (
-          hasErrors(response.body.errors) ||
+          ctx.hasErrors(response.body.errors) ||
           response.body.data?.issueUpdate?.issue === null ||
           response.body.data?.issueUpdate?.issue === undefined
         ) {
@@ -1493,6 +1493,3 @@ export async function handleIssueCommand(
   return emitValidationError("unsupported issue command. Try: get, create, list, search, update, close, assign, comment, attach-slack, bulk-update, bulk-close, bulk-assign.", options);
 }
 
-function hasErrors(errors: GraphQLErrorPayload[] | undefined): boolean {
-  return Array.isArray(errors) && errors.length > 0;
-}
