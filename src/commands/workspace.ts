@@ -1,7 +1,7 @@
-import { successEnvelope } from "../core/output/envelope.js";
 import { ExitCode } from "../core/errors/exit-codes.js";
 import { loadOptionalConfig, loadOptionalCredentials } from "../core/auth/runtime.js";
 import type { FetchLike } from "../core/transport/graphql.js";
+import { CommandContext } from "../core/runtime/command-context.js";
 
 export interface WorkspaceCommandOptions {
   json: boolean;
@@ -10,6 +10,9 @@ export interface WorkspaceCommandOptions {
   credentialsFile: string;
   env: Record<string, string | undefined>;
   fetchImpl?: FetchLike;
+  // retry flags
+  noRetry?: boolean;
+  maxRetries?: number;
 }
 
 interface WorkspaceListEntry {
@@ -22,6 +25,26 @@ interface WorkspaceListEntry {
 
 interface WorkspaceListResult {
   workspaces: WorkspaceListEntry[];
+}
+
+/** Build a CommandContext from workspace handler options */
+function buildContext(options: WorkspaceCommandOptions): CommandContext {
+  return new CommandContext({
+    json: options.json,
+    jsonEnvelope: options.jsonEnvelope,
+    configFile: options.configFile,
+    credentialsFile: options.credentialsFile,
+    env: options.env,
+    ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl }),
+    ...(options.noRetry === true || options.maxRetries !== undefined
+      ? {
+          retry: {
+            ...(options.noRetry === true ? { noRetry: true } : {}),
+            ...(options.maxRetries !== undefined ? { maxRetries: options.maxRetries } : {}),
+          },
+        }
+      : {}),
+  });
 }
 
 async function handleWorkspaceList(options: WorkspaceCommandOptions): Promise<number> {
@@ -50,9 +73,10 @@ async function handleWorkspaceList(options: WorkspaceCommandOptions): Promise<nu
 
   const result: WorkspaceListResult = { workspaces };
 
+  const ctx = buildContext(options);
+
   if (options.jsonEnvelope) {
-    const envelope = successEnvelope(result, { sourceLayer: "curated" });
-    process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
+    return ctx.emitSuccess(result);
   } else if (options.json) {
     process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
   } else {

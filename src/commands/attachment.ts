@@ -1,15 +1,12 @@
 import { emitValidationError } from "../core/output/validation-error.js";
-import { failureEnvelope, successEnvelope } from "../core/output/envelope.js";
 import type { PageInfo } from "../core/output/envelope.js";
-import { mapCommandFailure } from "../core/errors/command-failure.js";
 import { ExitCode } from "../core/errors/exit-codes.js";
-import { executeGraphQL } from "../core/transport/graphql.js";
 import type { FetchLike, GraphQLErrorPayload } from "../core/transport/graphql.js";
-import { resolveStoredProfile } from "../core/auth/runtime.js";
 import { paginateGraphQL, validatePaginationOptions } from "../core/pagination/pagination.js";
 import type { PaginationOptions } from "../core/pagination/pagination.js";
 import { streamPaginateGraphQL } from "../core/pagination/streaming.js";
 import { emitDryRunResult } from "../core/output/dry-run.js";
+import { CommandContext } from "../core/runtime/command-context.js";
 
 export interface AttachmentCommandOptions {
   json: boolean;
@@ -30,6 +27,9 @@ export interface AttachmentCommandOptions {
   pageSize?: number;
   after?: string;
   quiet?: boolean;
+  // retry flags
+  noRetry?: boolean;
+  maxRetries?: number;
 }
 
 interface RawAttachment {
@@ -127,6 +127,28 @@ function printHumanAttachment(attachment: NormalizedAttachment): void {
   process.stdout.write(`  URL:     ${attachment.url}\n`);
 }
 
+/** Build a CommandContext from attachment handler options */
+function buildContext(options: AttachmentCommandOptions): CommandContext {
+  return new CommandContext({
+    json: options.json,
+    jsonEnvelope: options.jsonEnvelope,
+    ...(options.profile === undefined ? {} : { profile: options.profile }),
+    configFile: options.configFile,
+    credentialsFile: options.credentialsFile,
+    ...(options.apiUrl === undefined ? {} : { apiUrl: options.apiUrl }),
+    env: options.env,
+    ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl }),
+    ...(options.noRetry === true || options.maxRetries !== undefined
+      ? {
+          retry: {
+            ...(options.noRetry === true ? { noRetry: true } : {}),
+            ...(options.maxRetries !== undefined ? { maxRetries: options.maxRetries } : {}),
+          },
+        }
+      : {}),
+  });
+}
+
 async function handleAttachmentList(options: AttachmentCommandOptions): Promise<number> {
   if (options.issue === undefined) {
     return emitValidationError("--issue is required for attachment list.", options);
@@ -145,15 +167,10 @@ async function handleAttachmentList(options: AttachmentCommandOptions): Promise<
     return emitValidationError(validationError, options);
   }
 
+  const ctx = buildContext(options);
+
   try {
-    const profile = await resolveStoredProfile({
-      paths: {
-        configFile: options.configFile,
-        credentialsFile: options.credentialsFile
-      },
-      ...(options.profile === undefined ? {} : { explicitProfile: options.profile }),
-      env: options.env
-    });
+    const profile = await ctx.resolveProfile();
 
     const paginateInput = {
       query: ATTACHMENT_LIST_QUERY,
@@ -188,11 +205,7 @@ async function handleAttachmentList(options: AttachmentCommandOptions): Promise<
       const attachments = result.items.map(normalizeAttachment);
 
       if (options.jsonEnvelope) {
-        const envelope = successEnvelope(attachments, {
-          sourceLayer: "curated",
-          profile: profile.name
-        }, result.pageInfo);
-        process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
+        return ctx.emitSuccess(attachments, result.pageInfo);
       } else if (options.json) {
         process.stdout.write(`${JSON.stringify(attachments, null, 2)}\n`);
       } else {
@@ -207,19 +220,7 @@ async function handleAttachmentList(options: AttachmentCommandOptions): Promise<
 
     return ExitCode.Success;
   } catch (error) {
-    const failure = mapCommandFailure(error);
-
-    if (options.jsonEnvelope) {
-      const envelope = failureEnvelope([failure.error], {
-        sourceLayer: "curated",
-        ...(options.profile === undefined ? {} : { profile: options.profile })
-      });
-      process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
-    } else {
-      process.stderr.write(`Error: ${failure.error.message}\n`);
-    }
-
-    return failure.exitCode;
+    return ctx.emitCaughtError(error);
   }
 }
 
@@ -249,55 +250,29 @@ async function handleAttachmentCreate(options: AttachmentCommandOptions): Promis
     return emitDryRunResult("create", "attachment", { issueId: options.issue, url: options.url, title: options.title }, options);
   }
 
-  try {
-    const profile = await resolveStoredProfile({
-      paths: {
-        configFile: options.configFile,
-        credentialsFile: options.credentialsFile
-      },
-      ...(options.profile === undefined ? {} : { explicitProfile: options.profile }),
-      env: options.env
-    });
+  const ctx = buildContext(options);
 
-    const response = await executeGraphQL<{
+  try {
+    const response = await ctx.graphql<{
       attachmentCreate: { success: boolean; attachment: RawAttachment | null };
-    }>({
-      query: ATTACHMENT_CREATE_MUTATION,
-      variables: { input: { issueId: options.issue, url: options.url, title: options.title } },
-      credentials: profile.credentials,
-      ...(options.apiUrl === undefined
-        ? profile.metadata.baseUrl === undefined
-          ? {}
-          : { apiUrl: profile.metadata.baseUrl }
-        : { apiUrl: options.apiUrl }),
-      ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl })
-    });
+    }>(ATTACHMENT_CREATE_MUTATION, { input: { issueId: options.issue, url: options.url, title: options.title } });
 
     if (
-      hasErrors(response.body.errors) ||
+      ctx.hasErrors(response.body.errors) ||
       response.body.data?.attachmentCreate?.success !== true ||
       response.body.data?.attachmentCreate?.attachment === null ||
       response.body.data?.attachmentCreate?.attachment === undefined
     ) {
-      if (options.jsonEnvelope) {
-        const errors = mapGraphQLErrors(response.body.errors);
-        const envelope = failureEnvelope(
-          errors.length > 0 ? errors : [{ category: "general", message: "Attachment creation failed" }],
-          { sourceLayer: "curated", profile: profile.name }
-        );
-        process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
-      } else {
-        const errorMessage = response.body.errors?.[0]?.message ?? "Attachment creation failed";
-        process.stderr.write(`Error: ${errorMessage}\n`);
-      }
-      return ExitCode.GeneralError;
+      const errors = ctx.mapGraphQLErrors(response.body.errors);
+      return ctx.emitFailure(
+        errors.length > 0 ? errors : [{ category: "general", message: "Attachment creation failed" }]
+      );
     }
 
     const attachment = normalizeAttachment(response.body.data.attachmentCreate.attachment);
 
     if (options.jsonEnvelope) {
-      const envelope = successEnvelope(attachment, { sourceLayer: "curated", profile: profile.name });
-      process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
+      return ctx.emitSuccess(attachment);
     } else if (options.json) {
       process.stdout.write(`${JSON.stringify(attachment, null, 2)}\n`);
     } else {
@@ -307,19 +282,7 @@ async function handleAttachmentCreate(options: AttachmentCommandOptions): Promis
 
     return ExitCode.Success;
   } catch (error) {
-    const failure = mapCommandFailure(error);
-
-    if (options.jsonEnvelope) {
-      const envelope = failureEnvelope([failure.error], {
-        sourceLayer: "curated",
-        ...(options.profile === undefined ? {} : { profile: options.profile })
-      });
-      process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
-    } else {
-      process.stderr.write(`Error: ${failure.error.message}\n`);
-    }
-
-    return failure.exitCode;
+    return ctx.emitCaughtError(error);
   }
 }
 
@@ -328,53 +291,27 @@ async function handleAttachmentDelete(attachmentId: string, options: AttachmentC
     return emitDryRunResult("delete", "attachment", { id: attachmentId }, options);
   }
 
-  try {
-    const profile = await resolveStoredProfile({
-      paths: {
-        configFile: options.configFile,
-        credentialsFile: options.credentialsFile
-      },
-      ...(options.profile === undefined ? {} : { explicitProfile: options.profile }),
-      env: options.env
-    });
+  const ctx = buildContext(options);
 
-    const response = await executeGraphQL<{
+  try {
+    const response = await ctx.graphql<{
       attachmentDelete: { success: boolean };
-    }>({
-      query: ATTACHMENT_DELETE_MUTATION,
-      variables: { id: attachmentId },
-      credentials: profile.credentials,
-      ...(options.apiUrl === undefined
-        ? profile.metadata.baseUrl === undefined
-          ? {}
-          : { apiUrl: profile.metadata.baseUrl }
-        : { apiUrl: options.apiUrl }),
-      ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl })
-    });
+    }>(ATTACHMENT_DELETE_MUTATION, { id: attachmentId });
 
     if (
-      hasErrors(response.body.errors) ||
+      ctx.hasErrors(response.body.errors) ||
       !response.body.data?.attachmentDelete?.success
     ) {
-      if (options.jsonEnvelope) {
-        const errors = mapGraphQLErrors(response.body.errors);
-        const envelope = failureEnvelope(
-          errors.length > 0 ? errors : [{ category: "general", message: "Attachment deletion failed" }],
-          { sourceLayer: "curated", profile: profile.name }
-        );
-        process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
-      } else {
-        const errorMessage = response.body.errors?.[0]?.message ?? "Attachment deletion failed";
-        process.stderr.write(`Error: ${errorMessage}\n`);
-      }
-      return ExitCode.GeneralError;
+      const errors = ctx.mapGraphQLErrors(response.body.errors);
+      return ctx.emitFailure(
+        errors.length > 0 ? errors : [{ category: "general", message: "Attachment deletion failed" }]
+      );
     }
 
     const result = { id: attachmentId, deleted: true };
 
     if (options.jsonEnvelope) {
-      const envelope = successEnvelope(result, { sourceLayer: "curated", profile: profile.name });
-      process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
+      return ctx.emitSuccess(result);
     } else if (options.json) {
       process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     } else {
@@ -383,19 +320,7 @@ async function handleAttachmentDelete(attachmentId: string, options: AttachmentC
 
     return ExitCode.Success;
   } catch (error) {
-    const failure = mapCommandFailure(error);
-
-    if (options.jsonEnvelope) {
-      const envelope = failureEnvelope([failure.error], {
-        sourceLayer: "curated",
-        ...(options.profile === undefined ? {} : { profile: options.profile })
-      });
-      process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
-    } else {
-      process.stderr.write(`Error: ${failure.error.message}\n`);
-    }
-
-    return failure.exitCode;
+    return ctx.emitCaughtError(error);
   }
 }
 

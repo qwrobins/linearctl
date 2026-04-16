@@ -12,6 +12,7 @@ export * from "./core/registry/types.js";
 export * from "./core/registry/option-catalog.js";
 export * from "./core/registry/commands.js";
 export * from "./core/registry/help.js";
+export * from "./core/registry/option-mapping.js";
 export * from "./core/runtime/command-context.js";
 export * from "./core/runtime/workflow.js";
 export * from "./core/output/envelope.js";

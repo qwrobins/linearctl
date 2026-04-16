@@ -21,21 +21,8 @@ import { handleStateCommand } from "../../commands/state.js";
 import { handleWorkspaceCommand } from "../../commands/workspace.js";
 import { handleSkillsCommand } from "../../commands/skills.js";
 import { OPTION_GROUPS } from "./option-catalog.js";
+import { baseOptions, curatedOptions, paginationOptions, teamFilterOptions, pickFields } from "./option-mapping.js";
 import type { CommandRegistration, ParsedCliArguments } from "./types.js";
-
-// Helper to spread optional fields without cluttering every buildOptions
-function optionalString(value: string | undefined, key: string): Record<string, string> {
-  return value === undefined ? {} : { [key]: value };
-}
-
-function optionalNumber(value: number | undefined, key: string): Record<string, number> {
-  return value === undefined ? {} : { [key]: value };
-}
-
-function optionalBool(value: boolean | undefined, key: string): Record<string, boolean> {
-  if (value === undefined || value === false) return {};
-  return { [key]: value };
-}
 
 // Common option key sets composed from groups
 const CURATED_BASE = [
@@ -73,38 +60,15 @@ export const COMMAND_REGISTRY: readonly CommandRegistration[] = [
       "bulk-assign":  { usage: "linearctl issue bulk-assign --ids <id1,id2,...> --assignee <id> [--json]" },
     },
     handler: handleIssueCommand,
-    buildOptions: (args: ParsedCliArguments, env: NodeJS.ProcessEnv) => ({
-      json: args.json, sync: args.sync, dryRun: args.dryRun, quiet: args.quiet,
-      allTeams: args.allTeams, jsonEnvelope: args.jsonEnvelope, jsonl: args.jsonl,
-      ...optionalString(args.profile, "profile"),
-      configFile: args.configFile, credentialsFile: args.credentialsFile,
-      ...optionalString(args.apiUrl, "apiUrl"),
-      ...optionalString(args.title, "title"),
-      ...optionalString(args.team, "team"),
-      ...optionalString(args.description, "description"),
-      ...optionalString(args.priority, "priority"),
-      ...optionalString(args.estimate, "estimate"),
-      ...optionalString(args.assignee, "assignee"),
-      ...optionalString(args.label, "label"),
-      ...optionalString(args.state, "state"),
-      ...optionalString(args.inputJson, "inputJson"),
-      ...optionalString(args.ids, "ids"),
-      ...optionalString(args.body, "body"),
-      ...optionalString(args.url, "url"),
-      ...optionalString(args.query, "query"),
-      ...optionalString(args.filterJson, "filterJson"),
-      ...optionalString(args.createdAfter, "createdAfter"),
-      ...optionalString(args.updatedAfter, "updatedAfter"),
-      ...optionalString(args.completedAfter, "completedAfter"),
-      ...optionalString(args.cycle, "cycle"),
-      ...optionalString(args.project, "project"),
-      ...optionalString(args.orderBy, "orderBy"),
-      ...optionalString(args.orderDir, "orderDir"),
-      ...optionalBool(args.all, "all"),
-      ...optionalNumber(args.max, "max"),
-      ...optionalNumber(args.pageSize, "pageSize"),
-      ...optionalString(args.after, "after"),
-      env,
+    buildOptions: (args, env) => ({
+      ...curatedOptions(args, env),
+      ...paginationOptions(args),
+      ...teamFilterOptions(args),
+      sync: args.sync,
+      ...pickFields(args, "title", "description", "priority", "estimate", "assignee",
+        "label", "state", "inputJson", "ids", "body", "url", "query",
+        "filterJson", "createdAfter", "updatedAfter", "completedAfter",
+        "cycle", "project", "orderBy", "orderDir"),
     }),
   },
 
@@ -125,22 +89,11 @@ export const COMMAND_REGISTRY: readonly CommandRegistration[] = [
       delete:               { usage: "linearctl project delete <id> [--json]" },
     },
     handler: handleProjectCommand,
-    buildOptions: (args: ParsedCliArguments, env: NodeJS.ProcessEnv) => ({
-      json: args.json, dryRun: args.dryRun, quiet: args.quiet,
-      allTeams: args.allTeams, jsonEnvelope: args.jsonEnvelope, jsonl: args.jsonl,
-      ...optionalString(args.profile, "profile"),
-      configFile: args.configFile, credentialsFile: args.credentialsFile,
-      ...optionalString(args.apiUrl, "apiUrl"),
-      ...optionalString(args.name, "name"),
-      ...optionalString(args.description, "description"),
-      ...optionalString(args.team, "team"),
-      ...optionalString(args.state, "state"),
-      ...optionalString(args.issuesJson, "issuesJson"),
-      all: args.all,
-      ...optionalNumber(args.max, "max"),
-      ...optionalNumber(args.pageSize, "pageSize"),
-      ...optionalString(args.after, "after"),
-      env,
+    buildOptions: (args, env) => ({
+      ...curatedOptions(args, env),
+      ...paginationOptions(args),
+      ...teamFilterOptions(args),
+      ...pickFields(args, "name", "description", "state", "issuesJson"),
     }),
   },
 
@@ -160,22 +113,11 @@ export const COMMAND_REGISTRY: readonly CommandRegistration[] = [
       update:  { usage: "linearctl cycle update <id> [--name ...] [--starts-at ...] [--ends-at ...] [--json]" },
     },
     handler: handleCycleCommand,
-    buildOptions: (args: ParsedCliArguments, env: NodeJS.ProcessEnv) => ({
-      json: args.json, dryRun: args.dryRun, quiet: args.quiet,
-      allTeams: args.allTeams, jsonEnvelope: args.jsonEnvelope, jsonl: args.jsonl,
-      ...optionalString(args.profile, "profile"),
-      configFile: args.configFile, credentialsFile: args.credentialsFile,
-      ...optionalString(args.apiUrl, "apiUrl"),
-      ...optionalString(args.name, "name"),
-      ...optionalString(args.description, "description"),
-      ...optionalString(args.team, "team"),
-      ...optionalString(args.startsAt, "startsAt"),
-      ...optionalString(args.endsAt, "endsAt"),
-      all: args.all,
-      ...optionalNumber(args.max, "max"),
-      ...optionalNumber(args.pageSize, "pageSize"),
-      ...optionalString(args.after, "after"),
-      env,
+    buildOptions: (args, env) => ({
+      ...curatedOptions(args, env),
+      ...paginationOptions(args),
+      ...teamFilterOptions(args),
+      ...pickFields(args, "name", "description", "startsAt", "endsAt"),
     }),
   },
 
@@ -194,17 +136,11 @@ export const COMMAND_REGISTRY: readonly CommandRegistration[] = [
       list: { usage: "linearctl team list [--json]" },
     },
     handler: handleTeamCommand,
-    buildOptions: (args: ParsedCliArguments, env: NodeJS.ProcessEnv) => ({
-      json: args.json, jsonEnvelope: args.jsonEnvelope, jsonl: args.jsonl, quiet: args.quiet,
-      ...optionalString(args.profile, "profile"),
-      configFile: args.configFile, credentialsFile: args.credentialsFile,
-      ...optionalString(args.apiUrl, "apiUrl"),
+    buildOptions: (args, env) => ({
+      ...baseOptions(args, env),
+      jsonl: args.jsonl, quiet: args.quiet,
       setDefault: args.setDefault,
-      ...optionalBool(args.all, "all"),
-      ...optionalNumber(args.max, "max"),
-      ...optionalNumber(args.pageSize, "pageSize"),
-      ...optionalString(args.after, "after"),
-      env,
+      ...paginationOptions(args),
     }),
   },
 
@@ -223,16 +159,10 @@ export const COMMAND_REGISTRY: readonly CommandRegistration[] = [
       list: { usage: "linearctl user list [--json]" },
     },
     handler: handleUserCommand,
-    buildOptions: (args: ParsedCliArguments, env: NodeJS.ProcessEnv) => ({
-      json: args.json, jsonEnvelope: args.jsonEnvelope, jsonl: args.jsonl, quiet: args.quiet,
-      ...optionalString(args.profile, "profile"),
-      configFile: args.configFile, credentialsFile: args.credentialsFile,
-      ...optionalString(args.apiUrl, "apiUrl"),
-      ...optionalBool(args.all, "all"),
-      ...optionalNumber(args.max, "max"),
-      ...optionalNumber(args.pageSize, "pageSize"),
-      ...optionalString(args.after, "after"),
-      env,
+    buildOptions: (args, env) => ({
+      ...baseOptions(args, env),
+      jsonl: args.jsonl, quiet: args.quiet,
+      ...paginationOptions(args),
     }),
   },
 
@@ -251,21 +181,11 @@ export const COMMAND_REGISTRY: readonly CommandRegistration[] = [
       delete: { usage: "linearctl label delete <id> [--json]" },
     },
     handler: handleLabelCommand,
-    buildOptions: (args: ParsedCliArguments, env: NodeJS.ProcessEnv) => ({
-      json: args.json, dryRun: args.dryRun, quiet: args.quiet,
-      allTeams: args.allTeams, jsonEnvelope: args.jsonEnvelope, jsonl: args.jsonl,
-      ...optionalString(args.profile, "profile"),
-      configFile: args.configFile, credentialsFile: args.credentialsFile,
-      ...optionalString(args.apiUrl, "apiUrl"),
-      ...optionalString(args.name, "name"),
-      ...optionalString(args.description, "description"),
-      ...optionalString(args.color, "color"),
-      ...optionalString(args.team, "team"),
-      ...optionalBool(args.all, "all"),
-      ...optionalNumber(args.max, "max"),
-      ...optionalNumber(args.pageSize, "pageSize"),
-      ...optionalString(args.after, "after"),
-      env,
+    buildOptions: (args, env) => ({
+      ...curatedOptions(args, env),
+      ...paginationOptions(args),
+      ...teamFilterOptions(args),
+      ...pickFields(args, "name", "description", "color"),
     }),
   },
 
@@ -283,23 +203,11 @@ export const COMMAND_REGISTRY: readonly CommandRegistration[] = [
       create: { usage: "linearctl state create --name <name> --team <id> --state-type <type> [--json]" },
     },
     handler: handleStateCommand,
-    buildOptions: (args: ParsedCliArguments, env: NodeJS.ProcessEnv) => ({
-      json: args.json, dryRun: args.dryRun, quiet: args.quiet,
-      allTeams: args.allTeams, jsonEnvelope: args.jsonEnvelope, jsonl: args.jsonl,
-      ...optionalString(args.profile, "profile"),
-      configFile: args.configFile, credentialsFile: args.credentialsFile,
-      ...optionalString(args.apiUrl, "apiUrl"),
-      ...optionalString(args.name, "name"),
-      ...optionalString(args.stateType, "stateType"),
-      ...optionalString(args.description, "description"),
-      ...optionalString(args.color, "color"),
-      ...optionalString(args.position, "position"),
-      ...optionalString(args.team, "team"),
-      ...optionalBool(args.all, "all"),
-      ...optionalNumber(args.max, "max"),
-      ...optionalNumber(args.pageSize, "pageSize"),
-      ...optionalString(args.after, "after"),
-      env,
+    buildOptions: (args, env) => ({
+      ...curatedOptions(args, env),
+      ...paginationOptions(args),
+      ...teamFilterOptions(args),
+      ...pickFields(args, "name", "stateType", "description", "color", "position"),
     }),
   },
 
@@ -321,22 +229,10 @@ export const COMMAND_REGISTRY: readonly CommandRegistration[] = [
       delete: { usage: "linearctl project-status delete <id> [--json]" },
     },
     handler: handleProjectStatusCommand,
-    buildOptions: (args: ParsedCliArguments, env: NodeJS.ProcessEnv) => ({
-      json: args.json, dryRun: args.dryRun, quiet: args.quiet,
-      jsonEnvelope: args.jsonEnvelope, jsonl: args.jsonl,
-      ...optionalString(args.profile, "profile"),
-      configFile: args.configFile, credentialsFile: args.credentialsFile,
-      ...optionalString(args.apiUrl, "apiUrl"),
-      ...optionalString(args.name, "name"),
-      ...optionalString(args.statusType, "statusType"),
-      ...optionalString(args.description, "description"),
-      ...optionalString(args.color, "color"),
-      ...optionalString(args.position, "position"),
-      ...optionalBool(args.all, "all"),
-      ...optionalNumber(args.max, "max"),
-      ...optionalNumber(args.pageSize, "pageSize"),
-      ...optionalString(args.after, "after"),
-      env,
+    buildOptions: (args, env) => ({
+      ...curatedOptions(args, env),
+      ...paginationOptions(args),
+      ...pickFields(args, "name", "statusType", "description", "color", "position"),
     }),
   },
 
@@ -358,19 +254,10 @@ export const COMMAND_REGISTRY: readonly CommandRegistration[] = [
       delete: { usage: "linearctl comment delete <id> [--json]" },
     },
     handler: handleCommentCommand,
-    buildOptions: (args: ParsedCliArguments, env: NodeJS.ProcessEnv) => ({
-      json: args.json, dryRun: args.dryRun, quiet: args.quiet,
-      jsonEnvelope: args.jsonEnvelope, jsonl: args.jsonl,
-      ...optionalString(args.profile, "profile"),
-      configFile: args.configFile, credentialsFile: args.credentialsFile,
-      ...optionalString(args.apiUrl, "apiUrl"),
-      ...optionalString(args.issue, "issue"),
-      ...optionalString(args.body, "body"),
-      ...optionalBool(args.all, "all"),
-      ...optionalNumber(args.max, "max"),
-      ...optionalNumber(args.pageSize, "pageSize"),
-      ...optionalString(args.after, "after"),
-      env,
+    buildOptions: (args, env) => ({
+      ...curatedOptions(args, env),
+      ...paginationOptions(args),
+      ...pickFields(args, "issue", "body"),
     }),
   },
 
@@ -391,20 +278,10 @@ export const COMMAND_REGISTRY: readonly CommandRegistration[] = [
       delete: { usage: "linearctl attachment delete <id> [--json]" },
     },
     handler: handleAttachmentCommand,
-    buildOptions: (args: ParsedCliArguments, env: NodeJS.ProcessEnv) => ({
-      json: args.json, dryRun: args.dryRun, quiet: args.quiet,
-      jsonEnvelope: args.jsonEnvelope, jsonl: args.jsonl,
-      ...optionalString(args.profile, "profile"),
-      configFile: args.configFile, credentialsFile: args.credentialsFile,
-      ...optionalString(args.apiUrl, "apiUrl"),
-      ...optionalString(args.issue, "issue"),
-      ...optionalString(args.url, "url"),
-      ...optionalString(args.title, "title"),
-      ...optionalBool(args.all, "all"),
-      ...optionalNumber(args.max, "max"),
-      ...optionalNumber(args.pageSize, "pageSize"),
-      ...optionalString(args.after, "after"),
-      env,
+    buildOptions: (args, env) => ({
+      ...curatedOptions(args, env),
+      ...paginationOptions(args),
+      ...pickFields(args, "issue", "url", "title"),
     }),
   },
 
@@ -423,15 +300,10 @@ export const COMMAND_REGISTRY: readonly CommandRegistration[] = [
       download: { usage: "linearctl file download <url> [--output <path>] [--json]" },
     },
     handler: handleFileCommand,
-    buildOptions: (args: ParsedCliArguments, env: NodeJS.ProcessEnv) => ({
-      json: args.json, dryRun: args.dryRun, jsonEnvelope: args.jsonEnvelope,
-      ...optionalString(args.profile, "profile"),
-      configFile: args.configFile, credentialsFile: args.credentialsFile,
-      ...optionalString(args.apiUrl, "apiUrl"),
-      ...optionalString(args.issue, "issue"),
-      ...optionalString(args.output, "output"),
-      ...optionalString(args.expiresIn, "expiresIn"),
-      env,
+    buildOptions: (args, env) => ({
+      ...baseOptions(args, env),
+      dryRun: args.dryRun,
+      ...pickFields(args, "issue", "output", "expiresIn"),
     }),
   },
 
@@ -453,20 +325,14 @@ export const COMMAND_REGISTRY: readonly CommandRegistration[] = [
       whoami: { usage: "linearctl auth whoami [--json]" },
     },
     handler: handleAuthCommand,
-    buildOptions: (args: ParsedCliArguments, env: NodeJS.ProcessEnv, stdin: NodeJS.ReadableStream) => ({
-      json: args.json, jsonEnvelope: args.jsonEnvelope,
-      configFile: args.configFile, credentialsFile: args.credentialsFile,
-      ...optionalString(args.profile, "profile"),
-      ...optionalString(args.apiKeyEnv, "apiKeyEnv"),
+    buildOptions: (args, env, stdin) => ({
+      ...baseOptions(args, env),
+      ...pickFields(args, "apiKeyEnv", "oauthClientId", "callbackPort"),
       apiKeyStdin: args.apiKeyStdin,
       oauth: args.oauth,
-      ...optionalString(args.oauthClientId, "oauthClientId"),
-      ...optionalString(args.callbackPort, "callbackPort"),
       noBrowser: args.noBrowser,
       setDefault: args.setDefault,
       removeConfig: args.removeConfig,
-      ...optionalString(args.apiUrl, "apiUrl"),
-      env,
       stdin,
     }),
   },
@@ -486,16 +352,11 @@ export const COMMAND_REGISTRY: readonly CommandRegistration[] = [
       mutation:   { usage: "linearctl gql mutation --file m.graphql --vars-file v.json --json" },
     },
     handler: handleGqlCommand,
-    buildOptions: (args: ParsedCliArguments, env: NodeJS.ProcessEnv, stdin: NodeJS.ReadableStream) => ({
-      json: args.json, jsonEnvelope: args.jsonEnvelope,
+    buildOptions: (args, env, stdin) => ({
+      ...baseOptions(args, env),
       raw: args.raw, stdin: args.stdin,
-      ...optionalString(args.file, "file"),
-      ...optionalString(args.varsFile, "varsFile"),
       vars: args.vars,
-      ...optionalString(args.profile, "profile"),
-      configFile: args.configFile, credentialsFile: args.credentialsFile,
-      ...optionalString(args.apiUrl, "apiUrl"),
-      env,
+      ...pickFields(args, "file", "varsFile"),
       stdinStream: stdin,
     }),
   },
@@ -516,18 +377,11 @@ export const COMMAND_REGISTRY: readonly CommandRegistration[] = [
       "search <term>":          { usage: "linearctl api search <term>          (search commands)" },
     },
     handler: handleApiCommand,
-    buildOptions: (args: ParsedCliArguments, env: NodeJS.ProcessEnv, stdin: NodeJS.ReadableStream) => ({
-      json: args.json, jsonEnvelope: args.jsonEnvelope,
+    buildOptions: (args, env, stdin) => ({
+      ...baseOptions(args, env),
       raw: args.raw,
-      ...optionalString(args.profile, "profile"),
-      configFile: args.configFile, credentialsFile: args.credentialsFile,
-      ...optionalString(args.apiUrl, "apiUrl"),
-      ...optionalString(args.id, "id"),
-      ...optionalString(args.inputJson, "inputJson"),
-      ...optionalString(args.inputFile, "inputFile"),
       inputStdin: args.inputStdin,
-      ...optionalString(args.fields, "fields"),
-      env,
+      ...pickFields(args, "id", "inputJson", "inputFile", "fields"),
       stdinStream: stdin,
     }),
   },
@@ -546,13 +400,9 @@ export const COMMAND_REGISTRY: readonly CommandRegistration[] = [
       check:   { usage: "linearctl schema check [--json]" },
     },
     handler: handleSchemaCommand,
-    buildOptions: (args: ParsedCliArguments, env: NodeJS.ProcessEnv) => ({
-      json: args.json, jsonEnvelope: args.jsonEnvelope,
-      ...optionalString(args.profile, "profile"),
-      configFile: args.configFile, credentialsFile: args.credentialsFile,
-      ...optionalString(args.apiUrl, "apiUrl"),
-      ...optionalString(args.outputDir, "outputDir"),
-      env,
+    buildOptions: (args, env) => ({
+      ...baseOptions(args, env),
+      ...pickFields(args, "outputDir"),
     }),
   },
 
@@ -567,7 +417,7 @@ export const COMMAND_REGISTRY: readonly CommandRegistration[] = [
       list: { usage: "linearctl workspace list [--json]" },
     },
     handler: handleWorkspaceCommand,
-    buildOptions: (args: ParsedCliArguments, env: NodeJS.ProcessEnv) => ({
+    buildOptions: (args, env) => ({
       json: args.json, jsonEnvelope: args.jsonEnvelope,
       configFile: args.configFile, credentialsFile: args.credentialsFile,
       env,
@@ -585,9 +435,9 @@ export const COMMAND_REGISTRY: readonly CommandRegistration[] = [
       list:    { usage: "linearctl skills list [--json]" },
     },
     handler: handleSkillsCommand,
-    buildOptions: (args: ParsedCliArguments, _env: NodeJS.ProcessEnv, stdin: NodeJS.ReadableStream) => ({
+    buildOptions: (args, _env, stdin) => ({
       json: args.json, jsonEnvelope: args.jsonEnvelope,
-      ...optionalString(args.scope, "scope"),
+      ...pickFields(args, "scope"),
       stdinStream: stdin,
     }),
   },

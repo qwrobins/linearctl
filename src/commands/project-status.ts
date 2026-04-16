@@ -1,15 +1,12 @@
 import { emitValidationError } from "../core/output/validation-error.js";
-import { failureEnvelope, successEnvelope } from "../core/output/envelope.js";
 import type { PageInfo } from "../core/output/envelope.js";
-import { mapCommandFailure } from "../core/errors/command-failure.js";
 import { ExitCode } from "../core/errors/exit-codes.js";
-import { executeGraphQL } from "../core/transport/graphql.js";
-import type { FetchLike, GraphQLErrorPayload } from "../core/transport/graphql.js";
-import { resolveStoredProfile } from "../core/auth/runtime.js";
+import type { FetchLike } from "../core/transport/graphql.js";
 import { paginateGraphQL, validatePaginationOptions } from "../core/pagination/pagination.js";
 import type { PaginationOptions } from "../core/pagination/pagination.js";
 import { streamPaginateGraphQL } from "../core/pagination/streaming.js";
 import { emitDryRunResult } from "../core/output/dry-run.js";
+import { CommandContext } from "../core/runtime/command-context.js";
 
 const VALID_STATUS_TYPES = ["backlog", "planned", "started", "paused", "completed", "canceled"] as const;
 
@@ -36,6 +33,9 @@ export interface ProjectStatusCommandOptions {
   pageSize?: number;
   after?: string;
   quiet?: boolean;
+  // retry flags
+  noRetry?: boolean;
+  maxRetries?: number;
 }
 
 interface RawProjectStatus {
@@ -123,64 +123,52 @@ function printHumanProjectStatus(status: NormalizedProjectStatus): void {
   }
 }
 
+/** Build a CommandContext from project-status handler options */
+function buildContext(options: ProjectStatusCommandOptions): CommandContext {
+  return new CommandContext({
+    json: options.json,
+    jsonEnvelope: options.jsonEnvelope,
+    ...(options.profile === undefined ? {} : { profile: options.profile }),
+    configFile: options.configFile,
+    credentialsFile: options.credentialsFile,
+    ...(options.apiUrl === undefined ? {} : { apiUrl: options.apiUrl }),
+    env: options.env,
+    ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl }),
+    ...(options.noRetry === true || options.maxRetries !== undefined
+      ? {
+          retry: {
+            ...(options.noRetry === true ? { noRetry: true } : {}),
+            ...(options.maxRetries !== undefined ? { maxRetries: options.maxRetries } : {}),
+          },
+        }
+      : {}),
+  });
+}
+
 async function handleProjectStatusGet(
   identifier: string,
   options: ProjectStatusCommandOptions
 ): Promise<number> {
+  const ctx = buildContext(options);
+
   try {
-    const profile = await resolveStoredProfile({
-      paths: {
-        configFile: options.configFile,
-        credentialsFile: options.credentialsFile
-      },
-      ...(options.profile === undefined ? {} : { explicitProfile: options.profile }),
-      env: options.env
-    });
+    const response = await ctx.graphql<{ projectStatus: RawProjectStatus | null }>(
+      PROJECT_STATUS_GET_QUERY,
+      { id: identifier }
+    );
 
-    const response = await executeGraphQL<{ projectStatus: RawProjectStatus | null }>({
-      query: PROJECT_STATUS_GET_QUERY,
-      variables: { id: identifier },
-      credentials: profile.credentials,
-      ...(options.apiUrl === undefined
-        ? profile.metadata.baseUrl === undefined
-          ? {}
-          : { apiUrl: profile.metadata.baseUrl }
-        : { apiUrl: options.apiUrl }),
-      ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl })
-    });
-
-    if (hasErrors(response.body.errors)) {
-      const errors = mapGraphQLErrors(response.body.errors);
-      if (options.jsonEnvelope) {
-        const envelope = failureEnvelope(errors, {
-          sourceLayer: "curated",
-          profile: profile.name
-        });
-        process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
-      } else {
-        process.stderr.write(`Error: ${errors[0]?.message ?? "Project status query failed"}\n`);
-      }
-      return ExitCode.GeneralError;
+    if (ctx.hasErrors(response.body.errors)) {
+      return ctx.emitFailure(ctx.mapGraphQLErrors(response.body.errors));
     }
 
     if (response.body.data?.projectStatus === null || response.body.data?.projectStatus === undefined) {
-      if (options.jsonEnvelope) {
-        const envelope = failureEnvelope(
-          [{ category: "not-found", message: "Project status not found" }],
-          { sourceLayer: "curated", profile: profile.name }
-        );
-        process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
-      } else {
-        process.stderr.write("Error: Project status not found\n");
-      }
-      return ExitCode.NotFound;
+      return ctx.emitNotFound("Project status not found");
     }
 
     const status = normalizeProjectStatus(response.body.data.projectStatus);
 
     if (options.jsonEnvelope) {
-      const envelope = successEnvelope(status, { sourceLayer: "curated", profile: profile.name });
-      process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
+      return ctx.emitSuccess(status);
     } else if (options.json) {
       process.stdout.write(`${JSON.stringify(status, null, 2)}\n`);
     } else {
@@ -189,19 +177,7 @@ async function handleProjectStatusGet(
 
     return ExitCode.Success;
   } catch (error) {
-    const failure = mapCommandFailure(error);
-
-    if (options.jsonEnvelope) {
-      const envelope = failureEnvelope([failure.error], {
-        sourceLayer: "curated",
-        ...(options.profile === undefined ? {} : { profile: options.profile })
-      });
-      process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
-    } else {
-      process.stderr.write(`Error: ${failure.error.message}\n`);
-    }
-
-    return failure.exitCode;
+    return ctx.emitCaughtError(error);
   }
 }
 
@@ -219,15 +195,10 @@ async function handleProjectStatusList(options: ProjectStatusCommandOptions): Pr
     return emitValidationError(validationError, options);
   }
 
+  const ctx = buildContext(options);
+
   try {
-    const profile = await resolveStoredProfile({
-      paths: {
-        configFile: options.configFile,
-        credentialsFile: options.credentialsFile
-      },
-      ...(options.profile === undefined ? {} : { explicitProfile: options.profile }),
-      env: options.env
-    });
+    const profile = await ctx.resolveProfile();
 
     const apiUrl = options.apiUrl === undefined
       ? profile.metadata.baseUrl === undefined
@@ -266,8 +237,7 @@ async function handleProjectStatusList(options: ProjectStatusCommandOptions): Pr
       const statuses = items.map(normalizeProjectStatus);
 
       if (options.jsonEnvelope) {
-        const envelope = successEnvelope(statuses, { sourceLayer: "curated", profile: profile.name }, pageInfo);
-        process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
+        return ctx.emitSuccess(statuses, pageInfo);
       } else if (options.json) {
         process.stdout.write(`${JSON.stringify(statuses, null, 2)}\n`);
       } else {
@@ -280,19 +250,7 @@ async function handleProjectStatusList(options: ProjectStatusCommandOptions): Pr
 
     return ExitCode.Success;
   } catch (error) {
-    const failure = mapCommandFailure(error);
-
-    if (options.jsonEnvelope) {
-      const envelope = failureEnvelope([failure.error], {
-        sourceLayer: "curated",
-        ...(options.profile === undefined ? {} : { profile: options.profile })
-      });
-      process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
-    } else {
-      process.stderr.write(`Error: ${failure.error.message}\n`);
-    }
-
-    return failure.exitCode;
+    return ctx.emitCaughtError(error);
   }
 }
 
@@ -340,54 +298,28 @@ async function handleProjectStatusCreate(options: ProjectStatusCommandOptions): 
     return emitDryRunResult("create", "project-status", input, options);
   }
 
-  try {
-    const profile = await resolveStoredProfile({
-      paths: {
-        configFile: options.configFile,
-        credentialsFile: options.credentialsFile
-      },
-      ...(options.profile === undefined ? {} : { explicitProfile: options.profile }),
-      env: options.env
-    });
+  const ctx = buildContext(options);
 
-    const response = await executeGraphQL<{
+  try {
+    const response = await ctx.graphql<{
       projectStatusCreate: { success: boolean; status: RawProjectStatus | null };
-    }>({
-      query: PROJECT_STATUS_CREATE_MUTATION,
-      variables: { input },
-      credentials: profile.credentials,
-      ...(options.apiUrl === undefined
-        ? profile.metadata.baseUrl === undefined
-          ? {}
-          : { apiUrl: profile.metadata.baseUrl }
-        : { apiUrl: options.apiUrl }),
-      ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl })
-    });
+    }>(PROJECT_STATUS_CREATE_MUTATION, { input });
 
     if (
-      hasErrors(response.body.errors) ||
+      ctx.hasErrors(response.body.errors) ||
       response.body.data?.projectStatusCreate?.status === null ||
       response.body.data?.projectStatusCreate?.status === undefined
     ) {
-      if (options.jsonEnvelope) {
-        const errors = mapGraphQLErrors(response.body.errors);
-        const envelope = failureEnvelope(
-          errors.length > 0 ? errors : [{ category: "general", message: "Project status creation failed" }],
-          { sourceLayer: "curated", profile: profile.name }
-        );
-        process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
-      } else {
-        const errorMessage = response.body.errors?.[0]?.message ?? "Project status creation failed";
-        process.stderr.write(`Error: ${errorMessage}\n`);
-      }
-      return ExitCode.GeneralError;
+      const errors = ctx.mapGraphQLErrors(response.body.errors);
+      return ctx.emitFailure(
+        errors.length > 0 ? errors : [{ category: "general", message: "Project status creation failed" }]
+      );
     }
 
     const status = normalizeProjectStatus(response.body.data.projectStatusCreate.status);
 
     if (options.jsonEnvelope) {
-      const envelope = successEnvelope(status, { sourceLayer: "curated", profile: profile.name });
-      process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
+      return ctx.emitSuccess(status);
     } else if (options.json) {
       process.stdout.write(`${JSON.stringify(status, null, 2)}\n`);
     } else {
@@ -396,19 +328,7 @@ async function handleProjectStatusCreate(options: ProjectStatusCommandOptions): 
 
     return ExitCode.Success;
   } catch (error) {
-    const failure = mapCommandFailure(error);
-
-    if (options.jsonEnvelope) {
-      const envelope = failureEnvelope([failure.error], {
-        sourceLayer: "curated",
-        ...(options.profile === undefined ? {} : { profile: options.profile })
-      });
-      process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
-    } else {
-      process.stderr.write(`Error: ${failure.error.message}\n`);
-    }
-
-    return failure.exitCode;
+    return ctx.emitCaughtError(error);
   }
 }
 
@@ -417,53 +337,27 @@ async function handleProjectStatusDelete(statusId: string, options: ProjectStatu
     return emitDryRunResult("delete", "project-status", { id: statusId }, options);
   }
 
-  try {
-    const profile = await resolveStoredProfile({
-      paths: {
-        configFile: options.configFile,
-        credentialsFile: options.credentialsFile
-      },
-      ...(options.profile === undefined ? {} : { explicitProfile: options.profile }),
-      env: options.env
-    });
+  const ctx = buildContext(options);
 
-    const response = await executeGraphQL<{
+  try {
+    const response = await ctx.graphql<{
       projectStatusArchive: { success: boolean };
-    }>({
-      query: PROJECT_STATUS_DELETE_MUTATION,
-      variables: { id: statusId },
-      credentials: profile.credentials,
-      ...(options.apiUrl === undefined
-        ? profile.metadata.baseUrl === undefined
-          ? {}
-          : { apiUrl: profile.metadata.baseUrl }
-        : { apiUrl: options.apiUrl }),
-      ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl })
-    });
+    }>(PROJECT_STATUS_DELETE_MUTATION, { id: statusId });
 
     if (
-      hasErrors(response.body.errors) ||
+      ctx.hasErrors(response.body.errors) ||
       !response.body.data?.projectStatusArchive?.success
     ) {
-      if (options.jsonEnvelope) {
-        const errors = mapGraphQLErrors(response.body.errors);
-        const envelope = failureEnvelope(
-          errors.length > 0 ? errors : [{ category: "general", message: "Project status deletion failed" }],
-          { sourceLayer: "curated", profile: profile.name }
-        );
-        process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
-      } else {
-        const errorMessage = response.body.errors?.[0]?.message ?? "Project status deletion failed";
-        process.stderr.write(`Error: ${errorMessage}\n`);
-      }
-      return ExitCode.GeneralError;
+      const errors = ctx.mapGraphQLErrors(response.body.errors);
+      return ctx.emitFailure(
+        errors.length > 0 ? errors : [{ category: "general", message: "Project status deletion failed" }]
+      );
     }
 
     const result = { id: statusId, deleted: true };
 
     if (options.jsonEnvelope) {
-      const envelope = successEnvelope(result, { sourceLayer: "curated", profile: profile.name });
-      process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
+      return ctx.emitSuccess(result);
     } else if (options.json) {
       process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     } else {
@@ -472,19 +366,7 @@ async function handleProjectStatusDelete(statusId: string, options: ProjectStatu
 
     return ExitCode.Success;
   } catch (error) {
-    const failure = mapCommandFailure(error);
-
-    if (options.jsonEnvelope) {
-      const envelope = failureEnvelope([failure.error], {
-        sourceLayer: "curated",
-        ...(options.profile === undefined ? {} : { profile: options.profile })
-      });
-      process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
-    } else {
-      process.stderr.write(`Error: ${failure.error.message}\n`);
-    }
-
-    return failure.exitCode;
+    return ctx.emitCaughtError(error);
   }
 }
 
@@ -531,19 +413,4 @@ export async function handleProjectStatusCommand(
   }
 
   return emitValidationError("unsupported project-status command. Try linearctl project-status get, list, create, or delete.", options);
-}
-
-function hasErrors(errors: GraphQLErrorPayload[] | undefined): boolean {
-  return Array.isArray(errors) && errors.length > 0;
-}
-
-function mapGraphQLErrors(errors: GraphQLErrorPayload[] | undefined): Array<{ category: "general"; message: string; details: Record<string, unknown> }> {
-  return (errors ?? []).map((error) => ({
-    category: "general" as const,
-    message: error.message,
-    details: {
-      ...(error.path === undefined ? {} : { path: error.path }),
-      ...(error.extensions === undefined ? {} : { extensions: error.extensions })
-    }
-  }));
 }

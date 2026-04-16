@@ -135,6 +135,11 @@ Completed:
 - **Workflow orchestration** (QWR-59): `runTwoStepWorkflow()` provides typed partial-success modeling for multi-step commands like `project create-with-issues`. Agents can now see exactly which step succeeded/failed. New module: `src/core/runtime/workflow.ts`.
 - **Generated command naming overrides** (QWR-60): Override table in `src/generated/naming-overrides.ts` stabilizes generated API command names against schema naming shifts. Applied in `fieldToEntry()` before heuristic derivation.
 
+## CommandContext migration (v0.5.1)
+
+- **All curated handlers migrated to CommandContext** (QWR-61, QWR-62, QWR-63): Every curated command handler now uses `CommandContext` for profile resolution, GraphQL execution (with retry), error mapping, and output emission. Handlers migrated: issue (12 subcommands), cycle, label, state, comment, attachment, team, user, project-status, file, workspace.
+- **Registry buildOptions boilerplate reduced** (QWR-64): Composable option mapping presets (`baseOptions`, `curatedOptions`, `paginationOptions`, `teamFilterOptions`, `pickFields`) replace manual `optionalString`/`optionalNumber`/`optionalBool` spreading. New module: `src/core/registry/option-mapping.ts`.
+
 ## All development complete
 
 All MVP and post-MVP features are implemented. 384 of 386 tests across 40 test files are passing. 2 pre-existing failures in skills.test.ts are unrelated to this codebase and excluded from the passing count.
