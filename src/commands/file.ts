@@ -219,8 +219,7 @@ async function handleFileUpload(
 
       if (
         ctx.hasErrors(attachResponse.body.errors) ||
-        attachResponse.body.data?.attachmentCreate?.attachment === null ||
-        attachResponse.body.data?.attachmentCreate?.attachment === undefined
+        attachResponse.body.data?.attachmentCreate?.attachment == null
       ) {
         const errors = ctx.mapGraphQLErrors(attachResponse.body.errors);
         return ctx.emitFailure(
