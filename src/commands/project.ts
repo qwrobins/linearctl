@@ -307,7 +307,7 @@ async function handleProjectList(options: ProjectCommandOptions): Promise<number
       const projects = items.map(normalizeProject);
 
       if (options.jsonEnvelope) {
-        ctx.emitSuccess(projects, pageInfo);
+        return ctx.emitSuccess(projects, pageInfo);
       } else if (options.json) {
         process.stdout.write(`${JSON.stringify(projects, null, 2)}\n`);
       } else {

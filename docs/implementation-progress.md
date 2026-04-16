@@ -137,7 +137,7 @@ Completed:
 
 ## All development complete
 
-All MVP and post-MVP features are implemented. 384 tests across 40 test files, all passing (2 pre-existing failures in skills.test.ts are unrelated).
+All MVP and post-MVP features are implemented. 384 of 386 tests across 40 test files are passing. 2 pre-existing failures in skills.test.ts are unrelated to this codebase and excluded from the passing count.
 
 ## Verification Baseline
 

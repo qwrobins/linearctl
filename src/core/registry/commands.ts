@@ -453,7 +453,7 @@ export const COMMAND_REGISTRY: readonly CommandRegistration[] = [
       whoami: { usage: "linearctl auth whoami [--json]" },
     },
     handler: handleAuthCommand,
-    buildOptions: (args: ParsedCliArguments, _env: NodeJS.ProcessEnv, stdin: NodeJS.ReadableStream) => ({
+    buildOptions: (args: ParsedCliArguments, env: NodeJS.ProcessEnv, stdin: NodeJS.ReadableStream) => ({
       json: args.json, jsonEnvelope: args.jsonEnvelope,
       configFile: args.configFile, credentialsFile: args.credentialsFile,
       ...optionalString(args.profile, "profile"),
@@ -466,7 +466,7 @@ export const COMMAND_REGISTRY: readonly CommandRegistration[] = [
       setDefault: args.setDefault,
       removeConfig: args.removeConfig,
       ...optionalString(args.apiUrl, "apiUrl"),
-      env: process.env,
+      env,
       stdin,
     }),
   },
@@ -486,7 +486,7 @@ export const COMMAND_REGISTRY: readonly CommandRegistration[] = [
       mutation:   { usage: "linearctl gql mutation --file m.graphql --vars-file v.json --json" },
     },
     handler: handleGqlCommand,
-    buildOptions: (args: ParsedCliArguments, _env: NodeJS.ProcessEnv, _stdin: NodeJS.ReadableStream) => ({
+    buildOptions: (args: ParsedCliArguments, env: NodeJS.ProcessEnv, stdin: NodeJS.ReadableStream) => ({
       json: args.json, jsonEnvelope: args.jsonEnvelope,
       raw: args.raw, stdin: args.stdin,
       ...optionalString(args.file, "file"),
@@ -495,8 +495,8 @@ export const COMMAND_REGISTRY: readonly CommandRegistration[] = [
       ...optionalString(args.profile, "profile"),
       configFile: args.configFile, credentialsFile: args.credentialsFile,
       ...optionalString(args.apiUrl, "apiUrl"),
-      env: process.env,
-      stdinStream: process.stdin,
+      env,
+      stdinStream: stdin,
     }),
   },
 
@@ -516,7 +516,7 @@ export const COMMAND_REGISTRY: readonly CommandRegistration[] = [
       "search <term>":          { usage: "linearctl api search <term>          (search commands)" },
     },
     handler: handleApiCommand,
-    buildOptions: (args: ParsedCliArguments, _env: NodeJS.ProcessEnv, _stdin: NodeJS.ReadableStream) => ({
+    buildOptions: (args: ParsedCliArguments, env: NodeJS.ProcessEnv, stdin: NodeJS.ReadableStream) => ({
       json: args.json, jsonEnvelope: args.jsonEnvelope,
       raw: args.raw,
       ...optionalString(args.profile, "profile"),
@@ -527,8 +527,8 @@ export const COMMAND_REGISTRY: readonly CommandRegistration[] = [
       ...optionalString(args.inputFile, "inputFile"),
       inputStdin: args.inputStdin,
       ...optionalString(args.fields, "fields"),
-      env: process.env,
-      stdinStream: process.stdin,
+      env,
+      stdinStream: stdin,
     }),
   },
 
@@ -546,13 +546,13 @@ export const COMMAND_REGISTRY: readonly CommandRegistration[] = [
       check:   { usage: "linearctl schema check [--json]" },
     },
     handler: handleSchemaCommand,
-    buildOptions: (args: ParsedCliArguments, _env: NodeJS.ProcessEnv) => ({
+    buildOptions: (args: ParsedCliArguments, env: NodeJS.ProcessEnv) => ({
       json: args.json, jsonEnvelope: args.jsonEnvelope,
       ...optionalString(args.profile, "profile"),
       configFile: args.configFile, credentialsFile: args.credentialsFile,
       ...optionalString(args.apiUrl, "apiUrl"),
       ...optionalString(args.outputDir, "outputDir"),
-      env: process.env,
+      env,
     }),
   },
 
@@ -567,10 +567,10 @@ export const COMMAND_REGISTRY: readonly CommandRegistration[] = [
       list: { usage: "linearctl workspace list [--json]" },
     },
     handler: handleWorkspaceCommand,
-    buildOptions: (args: ParsedCliArguments, _env: NodeJS.ProcessEnv) => ({
+    buildOptions: (args: ParsedCliArguments, env: NodeJS.ProcessEnv) => ({
       json: args.json, jsonEnvelope: args.jsonEnvelope,
       configFile: args.configFile, credentialsFile: args.credentialsFile,
-      env: process.env,
+      env,
     }),
   },
 
@@ -585,10 +585,10 @@ export const COMMAND_REGISTRY: readonly CommandRegistration[] = [
       list:    { usage: "linearctl skills list [--json]" },
     },
     handler: handleSkillsCommand,
-    buildOptions: (args: ParsedCliArguments, _env: NodeJS.ProcessEnv, _stdin: NodeJS.ReadableStream) => ({
+    buildOptions: (args: ParsedCliArguments, _env: NodeJS.ProcessEnv, stdin: NodeJS.ReadableStream) => ({
       json: args.json, jsonEnvelope: args.jsonEnvelope,
       ...optionalString(args.scope, "scope"),
-      stdinStream: process.stdin,
+      stdinStream: stdin,
     }),
   },
 ] as const;
