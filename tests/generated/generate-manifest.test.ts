@@ -5,6 +5,7 @@ import {
   deriveQueryParts,
   generateManifest
 } from "../../src/generated/generate-manifest.js";
+import { namingOverrides } from "../../src/generated/naming-overrides.js";
 
 describe("camelToKebab", () => {
   it("converts simple camelCase", () => {
@@ -232,5 +233,99 @@ describe("generateManifest", () => {
 
   it("throws for invalid schema", () => {
     expect(() => generateManifest({})).toThrow("does not contain a valid __schema");
+  });
+});
+
+describe("naming overrides", () => {
+  it("override takes precedence over mutation heuristic derivation", () => {
+    // Without the override, "imageUploadFromUrl" heuristically splits as
+    // resource="image-upload-from" operation="url" — the override stabilises
+    // it to resource="image" operation="upload-from-url".
+    const heuristic = deriveMutationParts("imageUploadFromUrl");
+    const override = namingOverrides["imageUploadFromUrl"];
+
+    // Verify the heuristic would give something different
+    expect(heuristic.resource).not.toBe(override!.resource);
+    expect(heuristic.operation).not.toBe(override!.operation);
+
+    // Build a schema with this field as a mutation and verify the manifest
+    // uses the override, not the heuristic.
+    const schema = {
+      __schema: {
+        queryType: { name: "Query" },
+        mutationType: { name: "Mutation" },
+        types: [
+          { name: "Query", kind: "OBJECT", fields: [] },
+          {
+            name: "Mutation",
+            kind: "OBJECT",
+            fields: [
+              {
+                name: "imageUploadFromUrl",
+                description: "Upload an image from a URL",
+                args: [
+                  {
+                    name: "url",
+                    type: { kind: "NON_NULL", ofType: { kind: "SCALAR", name: "String" } },
+                    description: "The URL"
+                  }
+                ],
+                type: { kind: "OBJECT", name: "ImageUploadFromUrlPayload" },
+                isDeprecated: false
+              }
+            ]
+          }
+        ]
+      }
+    };
+
+    const manifest = generateManifest(schema);
+    const entry = manifest.find((e) => e.graphqlField === "imageUploadFromUrl");
+    expect(entry).toBeDefined();
+    expect(entry!.resource).toBe("image");
+    expect(entry!.operation).toBe("upload-from-url");
+    expect(entry!.commandPath).toBe("linearctl api image upload-from-url");
+  });
+
+  it("override takes precedence over query heuristic derivation", () => {
+    // Without the override, "attachmentsForURL" depluralize cannot strip the
+    // trailing "s" (the field ends in "URL"), yielding
+    // resource="attachments-for-url" operation="list".
+    // The override stabilises it to resource="attachment"
+    // operation="list-for-url".
+    const schema = {
+      __schema: {
+        queryType: { name: "Query" },
+        mutationType: null,
+        types: [
+          {
+            name: "Query",
+            kind: "OBJECT",
+            fields: [
+              {
+                name: "attachmentsForURL",
+                description: "Attachments for a given URL",
+                args: [
+                  {
+                    name: "url",
+                    type: { kind: "NON_NULL", ofType: { kind: "SCALAR", name: "String" } },
+                    description: "The URL"
+                  }
+                ],
+                type: { kind: "OBJECT", name: "AttachmentConnection" },
+                isDeprecated: false
+              }
+            ]
+          }
+        ]
+      }
+    };
+
+    const manifest = generateManifest(schema);
+    const entry = manifest.find((e) => e.graphqlField === "attachmentsForURL");
+    expect(entry).toBeDefined();
+    expect(entry!.resource).toBe("attachment");
+    expect(entry!.operation).toBe("list-for-url");
+    expect(entry!.commandPath).toBe("linearctl api attachment list-for-url");
   });
 });

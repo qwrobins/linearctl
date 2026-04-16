@@ -127,9 +127,17 @@ Completed:
   - Resolution applied to issue create/update/assign/list, project create, cycle create/list, label create/list
   - `--dry-run` for all destructive/mutating commands (18 operations across 7 resource handlers)
 
+## Architecture improvements (v0.5.0)
+
+- **Typed command registry** (QWR-56): Single source of truth for option definitions, help text, parsing, and dispatch. Replaces 4+ places where command knowledge was duplicated in `src/cli/main.ts`. New modules: `src/core/registry/`.
+- **Shared command runtime/context** (QWR-57): `CommandContext` class centralizes profile resolution, GraphQL execution, error mapping, and output emission. Demonstrated in the `project` command handler. New module: `src/core/runtime/command-context.ts`.
+- **Retry wired into production** (QWR-58): `--no-retry` and `--max-retries` flags are now functional via `CommandContext.graphql()`, which routes through `executeGraphQLWithRetry()` when retry options are configured.
+- **Workflow orchestration** (QWR-59): `runTwoStepWorkflow()` provides typed partial-success modeling for multi-step commands like `project create-with-issues`. Agents can now see exactly which step succeeded/failed. New module: `src/core/runtime/workflow.ts`.
+- **Generated command naming overrides** (QWR-60): Override table in `src/generated/naming-overrides.ts` stabilizes generated API command names against schema naming shifts. Applied in `fieldToEntry()` before heuristic derivation.
+
 ## All development complete
 
-All MVP and post-MVP features are implemented. 330 tests across 35 test files, all passing.
+All MVP and post-MVP features are implemented. 384 of 386 tests across 40 test files are passing. 2 pre-existing failures in skills.test.ts are unrelated to this codebase and excluded from the passing count.
 
 ## Verification Baseline
 

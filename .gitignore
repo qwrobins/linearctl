@@ -17,6 +17,8 @@ src/generated/manifest/schema.json
 .firecrawl/
 
 .codex
+.opencode/
+opencode.json
 .gitconfig
 .claude/
 CLAUDE.md

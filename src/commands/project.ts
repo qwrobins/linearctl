@@ -11,6 +11,8 @@ import { streamPaginateGraphQL } from "../core/pagination/streaming.js";
 import { emitDryRunResult } from "../core/output/dry-run.js";
 import { resolveTeamId, looksLikeId } from "../core/resolution/resolve.js";
 import type { ResolverOptions } from "../core/resolution/resolve.js";
+import { CommandContext } from "../core/runtime/command-context.js";
+import { runTwoStepWorkflow } from "../core/runtime/workflow.js";
 
 export interface ProjectCommandOptions {
   json: boolean;
@@ -36,6 +38,9 @@ export interface ProjectCommandOptions {
   pageSize?: number;
   after?: string;
   quiet?: boolean;
+  // retry flags
+  noRetry?: boolean;
+  maxRetries?: number;
 }
 
 const CURATED_PROJECT_FRAGMENT = `
@@ -181,64 +186,52 @@ function printHumanProject(project: NormalizedProject): void {
   process.stdout.write(`  URL:    ${project.url}\n`);
 }
 
+/** Build a CommandContext from project handler options */
+function buildContext(options: ProjectCommandOptions): CommandContext {
+  return new CommandContext({
+    json: options.json,
+    jsonEnvelope: options.jsonEnvelope,
+    ...(options.profile === undefined ? {} : { profile: options.profile }),
+    configFile: options.configFile,
+    credentialsFile: options.credentialsFile,
+    ...(options.apiUrl === undefined ? {} : { apiUrl: options.apiUrl }),
+    env: options.env,
+    ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl }),
+    ...(options.noRetry === true || options.maxRetries !== undefined
+      ? {
+          retry: {
+            ...(options.noRetry === true ? { noRetry: true } : {}),
+            ...(options.maxRetries !== undefined ? { maxRetries: options.maxRetries } : {}),
+          },
+        }
+      : {}),
+  });
+}
+
 async function handleProjectGet(
   id: string,
   options: ProjectCommandOptions
 ): Promise<number> {
+  const ctx = buildContext(options);
+
   try {
-    const profile = await resolveStoredProfile({
-      paths: {
-        configFile: options.configFile,
-        credentialsFile: options.credentialsFile
-      },
-      ...(options.profile === undefined ? {} : { explicitProfile: options.profile }),
-      env: options.env
-    });
+    const response = await ctx.graphql<{ project: RawProject | null }>(
+      PROJECT_GET_QUERY,
+      { id }
+    );
 
-    const response = await executeGraphQL<{ project: RawProject | null }>({
-      query: PROJECT_GET_QUERY,
-      variables: { id },
-      credentials: profile.credentials,
-      ...(options.apiUrl === undefined
-        ? profile.metadata.baseUrl === undefined
-          ? {}
-          : { apiUrl: profile.metadata.baseUrl }
-        : { apiUrl: options.apiUrl }),
-      ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl })
-    });
-
-    if (hasErrors(response.body.errors)) {
-      const errors = mapGraphQLErrors(response.body.errors);
-      if (options.jsonEnvelope) {
-        const envelope = failureEnvelope(errors, {
-          sourceLayer: "curated",
-          profile: profile.name
-        });
-        process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
-      } else {
-        process.stderr.write(`Error: ${errors[0]?.message ?? "Project query failed"}\n`);
-      }
-      return ExitCode.GeneralError;
+    if (ctx.hasErrors(response.body.errors)) {
+      return ctx.emitFailure(ctx.mapGraphQLErrors(response.body.errors));
     }
 
     if (response.body.data?.project === null || response.body.data?.project === undefined) {
-      if (options.jsonEnvelope) {
-        const envelope = failureEnvelope(
-          [{ category: "not-found", message: "Project not found" }],
-          { sourceLayer: "curated", profile: profile.name }
-        );
-        process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
-      } else {
-        process.stderr.write("Error: Project not found\n");
-      }
-      return ExitCode.NotFound;
+      return ctx.emitNotFound("Project not found");
     }
 
     const project = normalizeProject(response.body.data.project);
 
     if (options.jsonEnvelope) {
-      const envelope = successEnvelope(project, { sourceLayer: "curated", profile: profile.name });
-      process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
+      return ctx.emitSuccess(project);
     } else if (options.json) {
       process.stdout.write(`${JSON.stringify(project, null, 2)}\n`);
     } else {
@@ -247,19 +240,7 @@ async function handleProjectGet(
 
     return ExitCode.Success;
   } catch (error) {
-    const failure = mapCommandFailure(error);
-
-    if (options.jsonEnvelope) {
-      const envelope = failureEnvelope([failure.error], {
-        sourceLayer: "curated",
-        ...(options.profile === undefined ? {} : { profile: options.profile })
-      });
-      process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
-    } else {
-      process.stderr.write(`Error: ${failure.error.message}\n`);
-    }
-
-    return failure.exitCode;
+    return ctx.emitCaughtError(error);
   }
 }
 
@@ -277,26 +258,15 @@ async function handleProjectList(options: ProjectCommandOptions): Promise<number
     return emitValidationError(validationError, options);
   }
 
+  const ctx = buildContext(options);
+
   try {
-    const profile = await resolveStoredProfile({
-      paths: {
-        configFile: options.configFile,
-        credentialsFile: options.credentialsFile
-      },
-      ...(options.profile === undefined ? {} : { explicitProfile: options.profile }),
-      env: options.env
-    });
+    const profile = await ctx.resolveProfile();
 
     const effectiveTeam = options.allTeams ? undefined : (options.team ?? profile.metadata.defaultTeam);
     let filter: Record<string, unknown> | undefined;
     if (effectiveTeam !== undefined) {
-      const resolverOpts = {
-        credentials: profile.credentials,
-        ...(options.apiUrl === undefined
-          ? profile.metadata.baseUrl === undefined ? {} : { apiUrl: profile.metadata.baseUrl }
-          : { apiUrl: options.apiUrl }),
-        ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl })
-      };
+      const resolverOpts = await ctx.resolverOptions();
       const teamId = looksLikeId(effectiveTeam) ? effectiveTeam : await resolveTeamId(effectiveTeam, resolverOpts);
       filter = { accessibleTeams: { some: { id: { eq: teamId } } } };
     }
@@ -337,8 +307,7 @@ async function handleProjectList(options: ProjectCommandOptions): Promise<number
       const projects = items.map(normalizeProject);
 
       if (options.jsonEnvelope) {
-        const envelope = successEnvelope(projects, { sourceLayer: "curated", profile: profile.name }, pageInfo);
-        process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
+        return ctx.emitSuccess(projects, pageInfo);
       } else if (options.json) {
         process.stdout.write(`${JSON.stringify(projects, null, 2)}\n`);
       } else {
@@ -351,19 +320,7 @@ async function handleProjectList(options: ProjectCommandOptions): Promise<number
 
     return ExitCode.Success;
   } catch (error) {
-    const failure = mapCommandFailure(error);
-
-    if (options.jsonEnvelope) {
-      const envelope = failureEnvelope([failure.error], {
-        sourceLayer: "curated",
-        ...(options.profile === undefined ? {} : { profile: options.profile })
-      });
-      process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
-    } else {
-      process.stderr.write(`Error: ${failure.error.message}\n`);
-    }
-
-    return failure.exitCode;
+    return ctx.emitCaughtError(error);
   }
 }
 
@@ -379,26 +336,14 @@ async function handleProjectCreate(options: ProjectCommandOptions): Promise<numb
   if (options.description !== undefined) {
     input.description = options.description;
   }
+
+  const ctx = buildContext(options);
+
   try {
-    const profile = await resolveStoredProfile({
-      paths: {
-        configFile: options.configFile,
-        credentialsFile: options.credentialsFile
-      },
-      ...(options.profile === undefined ? {} : { explicitProfile: options.profile }),
-      env: options.env
-    });
+    const profile = await ctx.resolveProfile();
 
     if (options.team !== undefined) {
-      const resolverOpts: ResolverOptions = {
-        credentials: profile.credentials,
-        ...(options.apiUrl === undefined
-          ? profile.metadata.baseUrl === undefined
-            ? {}
-            : { apiUrl: profile.metadata.baseUrl }
-          : { apiUrl: options.apiUrl }),
-        ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl })
-      };
+      const resolverOpts = await ctx.resolverOptions();
       input.teamIds = [looksLikeId(options.team) ? options.team : await resolveTeamId(options.team, resolverOpts)];
     }
 
@@ -406,44 +351,25 @@ async function handleProjectCreate(options: ProjectCommandOptions): Promise<numb
       return emitDryRunResult("create", "project", input, options);
     }
 
-    const response = await executeGraphQL<{
+    const response = await ctx.graphql<{
       projectCreate: { success: boolean; project: RawProject | null };
-    }>({
-      query: PROJECT_CREATE_MUTATION,
-      variables: { input },
-      credentials: profile.credentials,
-      ...(options.apiUrl === undefined
-        ? profile.metadata.baseUrl === undefined
-          ? {}
-          : { apiUrl: profile.metadata.baseUrl }
-        : { apiUrl: options.apiUrl }),
-      ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl })
-    });
+    }>(PROJECT_CREATE_MUTATION, { input });
 
     if (
-      hasErrors(response.body.errors) ||
+      ctx.hasErrors(response.body.errors) ||
       response.body.data?.projectCreate?.project === null ||
       response.body.data?.projectCreate?.project === undefined
     ) {
-      if (options.jsonEnvelope) {
-        const errors = mapGraphQLErrors(response.body.errors);
-        const envelope = failureEnvelope(
-          errors.length > 0 ? errors : [{ category: "general", message: "Project creation failed" }],
-          { sourceLayer: "curated", profile: profile.name }
-        );
-        process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
-      } else {
-        const errorMessage = response.body.errors?.[0]?.message ?? "Project creation failed";
-        process.stderr.write(`Error: ${errorMessage}\n`);
-      }
-      return ExitCode.GeneralError;
+      const errors = ctx.mapGraphQLErrors(response.body.errors);
+      return ctx.emitFailure(
+        errors.length > 0 ? errors : [{ category: "general", message: "Project creation failed" }]
+      );
     }
 
     const project = normalizeProject(response.body.data.projectCreate.project);
 
     if (options.jsonEnvelope) {
-      const envelope = successEnvelope(project, { sourceLayer: "curated", profile: profile.name });
-      process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
+      return ctx.emitSuccess(project);
     } else if (options.json) {
       process.stdout.write(`${JSON.stringify(project, null, 2)}\n`);
     } else {
@@ -453,19 +379,7 @@ async function handleProjectCreate(options: ProjectCommandOptions): Promise<numb
 
     return ExitCode.Success;
   } catch (error) {
-    const failure = mapCommandFailure(error);
-
-    if (options.jsonEnvelope) {
-      const envelope = failureEnvelope([failure.error], {
-        sourceLayer: "curated",
-        ...(options.profile === undefined ? {} : { profile: options.profile })
-      });
-      process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
-    } else {
-      process.stderr.write(`Error: ${failure.error.message}\n`);
-    }
-
-    return failure.exitCode;
+    return ctx.emitCaughtError(error);
   }
 }
 
@@ -493,54 +407,28 @@ async function handleProjectUpdate(
     return emitDryRunResult("update", "project", { id, ...input }, options);
   }
 
-  try {
-    const profile = await resolveStoredProfile({
-      paths: {
-        configFile: options.configFile,
-        credentialsFile: options.credentialsFile
-      },
-      ...(options.profile === undefined ? {} : { explicitProfile: options.profile }),
-      env: options.env
-    });
+  const ctx = buildContext(options);
 
-    const response = await executeGraphQL<{
+  try {
+    const response = await ctx.graphql<{
       projectUpdate: { success: boolean; project: RawProject | null };
-    }>({
-      query: PROJECT_UPDATE_MUTATION,
-      variables: { id, input },
-      credentials: profile.credentials,
-      ...(options.apiUrl === undefined
-        ? profile.metadata.baseUrl === undefined
-          ? {}
-          : { apiUrl: profile.metadata.baseUrl }
-        : { apiUrl: options.apiUrl }),
-      ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl })
-    });
+    }>(PROJECT_UPDATE_MUTATION, { id, input });
 
     if (
-      hasErrors(response.body.errors) ||
+      ctx.hasErrors(response.body.errors) ||
       response.body.data?.projectUpdate?.project === null ||
       response.body.data?.projectUpdate?.project === undefined
     ) {
-      if (options.jsonEnvelope) {
-        const errors = mapGraphQLErrors(response.body.errors);
-        const envelope = failureEnvelope(
-          errors.length > 0 ? errors : [{ category: "general", message: "Project update failed" }],
-          { sourceLayer: "curated", profile: profile.name }
-        );
-        process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
-      } else {
-        const errorMessage = response.body.errors?.[0]?.message ?? "Project update failed";
-        process.stderr.write(`Error: ${errorMessage}\n`);
-      }
-      return ExitCode.GeneralError;
+      const errors = ctx.mapGraphQLErrors(response.body.errors);
+      return ctx.emitFailure(
+        errors.length > 0 ? errors : [{ category: "general", message: "Project update failed" }]
+      );
     }
 
     const project = normalizeProject(response.body.data.projectUpdate.project);
 
     if (options.jsonEnvelope) {
-      const envelope = successEnvelope(project, { sourceLayer: "curated", profile: profile.name });
-      process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
+      return ctx.emitSuccess(project);
     } else if (options.json) {
       process.stdout.write(`${JSON.stringify(project, null, 2)}\n`);
     } else {
@@ -550,22 +438,14 @@ async function handleProjectUpdate(
 
     return ExitCode.Success;
   } catch (error) {
-    const failure = mapCommandFailure(error);
-
-    if (options.jsonEnvelope) {
-      const envelope = failureEnvelope([failure.error], {
-        sourceLayer: "curated",
-        ...(options.profile === undefined ? {} : { profile: options.profile })
-      });
-      process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
-    } else {
-      process.stderr.write(`Error: ${failure.error.message}\n`);
-    }
-
-    return failure.exitCode;
+    return ctx.emitCaughtError(error);
   }
 }
 
+/**
+ * Create a project and batch-create issues linked to it.
+ * Uses the workflow abstraction for typed partial-success reporting.
+ */
 async function handleProjectCreateWithIssues(options: ProjectCommandOptions): Promise<number> {
   if (options.name === undefined) {
     return emitValidationError("--name is required for project create-with-issues.", options);
@@ -615,26 +495,10 @@ async function handleProjectCreateWithIssues(options: ProjectCommandOptions): Pr
     projectInput.description = options.description;
   }
 
+  const ctx = buildContext(options);
+
   try {
-    const profile = await resolveStoredProfile({
-      paths: {
-        configFile: options.configFile,
-        credentialsFile: options.credentialsFile
-      },
-      ...(options.profile === undefined ? {} : { explicitProfile: options.profile }),
-      env: options.env
-    });
-
-    const resolverOpts: ResolverOptions = {
-      credentials: profile.credentials,
-      ...(options.apiUrl === undefined
-        ? profile.metadata.baseUrl === undefined
-          ? {}
-          : { apiUrl: profile.metadata.baseUrl }
-        : { apiUrl: options.apiUrl }),
-      ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl })
-    };
-
+    const resolverOpts = await ctx.resolverOptions();
     const teamId = looksLikeId(options.team) ? options.team : await resolveTeamId(options.team, resolverOpts);
     projectInput.teamIds = [teamId];
 
@@ -648,88 +512,92 @@ async function handleProjectCreateWithIssues(options: ProjectCommandOptions): Pr
       }, options);
     }
 
-    // Step 1: Create the project
-    const projectResponse = await executeGraphQL<{
-      projectCreate: { success: boolean; project: RawProject | null };
-    }>({
-      query: PROJECT_CREATE_MUTATION,
-      variables: { input: projectInput },
-      credentials: profile.credentials,
-      ...(options.apiUrl === undefined
-        ? profile.metadata.baseUrl === undefined
-          ? {}
-          : { apiUrl: profile.metadata.baseUrl }
-        : { apiUrl: options.apiUrl }),
-      ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl })
-    });
+    // Use workflow orchestration for typed partial-success modeling
+    const workflowResult = await runTwoStepWorkflow<NormalizedProject, RawBatchIssue[]>(
+      {
+        name: "create project",
+        execute: async () => {
+          const response = await ctx.graphql<{
+            projectCreate: { success: boolean; project: RawProject | null };
+          }>(PROJECT_CREATE_MUTATION, { input: projectInput });
 
-    if (
-      hasErrors(projectResponse.body.errors) ||
-      projectResponse.body.data?.projectCreate?.project === null ||
-      projectResponse.body.data?.projectCreate?.project === undefined
-    ) {
+          if (
+            ctx.hasErrors(response.body.errors) ||
+            response.body.data?.projectCreate?.project === null ||
+            response.body.data?.projectCreate?.project === undefined
+          ) {
+            const msg = response.body.errors?.[0]?.message ?? "Project creation failed";
+            throw new Error(msg);
+          }
+
+          return normalizeProject(response.body.data.projectCreate.project);
+        },
+      },
+      (project) => ({
+        name: "batch create issues",
+        execute: async () => {
+          const issuesInput = {
+            issues: issuesArray.map((issue) => ({
+              ...(issue as Record<string, unknown>),
+              projectId: project.id,
+            })),
+          };
+
+          const response = await ctx.graphql<{
+            issueBatchCreate: { success: boolean; issues: RawBatchIssue[] | null };
+          }>(ISSUE_BATCH_CREATE_MUTATION, { input: issuesInput });
+
+          if (
+            ctx.hasErrors(response.body.errors) ||
+            !response.body.data?.issueBatchCreate?.success
+          ) {
+            const msg = response.body.errors?.[0]?.message ?? "Issue batch creation failed";
+            throw new Error(`${msg} (project was created: ${project.id})`);
+          }
+
+          return response.body.data.issueBatchCreate.issues ?? [];
+        },
+      })
+    );
+
+    if (!workflowResult.ok) {
+      // Partial failure: include step details so the agent knows what completed
+      const firstStep = workflowResult.steps.first;
+      const secondStep = workflowResult.steps.second;
+
+      if (firstStep.status === "failed") {
+        return ctx.emitFailure([{ category: "general", message: firstStep.error ?? "Project creation failed" }]);
+      }
+
+      // Project succeeded but issues failed — report partial success
+      const partialResult = {
+        project: firstStep.result,
+        issues: null,
+        workflow: {
+          steps: workflowResult.steps,
+          partialSuccess: true,
+        },
+      };
+
       if (options.jsonEnvelope) {
-        const errors = mapGraphQLErrors(projectResponse.body.errors);
-        const envelope = failureEnvelope(
-          errors.length > 0 ? errors : [{ category: "general", message: "Project creation failed" }],
-          { sourceLayer: "curated", profile: profile.name }
-        );
-        process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
+        return ctx.emitFailure([{
+          category: "general",
+          message: secondStep.error ?? "Issue batch creation failed (project was created)",
+          details: partialResult,
+        }]);
       } else {
-        const errorMessage = projectResponse.body.errors?.[0]?.message ?? "Project creation failed";
-        process.stderr.write(`Error: ${errorMessage}\n`);
+        process.stderr.write(`Error: ${secondStep.error ?? "Issue batch creation failed (project was created)"}\n`);
       }
       return ExitCode.GeneralError;
     }
 
-    const project = normalizeProject(projectResponse.body.data.projectCreate.project);
-
-    // Step 2: Batch-create issues linked to the project
-    const issuesInput = {
-      issues: issuesArray.map((issue) => ({
-        ...(issue as Record<string, unknown>),
-        projectId: project.id
-      }))
-    };
-
-    const issuesResponse = await executeGraphQL<{
-      issueBatchCreate: { success: boolean; issues: RawBatchIssue[] | null };
-    }>({
-      query: ISSUE_BATCH_CREATE_MUTATION,
-      variables: { input: issuesInput },
-      credentials: profile.credentials,
-      ...(options.apiUrl === undefined
-        ? profile.metadata.baseUrl === undefined
-          ? {}
-          : { apiUrl: profile.metadata.baseUrl }
-        : { apiUrl: options.apiUrl }),
-      ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl })
-    });
-
-    if (
-      hasErrors(issuesResponse.body.errors) ||
-      !issuesResponse.body.data?.issueBatchCreate?.success
-    ) {
-      if (options.jsonEnvelope) {
-        const errors = mapGraphQLErrors(issuesResponse.body.errors);
-        const envelope = failureEnvelope(
-          errors.length > 0 ? errors : [{ category: "general", message: "Issue batch creation failed (project was created)" }],
-          { sourceLayer: "curated", profile: profile.name }
-        );
-        process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
-      } else {
-        const errorMessage = issuesResponse.body.errors?.[0]?.message ?? "Issue batch creation failed (project was created)";
-        process.stderr.write(`Error: ${errorMessage}\n`);
-      }
-      return ExitCode.GeneralError;
-    }
-
-    const issues = issuesResponse.body.data.issueBatchCreate.issues ?? [];
+    // Full success
+    const project = workflowResult.completed.first!;
+    const issues = workflowResult.completed.second!;
     const result = { project, issues };
 
     if (options.jsonEnvelope) {
-      const envelope = successEnvelope(result, { sourceLayer: "curated", profile: profile.name });
-      process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
+      return ctx.emitSuccess(result);
     } else if (options.json) {
       process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     } else {
@@ -743,19 +611,7 @@ async function handleProjectCreateWithIssues(options: ProjectCommandOptions): Pr
 
     return ExitCode.Success;
   } catch (error) {
-    const failure = mapCommandFailure(error);
-
-    if (options.jsonEnvelope) {
-      const envelope = failureEnvelope([failure.error], {
-        sourceLayer: "curated",
-        ...(options.profile === undefined ? {} : { profile: options.profile })
-      });
-      process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
-    } else {
-      process.stderr.write(`Error: ${failure.error.message}\n`);
-    }
-
-    return failure.exitCode;
+    return ctx.emitCaughtError(error);
   }
 }
 
@@ -764,53 +620,27 @@ async function handleProjectDelete(id: string, options: ProjectCommandOptions): 
     return emitDryRunResult("delete", "project", { id }, options);
   }
 
-  try {
-    const profile = await resolveStoredProfile({
-      paths: {
-        configFile: options.configFile,
-        credentialsFile: options.credentialsFile
-      },
-      ...(options.profile === undefined ? {} : { explicitProfile: options.profile }),
-      env: options.env
-    });
+  const ctx = buildContext(options);
 
-    const response = await executeGraphQL<{
+  try {
+    const response = await ctx.graphql<{
       projectDelete: { success: boolean };
-    }>({
-      query: PROJECT_DELETE_MUTATION,
-      variables: { id },
-      credentials: profile.credentials,
-      ...(options.apiUrl === undefined
-        ? profile.metadata.baseUrl === undefined
-          ? {}
-          : { apiUrl: profile.metadata.baseUrl }
-        : { apiUrl: options.apiUrl }),
-      ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl })
-    });
+    }>(PROJECT_DELETE_MUTATION, { id });
 
     if (
-      hasErrors(response.body.errors) ||
+      ctx.hasErrors(response.body.errors) ||
       !response.body.data?.projectDelete?.success
     ) {
-      if (options.jsonEnvelope) {
-        const errors = mapGraphQLErrors(response.body.errors);
-        const envelope = failureEnvelope(
-          errors.length > 0 ? errors : [{ category: "general", message: "Project deletion failed" }],
-          { sourceLayer: "curated", profile: profile.name }
-        );
-        process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
-      } else {
-        const errorMessage = response.body.errors?.[0]?.message ?? "Project deletion failed";
-        process.stderr.write(`Error: ${errorMessage}\n`);
-      }
-      return ExitCode.GeneralError;
+      const errors = ctx.mapGraphQLErrors(response.body.errors);
+      return ctx.emitFailure(
+        errors.length > 0 ? errors : [{ category: "general", message: "Project deletion failed" }]
+      );
     }
 
     const result = { id, deleted: true };
 
     if (options.jsonEnvelope) {
-      const envelope = successEnvelope(result, { sourceLayer: "curated", profile: profile.name });
-      process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
+      return ctx.emitSuccess(result);
     } else if (options.json) {
       process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     } else {
@@ -819,19 +649,7 @@ async function handleProjectDelete(id: string, options: ProjectCommandOptions): 
 
     return ExitCode.Success;
   } catch (error) {
-    const failure = mapCommandFailure(error);
-
-    if (options.jsonEnvelope) {
-      const envelope = failureEnvelope([failure.error], {
-        sourceLayer: "curated",
-        ...(options.profile === undefined ? {} : { profile: options.profile })
-      });
-      process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
-    } else {
-      process.stderr.write(`Error: ${failure.error.message}\n`);
-    }
-
-    return failure.exitCode;
+    return ctx.emitCaughtError(error);
   }
 }
 
