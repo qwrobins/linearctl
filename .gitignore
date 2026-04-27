@@ -16,6 +16,8 @@ src/generated/manifest/schema.json
 
 .firecrawl/
 
+.agents/
+.exa/
 .codex
 .opencode/
 opencode.json
