@@ -63,6 +63,7 @@ function makeRawIssue(overrides?: Partial<Record<string, unknown>>) {
     team: { id: "team-1", key: "INF", name: "Infrastructure" },
     assignee: { id: "user-1", name: "Quentin", email: "quentin@example.com" },
     creator: { id: "user-2", name: "Alice", email: "alice@example.com" },
+    cycle: { id: "cycle-1", number: 42, name: "Cycle 42" },
     project: { id: "proj-1", name: "Auth hardening" },
     labels: { nodes: [{ id: "label-1", name: "bug" }, { id: "label-2", name: "mobile" }] },
     url: "https://linear.app/team/issue/INF-2975",
@@ -602,6 +603,38 @@ describe("handleIssueCommand — issue update", () => {
 
       expect(exitCode).toBe(5);
       expect(output.stderr.join("")).toContain("at least one field");
+    } finally {
+      output.restore();
+    }
+  });
+
+  it("applies --cycle by sending cycleId in issue update input", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-issue-"));
+    const paths = await writeProfileFiles(directory);
+    const updatedIssue = makeRawIssue({
+      cycle: { id: "cycle-2", number: 43, name: "Cycle 43" }
+    });
+    const fetchSpy = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) =>
+      new Response(JSON.stringify({
+        data: { issueUpdate: { success: true, issue: updatedIssue } }
+      }), { status: 200 })
+    );
+    const fetchImpl = fetchSpy as unknown as FetchLike;
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleIssueCommand(["update", "INF-2975"], {
+        ...baseOptions(paths),
+        cycle: "cycle-2",
+        fetchImpl
+      });
+
+      expect(exitCode).toBe(0);
+      const request = JSON.parse(String(fetchSpy.mock.calls[0]?.[1]?.body ?? "{}"));
+      expect(request.variables.input.cycleId).toBe("cycle-2");
+
+      const parsed = JSON.parse(output.stdout.join(""));
+      expect(parsed.cycle).toEqual({ id: "cycle-2", number: 43, name: "Cycle 43" });
     } finally {
       output.restore();
     }
