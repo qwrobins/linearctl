@@ -606,6 +606,28 @@ describe("handleIssueCommand — issue update", () => {
       output.restore();
     }
   });
+
+  it("fails loudly for unsupported --cycle on issue update before mutation", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-issue-"));
+    const paths = await writeProfileFiles(directory);
+    const fetchImpl = vi.fn() as unknown as FetchLike;
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleIssueCommand(["update", "QWR-78"], {
+        ...baseOptions(paths),
+        cycle: "cycle-1",
+        fetchImpl
+      });
+
+      expect(exitCode).toBe(5);
+      expect(output.stderr.join("")).toContain("issue update does not support --cycle yet");
+      expect(output.stderr.join("")).toContain("linearctl issue bulk-update --ids <issue-id> --cycle <cycle-id>");
+      expect(fetchImpl).not.toHaveBeenCalled();
+    } finally {
+      output.restore();
+    }
+  });
 });
 
 describe("handleIssueCommand — issue close", () => {

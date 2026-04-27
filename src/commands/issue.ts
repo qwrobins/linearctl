@@ -1381,6 +1381,13 @@ export async function handleIssueCommand(
 ): Promise<number> {
   const [subcommand, ...rest] = positionals;
 
+  if (subcommand === "update" && options.cycle !== undefined) {
+    return emitValidationError(
+      "issue update does not support --cycle yet. Try: linearctl issue bulk-update --ids <issue-id> --cycle <cycle-id>",
+      options
+    );
+  }
+
   if (subcommand === "get") {
     const identifier = rest[0];
     if (identifier === undefined || identifier === "") {
@@ -1492,4 +1499,3 @@ export async function handleIssueCommand(
 
   return emitValidationError("unsupported issue command. Try: get, create, list, search, update, close, assign, comment, attach-slack, bulk-update, bulk-close, bulk-assign.", options);
 }
-
