@@ -101,6 +101,7 @@ fragment CuratedIssue on Issue {
   team { id key name }
   assignee { id name email }
   creator { id name email }
+  cycle { id number name }
   project { id name }
   labels { nodes { id name } }
   url
@@ -220,6 +221,7 @@ interface RawIssue {
   team: { id: string; key: string; name: string };
   assignee: { id: string; name: string; email: string } | null;
   creator: { id: string; name: string; email: string } | null;
+  cycle: { id: string; number: number; name: string | null } | null;
   project: { id: string; name: string } | null;
   labels: { nodes: Array<{ id: string; name: string }> };
   url: string;
@@ -237,6 +239,7 @@ export interface NormalizedIssue {
   team: { id: string; key: string; name: string };
   assignee: { id: string; name: string; email: string } | null;
   creator: { id: string; name: string; email: string } | null;
+  cycle: { id: string; number: number; name: string | null } | null;
   project: { id: string; name: string } | null;
   labels: Array<{ id: string; name: string }>;
   url: string;
@@ -255,6 +258,7 @@ export function normalizeIssue(raw: RawIssue): NormalizedIssue {
     team: raw.team,
     assignee: raw.assignee,
     creator: raw.creator,
+    cycle: raw.cycle,
     project: raw.project,
     labels: raw.labels.nodes,
     url: raw.url,
@@ -727,6 +731,9 @@ async function handleIssueUpdate(
   }
   if (options.state !== undefined) {
     input.stateId = options.state;
+  }
+  if (options.cycle !== undefined) {
+    input.cycleId = options.cycle;
   }
 
   if (Object.keys(input).length === 0) {
@@ -1492,4 +1499,3 @@ export async function handleIssueCommand(
 
   return emitValidationError("unsupported issue command. Try: get, create, list, search, update, close, assign, comment, attach-slack, bulk-update, bulk-close, bulk-assign.", options);
 }
-
