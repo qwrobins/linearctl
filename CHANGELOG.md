@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.4] - 2026-04-28
+
+### Added
+
+- `project update --target-date <YYYY-MM-DD>` to set or change a project's target date
+- `project update --state` now resolves status names (e.g. "Paused", "Active Development") and state types (e.g. "completed", "backlog") to status IDs automatically; UUIDs are passed through directly
+
+### Fixed
+
+- `project update --state` sending a raw state type string instead of resolving to a `statusId`, causing "status not found" errors on every state change
+
 ## [0.5.3] - 2026-04-28
 
 ### Added

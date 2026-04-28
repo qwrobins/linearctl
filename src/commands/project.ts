@@ -32,6 +32,7 @@ export interface ProjectCommandOptions {
   issuesJson?: string;
   allTeams?: boolean;
   state?: string;
+  targetDate?: string;
   // pagination flags
   all?: boolean;
   max?: number;
@@ -48,6 +49,61 @@ type ProjectStateType = (typeof VALID_PROJECT_STATE_TYPES)[number];
 
 function isProjectStateType(value: string): value is ProjectStateType {
   return (VALID_PROJECT_STATE_TYPES as readonly string[]).includes(value);
+}
+
+const PROJECT_STATUSES_QUERY = `
+query ProjectStatuses {
+  projectStatuses(first: 100) {
+    nodes {
+      id
+      name
+      type
+    }
+  }
+}`;
+
+interface RawProjectStatus {
+  id: string;
+  name: string;
+  type: string;
+}
+
+async function resolveStatusId(
+  stateValue: string,
+  ctx: CommandContext
+): Promise<{ statusId: string } | { error: string }> {
+  if (looksLikeId(stateValue)) {
+    return { statusId: stateValue };
+  }
+
+  const response = await ctx.graphql<{
+    projectStatuses: { nodes: RawProjectStatus[] };
+  }>(PROJECT_STATUSES_QUERY, {});
+
+  if (ctx.hasErrors(response.body.errors) || !response.body.data?.projectStatuses) {
+    return { error: "Failed to fetch project statuses for resolution" };
+  }
+
+  const statuses = response.body.data.projectStatuses.nodes;
+
+  const byName = statuses.find(
+    (s) => s.name.toLowerCase() === stateValue.toLowerCase()
+  );
+  if (byName !== undefined) {
+    return { statusId: byName.id };
+  }
+
+  const byType = statuses.filter((s) => s.type === stateValue);
+  if (byType.length === 1) {
+    return { statusId: byType[0]!.id };
+  }
+  if (byType.length > 1) {
+    const names = byType.map((s) => `"${s.name}" (${s.id})`).join(", ");
+    return { error: `Multiple statuses match type "${stateValue}": ${names}. Use --state with a status name or ID.` };
+  }
+
+  const available = statuses.map((s) => `${s.name} [${s.type}]`).join(", ");
+  return { error: `No project status matches "${stateValue}". Available: ${available}` };
 }
 
 const CURATED_PROJECT_FRAGMENT = `
@@ -527,21 +583,31 @@ async function handleProjectUpdate(
   if (options.description !== undefined) {
     input.description = options.description;
   }
-  if (options.state !== undefined) {
-    input.state = options.state;
+  if (options.targetDate !== undefined) {
+    input.targetDate = options.targetDate;
   }
 
-  if (Object.keys(input).length === 0) {
-    return emitValidationError("project update requires at least one of --name, --description, --state.", options);
-  }
+  const needsStateResolution = options.state !== undefined;
 
-  if (options.dryRun === true) {
-    return emitDryRunResult("update", "project", { id, ...input }, options);
+  if (Object.keys(input).length === 0 && !needsStateResolution) {
+    return emitValidationError("project update requires at least one of --name, --description, --state, --target-date.", options);
   }
 
   const ctx = buildContext(options);
 
   try {
+    if (needsStateResolution) {
+      const result = await resolveStatusId(options.state!, ctx);
+      if ("error" in result) {
+        return ctx.emitFailure([{ category: "general", message: result.error }]);
+      }
+      input.statusId = result.statusId;
+    }
+
+    if (options.dryRun === true) {
+      return emitDryRunResult("update", "project", { id, ...input }, options);
+    }
+
     const response = await ctx.graphql<{
       projectUpdate: { success: boolean; project: RawProject | null };
     }>(PROJECT_UPDATE_MUTATION, { id, input });

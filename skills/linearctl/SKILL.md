@@ -53,7 +53,7 @@ Raw GraphQL should not be used merely because it is possible. It is the fallback
 - `linearctl project list [--team <id>] [--state <status-type>] [--all-teams] --json` — includes portfolio fields (`progress`, `health`, `currentProgress`), normalized `milestones`, and milestone truncation metadata (`milestonesPageInfo`, `milestonesTruncated`) in JSON output; `--state` values: backlog, planned, started, paused, completed, canceled
 - `linearctl project create --name <name> [--description <text>] [--team <id>] --json`
 - `linearctl project create-with-issues --name <name> --team <id> --issues-json <json> [--description <text>] --json` — create a project then batch-create linked issues (reports partial success if issue creation fails after project was created)
-- `linearctl project update <id> [--name <text>] [--description <text>] [--state <state>] --json`
+- `linearctl project update <id> [--name <text>] [--description <text>] [--state <name|type>] [--target-date <YYYY-MM-DD>] --json` — `--state` resolves status names (e.g. "Paused", "Active Development") or state types (e.g. "completed", "backlog") to IDs automatically
 - `linearctl project delete <id> --json`
 
 ### Project statuses
