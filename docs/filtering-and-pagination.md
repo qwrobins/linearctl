@@ -87,6 +87,14 @@ linearctl issue list --filter-json '{"state":{"name":{"in":["Todo","In Progress"
 
 When `--filter-json` is provided, it is used directly. Individual filter flags (`--team`, `--state`, etc.) are ignored. When `--filter-json` is not provided, individual flags are combined into a filter object.
 
+Project list supports:
+
+| Flag | Description | Accepts |
+|---|---|---|
+| `--team <value>` | Filter by team | Name, key (e.g. `INF`), or UUID |
+| `--state <value>` | Filter by project status type | `backlog`, `planned`, `started`, `paused`, `completed`, `canceled` |
+| `--all-teams` | Disable default-team team filtering | boolean |
+
 ## Name resolution
 
 Curated commands automatically resolve friendly names to Linear UUIDs:

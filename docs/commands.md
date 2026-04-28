@@ -63,13 +63,15 @@ Bulk operations report partial success. Check the response for per-item results.
 
 ```bash
 linearctl project get <id> --json                  # richer detail payload: progress/health/currentProgress, milestones, issueCounts
-linearctl project list [--team <name|key|id>] [--state <name>] [--all-teams] --json
+linearctl project list [--team <name|key|id>] [--state <status-type>] [--all-teams] --json
 linearctl project create --name <name> [--description <text>] [--team <name|key|id>] --json
 linearctl project create-with-issues --name <name> --team <name|key|id> \
   --issues-json '[{"title":"...","teamId":"..."}]' [--description <text>] --json
 linearctl project update <id> [--name <text>] [--description <text>] [--state <state>] --json
 linearctl project delete <id> --json              # [destructive]
 ```
+
+For `project list`, `--state` accepts project status types: `backlog`, `planned`, `started`, `paused`, `completed`, or `canceled`.
 
 ## Cycle
 
