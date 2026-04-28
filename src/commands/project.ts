@@ -58,13 +58,36 @@ fragment CuratedProject on Project {
   updatedAt
 }`;
 
+const CURATED_PROJECT_DETAIL_FRAGMENT = `
+fragment CuratedProjectDetail on Project {
+  ...CuratedProject
+  progress
+  health
+  currentProgress
+  projectMilestones(first: 50) {
+    nodes {
+      id
+      name
+      description
+      targetDate
+      sortOrder
+      createdAt
+      updatedAt
+    }
+  }
+  issues {
+    totalCount
+  }
+}`;
+
 const PROJECT_GET_QUERY = `
 query ProjectGet($id: String!) {
   project(id: $id) {
-    ...CuratedProject
+    ...CuratedProjectDetail
   }
 }
-${CURATED_PROJECT_FRAGMENT}`;
+${CURATED_PROJECT_FRAGMENT}
+${CURATED_PROJECT_DETAIL_FRAGMENT}`;
 
 const PROJECT_LIST_QUERY = `
 query ProjectList($first: Int!, $after: String, $filter: ProjectFilter) {
@@ -141,6 +164,24 @@ interface RawProject {
   updatedAt: string;
 }
 
+interface RawProjectMilestone {
+  id: string;
+  name: string;
+  description: string | null;
+  targetDate: string | null;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface RawProjectDetail extends RawProject {
+  progress: number;
+  health: string | null;
+  currentProgress: number | null;
+  projectMilestones: { nodes: RawProjectMilestone[] };
+  issues: { totalCount: number };
+}
+
 export interface NormalizedProject {
   id: string;
   name: string;
@@ -153,6 +194,16 @@ export interface NormalizedProject {
   url: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface NormalizedProjectDetail extends NormalizedProject {
+  progress: number;
+  health: string | null;
+  currentProgress: number | null;
+  milestones: RawProjectMilestone[];
+  issueCounts: {
+    total: number;
+  };
 }
 
 export function normalizeProject(raw: RawProject): NormalizedProject {
@@ -168,6 +219,19 @@ export function normalizeProject(raw: RawProject): NormalizedProject {
     url: raw.url,
     createdAt: raw.createdAt,
     updatedAt: raw.updatedAt
+  };
+}
+
+export function normalizeProjectDetail(raw: RawProjectDetail): NormalizedProjectDetail {
+  return {
+    ...normalizeProject(raw),
+    progress: raw.progress,
+    health: raw.health,
+    currentProgress: raw.currentProgress,
+    milestones: raw.projectMilestones.nodes,
+    issueCounts: {
+      total: raw.issues.totalCount
+    }
   };
 }
 
@@ -215,7 +279,7 @@ async function handleProjectGet(
   const ctx = buildContext(options);
 
   try {
-    const response = await ctx.graphql<{ project: RawProject | null }>(
+    const response = await ctx.graphql<{ project: RawProjectDetail | null }>(
       PROJECT_GET_QUERY,
       { id }
     );
@@ -228,7 +292,7 @@ async function handleProjectGet(
       return ctx.emitNotFound("Project not found");
     }
 
-    const project = normalizeProject(response.body.data.project);
+    const project = normalizeProjectDetail(response.body.data.project);
 
     if (options.jsonEnvelope) {
       return ctx.emitSuccess(project);

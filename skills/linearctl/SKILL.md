@@ -49,7 +49,7 @@ Raw GraphQL should not be used merely because it is possible. It is the fallback
 - `linearctl issue bulk-assign --ids <id1,id2,...> --assignee <id> --json`
 
 ### Projects
-- `linearctl project get <id> --json`
+- `linearctl project get <id> --json` — richer single-project detail payload than `project list` (includes progress/health/currentProgress, normalized milestones, and issueCounts summary)
 - `linearctl project list [--team <id>] [--state <name>] [--all-teams] --json`
 - `linearctl project create --name <name> [--description <text>] [--team <id>] --json`
 - `linearctl project create-with-issues --name <name> --team <id> --issues-json <json> [--description <text>] --json` — create a project then batch-create linked issues (reports partial success if issue creation fails after project was created)
