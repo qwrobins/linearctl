@@ -165,6 +165,19 @@ describe("normalizeProject", () => {
     expect(normalized.milestonesPageInfo).toEqual({ hasNextPage: true, endCursor: "cursor-1" });
     expect(normalized.milestonesTruncated).toBe(true);
   });
+
+  it("flags milestones as truncated when total count exceeds returned nodes", () => {
+    const raw = makeRawProject({
+      projectMilestones: {
+        totalCount: 2,
+        pageInfo: { hasNextPage: false, endCursor: "cursor-1" },
+        nodes: [{ id: "milestone-1", name: "Phase 1", targetDate: "2026-05-01" }]
+      }
+    });
+    const normalized = normalizeProject(raw as Parameters<typeof normalizeProject>[0]);
+    expect(normalized.milestonesPageInfo).toEqual({ hasNextPage: false, endCursor: "cursor-1" });
+    expect(normalized.milestonesTruncated).toBe(true);
+  });
 });
 
 describe("normalizeProjectDetail", () => {
