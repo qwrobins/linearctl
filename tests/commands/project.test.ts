@@ -2,7 +2,7 @@ import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import { handleProjectCommand, normalizeProject } from "../../src/commands/project.js";
+import { handleProjectCommand, normalizeProject, normalizeProjectDetail } from "../../src/commands/project.js";
 import { writeCredentialsFile } from "../../src/core/auth/credentials.js";
 import { writeLinearConfigFile } from "../../src/core/config/config-file.js";
 import type { FetchLike } from "../../src/core/transport/graphql.js";
@@ -82,6 +82,30 @@ function makeRawProject(overrides?: Partial<Record<string, unknown>>) {
   };
 }
 
+function makeRawProjectDetail(overrides?: Partial<Record<string, unknown>>) {
+  return {
+    ...makeRawProject(),
+    progress: 45,
+    health: "onTrack",
+    currentProgress: 48,
+    projectMilestones: {
+      nodes: [
+        {
+          id: "milestone-1",
+          name: "Auth infra complete",
+          description: "Core auth infra is ready",
+          targetDate: "2026-05-01",
+          sortOrder: 0,
+          createdAt: "2026-04-01T10:00:00Z",
+          updatedAt: "2026-04-02T10:00:00Z"
+        }
+      ]
+    },
+    issues: { totalCount: 12 },
+    ...overrides
+  };
+}
+
 function makeFetch(responseBody: unknown): FetchLike {
   return vi.fn(async () =>
     new Response(JSON.stringify(responseBody), { status: 200 })
@@ -143,11 +167,46 @@ describe("normalizeProject", () => {
   });
 });
 
+describe("normalizeProjectDetail", () => {
+  it("preserves base fields and adds detail-level fields", () => {
+    const raw = makeRawProjectDetail();
+    const normalized = normalizeProjectDetail(raw as Parameters<typeof normalizeProjectDetail>[0]);
+
+    expect(normalized.id).toBe("proj-uuid-1");
+    expect(normalized.progress).toBe(45);
+    expect(normalized.health).toBe("onTrack");
+    expect(normalized.currentProgress).toBe(48);
+    expect(normalized.milestones).toEqual([
+      {
+        id: "milestone-1",
+        name: "Auth infra complete",
+        description: "Core auth infra is ready",
+        targetDate: "2026-05-01",
+        sortOrder: 0,
+        createdAt: "2026-04-01T10:00:00Z",
+        updatedAt: "2026-04-02T10:00:00Z"
+      }
+    ]);
+    expect(normalized.issueCounts).toEqual({ total: 12 });
+  });
+
+  it("defaults milestones and issue counts when detail relations are omitted", () => {
+    const raw = makeRawProjectDetail({
+      projectMilestones: null,
+      issues: null
+    });
+    const normalized = normalizeProjectDetail(raw as Parameters<typeof normalizeProjectDetail>[0]);
+
+    expect(normalized.milestones).toEqual([]);
+    expect(normalized.issueCounts).toEqual({ total: 0 });
+  });
+});
+
 describe("handleProjectCommand — project get", () => {
   it("returns normalized project JSON for a valid id", async () => {
     const directory = await mkdtemp(join(tmpdir(), "linear-cli-project-"));
     const paths = await writeProfileFiles(directory);
-    const fetchImpl = makeFetch({ data: { project: makeRawProject() } });
+    const fetchImpl = makeFetch({ data: { project: makeRawProjectDetail() } });
     const output = captureOutput();
 
     try {
@@ -163,6 +222,11 @@ describe("handleProjectCommand — project get", () => {
       expect(parsed.teams).toEqual([
         { id: "team-1", key: "INF", name: "Infrastructure" }
       ]);
+      expect(parsed.progress).toBe(45);
+      expect(parsed.health).toBe("onTrack");
+      expect(parsed.currentProgress).toBe(48);
+      expect(parsed.milestones).toHaveLength(1);
+      expect(parsed.issueCounts).toEqual({ total: 12 });
     } finally {
       output.restore();
     }

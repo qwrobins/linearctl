@@ -80,13 +80,36 @@ fragment CuratedProject on Project {
   updatedAt
 }`;
 
+const CURATED_PROJECT_DETAIL_FRAGMENT = `
+fragment CuratedProjectDetail on Project {
+  ...CuratedProject
+  progress
+  health
+  currentProgress
+  projectMilestones(first: 50) {
+    nodes {
+      id
+      name
+      description
+      targetDate
+      sortOrder
+      createdAt
+      updatedAt
+    }
+  }
+  issues {
+    totalCount
+  }
+}`;
+
 const PROJECT_GET_QUERY = `
 query ProjectGet($id: String!) {
   project(id: $id) {
-    ...CuratedProject
+    ...CuratedProjectDetail
   }
 }
-${CURATED_PROJECT_FRAGMENT}`;
+${CURATED_PROJECT_FRAGMENT}
+${CURATED_PROJECT_DETAIL_FRAGMENT}`;
 
 const PROJECT_LIST_QUERY = `
 query ProjectList($first: Int!, $after: String, $filter: ProjectFilter) {
@@ -158,16 +181,16 @@ interface RawProject {
   health: string | null;
   currentProgress: unknown;
   projectMilestones: {
-    totalCount: number;
-    pageInfo: {
+    totalCount?: number | null;
+    pageInfo?: {
       hasNextPage: boolean;
       endCursor: string | null;
-    };
-    nodes: Array<{
+    } | null;
+    nodes?: Array<{
       id: string;
       name: string;
       targetDate: string | null;
-    }>;
+    }> | null;
   } | null;
   startDate: string | null;
   targetDate: string | null;
@@ -176,6 +199,31 @@ interface RawProject {
   url: string;
   createdAt: string;
   updatedAt: string;
+}
+
+interface RawProjectMilestone {
+  id: string;
+  name: string;
+  description: string | null;
+  targetDate: string | null;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface RawProjectDetail extends RawProject {
+  progress: number;
+  health: string | null;
+  currentProgress: number | null;
+  projectMilestones: {
+    totalCount?: number | null;
+    pageInfo?: {
+      hasNextPage: boolean;
+      endCursor: string | null;
+    } | null;
+    nodes?: RawProjectMilestone[] | null;
+  } | null;
+  issues?: { totalCount?: number | null } | null;
 }
 
 export interface NormalizedProject {
@@ -205,6 +253,24 @@ export interface NormalizedProject {
   updatedAt: string;
 }
 
+export interface NormalizedProjectDetail extends NormalizedProject {
+  progress: number;
+  health: string | null;
+  currentProgress: number | null;
+  milestones: Array<{
+    id: string;
+    name: string;
+    description: string | null;
+    targetDate: string | null;
+    sortOrder: number;
+    createdAt: string;
+    updatedAt: string;
+  }>;
+  issueCounts: {
+    total: number;
+  };
+}
+
 export function normalizeProject(raw: RawProject): NormalizedProject {
   const milestones = raw.projectMilestones?.nodes ?? [];
   const milestonesPageInfo = raw.projectMilestones?.pageInfo ?? null;
@@ -229,6 +295,19 @@ export function normalizeProject(raw: RawProject): NormalizedProject {
     url: raw.url,
     createdAt: raw.createdAt,
     updatedAt: raw.updatedAt
+  };
+}
+
+export function normalizeProjectDetail(raw: RawProjectDetail): NormalizedProjectDetail {
+  return {
+    ...normalizeProject(raw),
+    progress: raw.progress,
+    health: raw.health,
+    currentProgress: raw.currentProgress,
+    milestones: raw.projectMilestones?.nodes ?? [],
+    issueCounts: {
+      total: raw.issues?.totalCount ?? 0
+    }
   };
 }
 
@@ -276,7 +355,7 @@ async function handleProjectGet(
   const ctx = buildContext(options);
 
   try {
-    const response = await ctx.graphql<{ project: RawProject | null }>(
+    const response = await ctx.graphql<{ project: RawProjectDetail | null }>(
       PROJECT_GET_QUERY,
       { id }
     );
@@ -289,7 +368,7 @@ async function handleProjectGet(
       return ctx.emitNotFound("Project not found");
     }
 
-    const project = normalizeProject(response.body.data.project);
+    const project = normalizeProjectDetail(response.body.data.project);
 
     if (options.jsonEnvelope) {
       return ctx.emitSuccess(project);
