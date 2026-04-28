@@ -62,7 +62,6 @@ function makeRawProject(overrides?: Partial<Record<string, unknown>>) {
     health: "onTrack",
     currentProgress: { percentage: 42 },
     projectMilestones: {
-      totalCount: 1,
       pageInfo: {
         hasNextPage: false,
         endCursor: null
@@ -101,7 +100,6 @@ function makeRawProjectDetail(overrides?: Partial<Record<string, unknown>>) {
         }
       ]
     },
-    issues: { totalCount: 12 },
     ...overrides
   };
 }
@@ -156,26 +154,12 @@ describe("normalizeProject", () => {
   it("flags milestones as truncated when connection has next page", () => {
     const raw = makeRawProject({
       projectMilestones: {
-        totalCount: 100,
         pageInfo: { hasNextPage: true, endCursor: "cursor-1" },
         nodes: [{ id: "milestone-1", name: "Phase 1", targetDate: "2026-05-01" }]
       }
     });
     const normalized = normalizeProject(raw as Parameters<typeof normalizeProject>[0]);
     expect(normalized.milestonesPageInfo).toEqual({ hasNextPage: true, endCursor: "cursor-1" });
-    expect(normalized.milestonesTruncated).toBe(true);
-  });
-
-  it("flags milestones as truncated when total count exceeds returned nodes", () => {
-    const raw = makeRawProject({
-      projectMilestones: {
-        totalCount: 2,
-        pageInfo: { hasNextPage: false, endCursor: "cursor-1" },
-        nodes: [{ id: "milestone-1", name: "Phase 1", targetDate: "2026-05-01" }]
-      }
-    });
-    const normalized = normalizeProject(raw as Parameters<typeof normalizeProject>[0]);
-    expect(normalized.milestonesPageInfo).toEqual({ hasNextPage: false, endCursor: "cursor-1" });
     expect(normalized.milestonesTruncated).toBe(true);
   });
 });
@@ -200,18 +184,15 @@ describe("normalizeProjectDetail", () => {
         updatedAt: "2026-04-02T10:00:00Z"
       }
     ]);
-    expect(normalized.issueCounts).toEqual({ total: 12 });
   });
 
-  it("defaults milestones and issue counts when detail relations are omitted", () => {
+  it("defaults milestones when detail relations are omitted", () => {
     const raw = makeRawProjectDetail({
       projectMilestones: null,
-      issues: null
     });
     const normalized = normalizeProjectDetail(raw as Parameters<typeof normalizeProjectDetail>[0]);
 
     expect(normalized.milestones).toEqual([]);
-    expect(normalized.issueCounts).toEqual({ total: 0 });
   });
 });
 
@@ -239,7 +220,6 @@ describe("handleProjectCommand — project get", () => {
       expect(parsed.health).toBe("onTrack");
       expect(parsed.currentProgress).toBe(48);
       expect(parsed.milestones).toHaveLength(1);
-      expect(parsed.issueCounts).toEqual({ total: 12 });
     } finally {
       output.restore();
     }

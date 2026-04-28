@@ -59,8 +59,7 @@ fragment CuratedProject on Project {
   progress
   health
   currentProgress
-  projectMilestones(first: 50) {
-    totalCount
+  projectMilestones(first: 10) {
     pageInfo {
       hasNextPage
       endCursor
@@ -86,7 +85,7 @@ fragment CuratedProjectDetail on Project {
   progress
   health
   currentProgress
-  projectMilestones(first: 50) {
+  projectMilestones(first: 10) {
     nodes {
       id
       name
@@ -96,9 +95,6 @@ fragment CuratedProjectDetail on Project {
       createdAt
       updatedAt
     }
-  }
-  issues {
-    totalCount
   }
 }`;
 
@@ -181,7 +177,6 @@ interface RawProject {
   health: string | null;
   currentProgress: unknown;
   projectMilestones: {
-    totalCount?: number | null;
     pageInfo?: {
       hasNextPage: boolean;
       endCursor: string | null;
@@ -216,14 +211,12 @@ interface RawProjectDetail extends RawProject {
   health: string | null;
   currentProgress: number | null;
   projectMilestones: {
-    totalCount?: number | null;
     pageInfo?: {
       hasNextPage: boolean;
       endCursor: string | null;
     } | null;
     nodes?: RawProjectMilestone[] | null;
   } | null;
-  issues?: { totalCount?: number | null } | null;
 }
 
 export interface NormalizedProject {
@@ -266,16 +259,12 @@ export interface NormalizedProjectDetail extends NormalizedProject {
     createdAt: string;
     updatedAt: string;
   }>;
-  issueCounts: {
-    total: number;
-  };
 }
 
 export function normalizeProject(raw: RawProject): NormalizedProject {
   const milestones = raw.projectMilestones?.nodes ?? [];
   const milestonesPageInfo = raw.projectMilestones?.pageInfo ?? null;
-  const milestonesTruncated = milestonesPageInfo?.hasNextPage === true
-    || (raw.projectMilestones?.totalCount ?? milestones.length) > milestones.length;
+  const milestonesTruncated = milestonesPageInfo?.hasNextPage === true;
 
   return {
     id: raw.id,
@@ -305,9 +294,6 @@ export function normalizeProjectDetail(raw: RawProjectDetail): NormalizedProject
     health: raw.health,
     currentProgress: raw.currentProgress,
     milestones: raw.projectMilestones?.nodes ?? [],
-    issueCounts: {
-      total: raw.issues?.totalCount ?? 0
-    }
   };
 }
 

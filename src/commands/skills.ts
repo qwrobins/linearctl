@@ -36,7 +36,7 @@ function isTty(stream?: NodeJS.ReadableStream): boolean {
 }
 
 function discoverAgentTargets(scope: "user" | "project"): AgentTarget[] {
-  const home = homedir();
+  const home = process.env.HOME ?? homedir();
   const cwd = process.cwd();
   const targets: AgentTarget[] = [];
 

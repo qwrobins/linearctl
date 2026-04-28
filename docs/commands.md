@@ -62,7 +62,7 @@ Bulk operations report partial success. Check the response for per-item results.
 ## Project
 
 ```bash
-linearctl project get <id> --json                  # richer detail payload: progress/health/currentProgress, milestones, issueCounts
+linearctl project get <id> --json                  # richer detail payload: progress/health/currentProgress, milestones
 linearctl project list [--team <name|key|id>] [--state <status-type>] [--all-teams] --json
 linearctl project create --name <name> [--description <text>] [--team <name|key|id>] --json
 linearctl project create-with-issues --name <name> --team <name|key|id> \
