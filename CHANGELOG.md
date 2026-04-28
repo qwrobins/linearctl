@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.4] - 2026-04-28
+
+### Added
+
+- `project update --target-date <YYYY-MM-DD>` to set or change a project's target date
+- `project update --state` now resolves status names (e.g. "Paused", "Active Development") and state types (e.g. "completed", "backlog") to status IDs automatically; UUIDs are passed through directly
+
+### Fixed
+
+- `project update --state` sending a raw state type string instead of resolving to a `statusId`, causing "status not found" errors on every state change
+- `project update --target-date` now validates YYYY-MM-DD format and rejects impossible dates (e.g. 2026-02-30) before making the API call
+- Project status resolution now paginates the `projectStatuses` connection to fetch all pages instead of only the first 100
+- Project status fetch errors now preserve and return the original GraphQL error details instead of a generic message
+
 ## [0.5.3] - 2026-04-28
 
 ### Added

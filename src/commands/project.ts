@@ -32,6 +32,7 @@ export interface ProjectCommandOptions {
   issuesJson?: string;
   allTeams?: boolean;
   state?: string;
+  targetDate?: string;
   // pagination flags
   all?: boolean;
   max?: number;
@@ -48,6 +49,102 @@ type ProjectStateType = (typeof VALID_PROJECT_STATE_TYPES)[number];
 
 function isProjectStateType(value: string): value is ProjectStateType {
   return (VALID_PROJECT_STATE_TYPES as readonly string[]).includes(value);
+}
+
+const PROJECT_STATUSES_QUERY = `
+query ProjectStatuses($first: Int!, $after: String) {
+  projectStatuses(first: $first, after: $after) {
+    pageInfo {
+      hasNextPage
+      endCursor
+    }
+    nodes {
+      id
+      name
+      type
+    }
+  }
+}`;
+
+interface RawProjectStatus {
+  id: string;
+  name: string;
+  type: string;
+}
+
+async function fetchAllProjectStatuses(
+  ctx: CommandContext
+): Promise<{ statuses: RawProjectStatus[] } | { error: string }> {
+  const allStatuses: RawProjectStatus[] = [];
+  let cursor: string | undefined;
+
+  for (;;) {
+    const variables: Record<string, unknown> = { first: 100 };
+    if (cursor !== undefined) {
+      variables.after = cursor;
+    }
+
+    const response = await ctx.graphql<{
+      projectStatuses: {
+        pageInfo: { hasNextPage: boolean; endCursor: string | null };
+        nodes: RawProjectStatus[];
+      };
+    }>(PROJECT_STATUSES_QUERY, variables);
+
+    if (ctx.hasErrors(response.body.errors)) {
+      const mapped = ctx.mapGraphQLErrors(response.body.errors);
+      const msg = mapped.length > 0 ? mapped[0]!.message : "Failed to fetch project statuses";
+      return { error: msg };
+    }
+
+    if (!response.body.data?.projectStatuses) {
+      return { error: "Failed to fetch project statuses: empty response" };
+    }
+
+    const page = response.body.data.projectStatuses;
+    allStatuses.push(...page.nodes);
+
+    if (!page.pageInfo.hasNextPage || page.pageInfo.endCursor === null) {
+      break;
+    }
+    cursor = page.pageInfo.endCursor;
+  }
+
+  return { statuses: allStatuses };
+}
+
+async function resolveStatusId(
+  stateValue: string,
+  ctx: CommandContext
+): Promise<{ statusId: string } | { error: string }> {
+  if (looksLikeId(stateValue)) {
+    return { statusId: stateValue };
+  }
+
+  const result = await fetchAllProjectStatuses(ctx);
+  if ("error" in result) {
+    return result;
+  }
+  const statuses = result.statuses;
+
+  const byName = statuses.find(
+    (s) => s.name.toLowerCase() === stateValue.toLowerCase()
+  );
+  if (byName !== undefined) {
+    return { statusId: byName.id };
+  }
+
+  const byType = statuses.filter((s) => s.type === stateValue);
+  if (byType.length === 1) {
+    return { statusId: byType[0]!.id };
+  }
+  if (byType.length > 1) {
+    const names = byType.map((s) => `"${s.name}" (${s.id})`).join(", ");
+    return { error: `Multiple statuses match type "${stateValue}": ${names}. Use --state with a status name or ID.` };
+  }
+
+  const available = statuses.map((s) => `${s.name} [${s.type}]`).join(", ");
+  return { error: `No project status matches "${stateValue}". Available: ${available}` };
 }
 
 const CURATED_PROJECT_FRAGMENT = `
@@ -527,21 +624,39 @@ async function handleProjectUpdate(
   if (options.description !== undefined) {
     input.description = options.description;
   }
-  if (options.state !== undefined) {
-    input.state = options.state;
+  if (options.targetDate !== undefined) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(options.targetDate)) {
+      return emitValidationError("Invalid --target-date, expected YYYY-MM-DD.", options);
+    }
+    const [y, m, d] = options.targetDate.split("-").map(Number) as [number, number, number];
+    const parsed = new Date(y, m - 1, d);
+    if (parsed.getFullYear() !== y || parsed.getMonth() !== m - 1 || parsed.getDate() !== d) {
+      return emitValidationError(`Invalid --target-date: ${options.targetDate} is not a real calendar date.`, options);
+    }
+    input.targetDate = options.targetDate;
   }
 
-  if (Object.keys(input).length === 0) {
-    return emitValidationError("project update requires at least one of --name, --description, --state.", options);
-  }
+  const needsStateResolution = options.state !== undefined;
 
-  if (options.dryRun === true) {
-    return emitDryRunResult("update", "project", { id, ...input }, options);
+  if (Object.keys(input).length === 0 && !needsStateResolution) {
+    return emitValidationError("project update requires at least one of --name, --description, --state, --target-date.", options);
   }
 
   const ctx = buildContext(options);
 
   try {
+    if (needsStateResolution) {
+      const result = await resolveStatusId(options.state!, ctx);
+      if ("error" in result) {
+        return ctx.emitFailure([{ category: "general", message: result.error }]);
+      }
+      input.statusId = result.statusId;
+    }
+
+    if (options.dryRun === true) {
+      return emitDryRunResult("update", "project", { id, ...input }, options);
+    }
+
     const response = await ctx.graphql<{
       projectUpdate: { success: boolean; project: RawProject | null };
     }>(PROJECT_UPDATE_MUTATION, { id, input });

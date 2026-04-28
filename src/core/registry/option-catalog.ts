@@ -61,6 +61,7 @@ export const OPTION_CATALOG: Record<string, OptionSpec> = {
   "page-size": { type: "string" },
   after: { type: "string" },
   name: { type: "string" },
+  "target-date": { type: "string" },
   "starts-at": { type: "string" },
   "ends-at": { type: "string" },
   color: { type: "string" },

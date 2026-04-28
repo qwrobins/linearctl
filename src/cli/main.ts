@@ -210,6 +210,7 @@ function toParsedCliArguments(values: Record<string, unknown>, positionals: stri
     ...(typeof values.position === "string" ? { position: values.position } : {}),
     ...(typeof values["state-type"] === "string" ? { stateType: values["state-type"] } : {}),
     ...(typeof values["status-type"] === "string" ? { statusType: values["status-type"] } : {}),
+    ...(typeof values["target-date"] === "string" ? { targetDate: values["target-date"] } : {}),
     ...(typeof values["starts-at"] === "string" ? { startsAt: values["starts-at"] } : {}),
     ...(typeof values["ends-at"] === "string" ? { endsAt: values["ends-at"] } : {}),
     ...(typeof values.body === "string" ? { body: values.body } : {}),

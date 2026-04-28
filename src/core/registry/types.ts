@@ -73,6 +73,7 @@ export interface ParsedCliArguments {
   position?: string;
   stateType?: string;
   statusType?: string;
+  targetDate?: string;
   startsAt?: string;
   endsAt?: string;
   body?: string;

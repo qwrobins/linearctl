@@ -67,7 +67,7 @@ linearctl project list [--team <name|key|id>] [--state <status-type>] [--all-tea
 linearctl project create --name <name> [--description <text>] [--team <name|key|id>] --json
 linearctl project create-with-issues --name <name> --team <name|key|id> \
   --issues-json '[{"title":"...","teamId":"..."}]' [--description <text>] --json
-linearctl project update <id> [--name <text>] [--description <text>] [--state <state>] --json
+linearctl project update <id> [--name <text>] [--description <text>] [--state <name|type>] [--target-date <YYYY-MM-DD>] --json
 linearctl project delete <id> --json              # [destructive]
 ```
 
