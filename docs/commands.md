@@ -71,7 +71,7 @@ linearctl project update <id> [--name <text>] [--description <text>] [--state <s
 linearctl project delete <id> --json              # [destructive]
 ```
 
-`project list --json` includes portfolio fields such as `progress`, `health`, `currentProgress`, and a normalized `milestones` array.
+`project list --json` includes portfolio fields such as `progress`, `health`, `currentProgress`, a normalized `milestones` array, and milestone pagination metadata (`milestonesPageInfo`, `milestonesTruncated`) so clients can detect truncation.
 
 ## Cycle
 

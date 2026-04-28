@@ -53,6 +53,11 @@ fragment CuratedProject on Project {
   health
   currentProgress
   projectMilestones(first: 50) {
+    totalCount
+    pageInfo {
+      hasNextPage
+      endCursor
+    }
     nodes {
       id
       name
@@ -146,6 +151,11 @@ interface RawProject {
   health: string | null;
   currentProgress: unknown;
   projectMilestones: {
+    totalCount: number;
+    pageInfo: {
+      hasNextPage: boolean;
+      endCursor: string | null;
+    };
     nodes: Array<{
       id: string;
       name: string;
@@ -174,6 +184,11 @@ export interface NormalizedProject {
     name: string;
     targetDate: string | null;
   }>;
+  milestonesPageInfo: {
+    hasNextPage: boolean;
+    endCursor: string | null;
+  } | null;
+  milestonesTruncated: boolean;
   startDate: string | null;
   targetDate: string | null;
   lead: { id: string; name: string; email: string } | null;
@@ -184,6 +199,11 @@ export interface NormalizedProject {
 }
 
 export function normalizeProject(raw: RawProject): NormalizedProject {
+  const milestones = raw.projectMilestones?.nodes ?? [];
+  const milestonesPageInfo = raw.projectMilestones?.pageInfo ?? null;
+  const milestonesTruncated = milestonesPageInfo?.hasNextPage === true
+    || (raw.projectMilestones?.totalCount ?? milestones.length) > milestones.length;
+
   return {
     id: raw.id,
     name: raw.name,
@@ -192,7 +212,9 @@ export function normalizeProject(raw: RawProject): NormalizedProject {
     progress: raw.progress,
     health: raw.health,
     currentProgress: raw.currentProgress,
-    milestones: raw.projectMilestones?.nodes ?? [],
+    milestones,
+    milestonesPageInfo,
+    milestonesTruncated,
     startDate: raw.startDate,
     targetDate: raw.targetDate,
     lead: raw.lead,

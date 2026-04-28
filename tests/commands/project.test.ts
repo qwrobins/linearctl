@@ -62,6 +62,11 @@ function makeRawProject(overrides?: Partial<Record<string, unknown>>) {
     health: "onTrack",
     currentProgress: { percentage: 42 },
     projectMilestones: {
+      totalCount: 1,
+      pageInfo: {
+        hasNextPage: false,
+        endCursor: null
+      },
       nodes: [
         { id: "milestone-1", name: "Phase 1", targetDate: "2026-05-01" }
       ]
@@ -112,12 +117,29 @@ describe("normalizeProject", () => {
     expect(normalized.milestones).toEqual([
       { id: "milestone-1", name: "Phase 1", targetDate: "2026-05-01" }
     ]);
+    expect(normalized.milestonesPageInfo).toEqual({ hasNextPage: false, endCursor: null });
+    expect(normalized.milestonesTruncated).toBe(false);
   });
 
   it("normalizes null milestone connections to an empty milestones array", () => {
     const raw = makeRawProject({ projectMilestones: null });
     const normalized = normalizeProject(raw as Parameters<typeof normalizeProject>[0]);
     expect(normalized.milestones).toEqual([]);
+    expect(normalized.milestonesPageInfo).toBeNull();
+    expect(normalized.milestonesTruncated).toBe(false);
+  });
+
+  it("flags milestones as truncated when connection has next page", () => {
+    const raw = makeRawProject({
+      projectMilestones: {
+        totalCount: 100,
+        pageInfo: { hasNextPage: true, endCursor: "cursor-1" },
+        nodes: [{ id: "milestone-1", name: "Phase 1", targetDate: "2026-05-01" }]
+      }
+    });
+    const normalized = normalizeProject(raw as Parameters<typeof normalizeProject>[0]);
+    expect(normalized.milestonesPageInfo).toEqual({ hasNextPage: true, endCursor: "cursor-1" });
+    expect(normalized.milestonesTruncated).toBe(true);
   });
 });
 
