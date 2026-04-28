@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.3] - 2026-04-28
+
+### Added
+
+- `project list` and `project get` JSON output now includes `progress` (float), `health` (enum), `currentProgress`, and a normalized `milestones` array with truncation metadata (`milestonesPageInfo`, `milestonesTruncated`)
+- `project get` detail payload includes richer milestone fields: `description`, `sortOrder`, `createdAt`, `updatedAt`
+- `project list --state <status-type>` filters by project state type (`backlog`, `planned`, `started`, `paused`, `completed`, `canceled`)
+
+### Fixed
+
+- All project commands (`list`, `get`, `create`, `update`, `delete`) returning HTTP 400 due to `totalCount` field not existing on `ProjectMilestoneConnection` and `issues` connection requiring a `first` argument
+- `project list` exceeding Linear's query complexity limit (12165 vs 10000 ceiling) when fetching milestones; reduced milestone page size from 50 to 10
+- `skills install --scope user` ignoring `HOME` env var override because `os.homedir()` caches the native value in Bun
+
+### Removed
+
+- `issueCounts` field from `project get` JSON output (Linear API does not expose issue count on the project connection)
+
 ## [0.5.2] - 2026-04-27
 
 ### Changed
