@@ -52,8 +52,12 @@ function isProjectStateType(value: string): value is ProjectStateType {
 }
 
 const PROJECT_STATUSES_QUERY = `
-query ProjectStatuses {
-  projectStatuses(first: 100) {
+query ProjectStatuses($first: Int!, $after: String) {
+  projectStatuses(first: $first, after: $after) {
+    pageInfo {
+      hasNextPage
+      endCursor
+    }
     nodes {
       id
       name
@@ -68,6 +72,47 @@ interface RawProjectStatus {
   type: string;
 }
 
+async function fetchAllProjectStatuses(
+  ctx: CommandContext
+): Promise<{ statuses: RawProjectStatus[] } | { error: string }> {
+  const allStatuses: RawProjectStatus[] = [];
+  let cursor: string | undefined;
+
+  for (;;) {
+    const variables: Record<string, unknown> = { first: 100 };
+    if (cursor !== undefined) {
+      variables.after = cursor;
+    }
+
+    const response = await ctx.graphql<{
+      projectStatuses: {
+        pageInfo: { hasNextPage: boolean; endCursor: string | null };
+        nodes: RawProjectStatus[];
+      };
+    }>(PROJECT_STATUSES_QUERY, variables);
+
+    if (ctx.hasErrors(response.body.errors)) {
+      const mapped = ctx.mapGraphQLErrors(response.body.errors);
+      const msg = mapped.length > 0 ? mapped[0]!.message : "Failed to fetch project statuses";
+      return { error: msg };
+    }
+
+    if (!response.body.data?.projectStatuses) {
+      return { error: "Failed to fetch project statuses: empty response" };
+    }
+
+    const page = response.body.data.projectStatuses;
+    allStatuses.push(...page.nodes);
+
+    if (!page.pageInfo.hasNextPage || page.pageInfo.endCursor === null) {
+      break;
+    }
+    cursor = page.pageInfo.endCursor;
+  }
+
+  return { statuses: allStatuses };
+}
+
 async function resolveStatusId(
   stateValue: string,
   ctx: CommandContext
@@ -76,15 +121,11 @@ async function resolveStatusId(
     return { statusId: stateValue };
   }
 
-  const response = await ctx.graphql<{
-    projectStatuses: { nodes: RawProjectStatus[] };
-  }>(PROJECT_STATUSES_QUERY, {});
-
-  if (ctx.hasErrors(response.body.errors) || !response.body.data?.projectStatuses) {
-    return { error: "Failed to fetch project statuses for resolution" };
+  const result = await fetchAllProjectStatuses(ctx);
+  if ("error" in result) {
+    return result;
   }
-
-  const statuses = response.body.data.projectStatuses.nodes;
+  const statuses = result.statuses;
 
   const byName = statuses.find(
     (s) => s.name.toLowerCase() === stateValue.toLowerCase()
@@ -584,6 +625,14 @@ async function handleProjectUpdate(
     input.description = options.description;
   }
   if (options.targetDate !== undefined) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(options.targetDate)) {
+      return emitValidationError("Invalid --target-date, expected YYYY-MM-DD.", options);
+    }
+    const [y, m, d] = options.targetDate.split("-").map(Number) as [number, number, number];
+    const parsed = new Date(y, m - 1, d);
+    if (parsed.getFullYear() !== y || parsed.getMonth() !== m - 1 || parsed.getDate() !== d) {
+      return emitValidationError(`Invalid --target-date: ${options.targetDate} is not a real calendar date.`, options);
+    }
     input.targetDate = options.targetDate;
   }
 
