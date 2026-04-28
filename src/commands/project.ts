@@ -178,8 +178,8 @@ interface RawProjectDetail extends RawProject {
   progress: number;
   health: string | null;
   currentProgress: number | null;
-  projectMilestones: { nodes: RawProjectMilestone[] };
-  issues: { totalCount: number };
+  projectMilestones?: { nodes?: RawProjectMilestone[] | null } | null;
+  issues?: { totalCount?: number | null } | null;
 }
 
 export interface NormalizedProject {
@@ -200,7 +200,15 @@ export interface NormalizedProjectDetail extends NormalizedProject {
   progress: number;
   health: string | null;
   currentProgress: number | null;
-  milestones: RawProjectMilestone[];
+  milestones: Array<{
+    id: string;
+    name: string;
+    description: string | null;
+    targetDate: string | null;
+    sortOrder: number;
+    createdAt: string;
+    updatedAt: string;
+  }>;
   issueCounts: {
     total: number;
   };
@@ -228,9 +236,9 @@ export function normalizeProjectDetail(raw: RawProjectDetail): NormalizedProject
     progress: raw.progress,
     health: raw.health,
     currentProgress: raw.currentProgress,
-    milestones: raw.projectMilestones.nodes,
+    milestones: raw.projectMilestones?.nodes ?? [],
     issueCounts: {
-      total: raw.issues.totalCount
+      total: raw.issues?.totalCount ?? 0
     }
   };
 }

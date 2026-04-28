@@ -142,6 +142,17 @@ describe("normalizeProjectDetail", () => {
     ]);
     expect(normalized.issueCounts).toEqual({ total: 12 });
   });
+
+  it("defaults milestones and issue counts when detail relations are omitted", () => {
+    const raw = makeRawProjectDetail({
+      projectMilestones: null,
+      issues: null
+    });
+    const normalized = normalizeProjectDetail(raw as Parameters<typeof normalizeProjectDetail>[0]);
+
+    expect(normalized.milestones).toEqual([]);
+    expect(normalized.issueCounts).toEqual({ total: 0 });
+  });
 });
 
 describe("handleProjectCommand — project get", () => {
