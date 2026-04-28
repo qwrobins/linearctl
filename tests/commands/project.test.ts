@@ -58,6 +58,14 @@ function makeRawProject(overrides?: Partial<Record<string, unknown>>) {
     name: "Auth hardening",
     description: "Harden authentication flows",
     state: "started",
+    progress: 0.42,
+    health: "onTrack",
+    currentProgress: { percentage: 42 },
+    projectMilestones: {
+      nodes: [
+        { id: "milestone-1", name: "Phase 1", targetDate: "2026-05-01" }
+      ]
+    },
     startDate: "2026-04-01",
     targetDate: "2026-06-01",
     lead: { id: "user-1", name: "Quentin", email: "quentin@example.com" },
@@ -93,6 +101,23 @@ describe("normalizeProject", () => {
       { id: "team-1", key: "INF", name: "Infrastructure" }
     ]);
     expect(normalized).not.toHaveProperty("teams.nodes");
+  });
+
+  it("normalizes progress and milestones fields", () => {
+    const raw = makeRawProject();
+    const normalized = normalizeProject(raw as Parameters<typeof normalizeProject>[0]);
+    expect(normalized.progress).toBe(0.42);
+    expect(normalized.health).toBe("onTrack");
+    expect(normalized.currentProgress).toEqual({ percentage: 42 });
+    expect(normalized.milestones).toEqual([
+      { id: "milestone-1", name: "Phase 1", targetDate: "2026-05-01" }
+    ]);
+  });
+
+  it("normalizes null milestone connections to an empty milestones array", () => {
+    const raw = makeRawProject({ projectMilestones: null });
+    const normalized = normalizeProject(raw as Parameters<typeof normalizeProject>[0]);
+    expect(normalized.milestones).toEqual([]);
   });
 });
 

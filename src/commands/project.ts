@@ -49,6 +49,16 @@ fragment CuratedProject on Project {
   name
   description
   state
+  progress
+  health
+  currentProgress
+  projectMilestones(first: 50) {
+    nodes {
+      id
+      name
+      targetDate
+    }
+  }
   startDate
   targetDate
   lead { id name email }
@@ -132,6 +142,16 @@ interface RawProject {
   name: string;
   description: string | null;
   state: string;
+  progress: number | null;
+  health: string | null;
+  currentProgress: unknown;
+  projectMilestones: {
+    nodes: Array<{
+      id: string;
+      name: string;
+      targetDate: string | null;
+    }>;
+  } | null;
   startDate: string | null;
   targetDate: string | null;
   lead: { id: string; name: string; email: string } | null;
@@ -146,6 +166,14 @@ export interface NormalizedProject {
   name: string;
   description: string | null;
   state: string;
+  progress: number | null;
+  health: string | null;
+  currentProgress: unknown;
+  milestones: Array<{
+    id: string;
+    name: string;
+    targetDate: string | null;
+  }>;
   startDate: string | null;
   targetDate: string | null;
   lead: { id: string; name: string; email: string } | null;
@@ -161,6 +189,10 @@ export function normalizeProject(raw: RawProject): NormalizedProject {
     name: raw.name,
     description: raw.description,
     state: raw.state,
+    progress: raw.progress,
+    health: raw.health,
+    currentProgress: raw.currentProgress,
+    milestones: raw.projectMilestones?.nodes ?? [],
     startDate: raw.startDate,
     targetDate: raw.targetDate,
     lead: raw.lead,

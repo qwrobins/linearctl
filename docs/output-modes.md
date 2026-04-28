@@ -27,6 +27,8 @@ The shape of `--json` output is a stable contract. Fields are not removed or ren
 
 For list commands, `--json` outputs a JSON array.
 
+For example, `linearctl project list --json` includes stable portfolio fields (`progress`, `health`, `currentProgress`) and a normalized `milestones` array.
+
 ## --json-envelope
 
 Wraps the response in an envelope with metadata:

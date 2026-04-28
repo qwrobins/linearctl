@@ -71,6 +71,8 @@ linearctl project update <id> [--name <text>] [--description <text>] [--state <s
 linearctl project delete <id> --json              # [destructive]
 ```
 
+`project list --json` includes portfolio fields such as `progress`, `health`, `currentProgress`, and a normalized `milestones` array.
+
 ## Cycle
 
 ```bash
