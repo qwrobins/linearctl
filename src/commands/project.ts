@@ -43,6 +43,13 @@ export interface ProjectCommandOptions {
   maxRetries?: number;
 }
 
+const VALID_PROJECT_STATE_TYPES = ["backlog", "planned", "started", "paused", "completed", "canceled"] as const;
+type ProjectStateType = (typeof VALID_PROJECT_STATE_TYPES)[number];
+
+function isProjectStateType(value: string): value is ProjectStateType {
+  return (VALID_PROJECT_STATE_TYPES as readonly string[]).includes(value);
+}
+
 const CURATED_PROJECT_FRAGMENT = `
 fragment CuratedProject on Project {
   id
@@ -271,7 +278,13 @@ async function handleProjectList(options: ProjectCommandOptions): Promise<number
       filter = { accessibleTeams: { some: { id: { eq: teamId } } } };
     }
     if (options.state !== undefined) {
-      filter = { ...filter, state: { name: { eq: options.state } } };
+      if (!isProjectStateType(options.state)) {
+        return emitValidationError(
+          `--state must be one of: ${VALID_PROJECT_STATE_TYPES.join(", ")}. Got "${options.state}".`,
+          options
+        );
+      }
+      filter = { ...filter, status: { type: { eq: options.state } } };
     }
 
     const commonPaginateInput = {
