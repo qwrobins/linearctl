@@ -63,7 +63,7 @@ Bulk operations report partial success. Check the response for per-item results.
 
 ```bash
 linearctl project get <id> --json
-linearctl project list [--team <name|key|id>] [--state <name>] [--all-teams] --json
+linearctl project list [--team <name|key|id>] [--state <status-type>] [--all-teams] --json
 linearctl project create --name <name> [--description <text>] [--team <name|key|id>] --json
 linearctl project create-with-issues --name <name> --team <name|key|id> \
   --issues-json '[{"title":"...","teamId":"..."}]' [--description <text>] --json
@@ -72,6 +72,8 @@ linearctl project delete <id> --json              # [destructive]
 ```
 
 `project list --json` includes portfolio fields such as `progress`, `health`, `currentProgress`, a normalized `milestones` array, and milestone pagination metadata (`milestonesPageInfo`, `milestonesTruncated`) so clients can detect truncation.
+
+For `project list`, `--state` accepts project status types: `backlog`, `planned`, `started`, `paused`, `completed`, or `canceled`.
 
 ## Cycle
 

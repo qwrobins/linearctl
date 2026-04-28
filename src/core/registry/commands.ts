@@ -82,7 +82,7 @@ export const COMMAND_REGISTRY: readonly CommandRegistration[] = [
     ],
     subcommands: {
       get:                  { usage: "linearctl project get <id> [--json]" },
-      list:                 { usage: "linearctl project list [--team <id>] [--state <name>] [--all-teams] [--json]" },
+      list:                 { usage: "linearctl project list [--team <id>] [--state <status-type>] [--all-teams] [--json]" },
       create:               { usage: "linearctl project create --name <name> [--description ...] [--team <id>] [--json]" },
       update:               { usage: "linearctl project update <id> [--name ...] [--state ...] [--json]" },
       "create-with-issues": { usage: "linearctl project create-with-issues --name <name> --team <id> --issues-json <json> [--description <text>] [--json]" },
