@@ -56,6 +56,21 @@ fragment CuratedProject on Project {
   name
   description
   state
+  progress
+  health
+  currentProgress
+  projectMilestones(first: 50) {
+    totalCount
+    pageInfo {
+      hasNextPage
+      endCursor
+    }
+    nodes {
+      id
+      name
+      targetDate
+    }
+  }
   startDate
   targetDate
   lead { id name email }
@@ -162,6 +177,21 @@ interface RawProject {
   name: string;
   description: string | null;
   state: string;
+  progress: number | null;
+  health: string | null;
+  currentProgress: unknown;
+  projectMilestones: {
+    totalCount?: number | null;
+    pageInfo?: {
+      hasNextPage: boolean;
+      endCursor: string | null;
+    } | null;
+    nodes?: Array<{
+      id: string;
+      name: string;
+      targetDate: string | null;
+    }> | null;
+  } | null;
   startDate: string | null;
   targetDate: string | null;
   lead: { id: string; name: string; email: string } | null;
@@ -185,7 +215,14 @@ interface RawProjectDetail extends RawProject {
   progress: number;
   health: string | null;
   currentProgress: number | null;
-  projectMilestones?: { nodes?: RawProjectMilestone[] | null } | null;
+  projectMilestones: {
+    totalCount?: number | null;
+    pageInfo?: {
+      hasNextPage: boolean;
+      endCursor: string | null;
+    } | null;
+    nodes?: RawProjectMilestone[] | null;
+  } | null;
   issues?: { totalCount?: number | null } | null;
 }
 
@@ -194,6 +231,19 @@ export interface NormalizedProject {
   name: string;
   description: string | null;
   state: string;
+  progress: number | null;
+  health: string | null;
+  currentProgress: unknown;
+  milestones: Array<{
+    id: string;
+    name: string;
+    targetDate: string | null;
+  }>;
+  milestonesPageInfo: {
+    hasNextPage: boolean;
+    endCursor: string | null;
+  } | null;
+  milestonesTruncated: boolean;
   startDate: string | null;
   targetDate: string | null;
   lead: { id: string; name: string; email: string } | null;
@@ -222,11 +272,22 @@ export interface NormalizedProjectDetail extends NormalizedProject {
 }
 
 export function normalizeProject(raw: RawProject): NormalizedProject {
+  const milestones = raw.projectMilestones?.nodes ?? [];
+  const milestonesPageInfo = raw.projectMilestones?.pageInfo ?? null;
+  const milestonesTruncated = milestonesPageInfo?.hasNextPage === true
+    || (raw.projectMilestones?.totalCount ?? milestones.length) > milestones.length;
+
   return {
     id: raw.id,
     name: raw.name,
     description: raw.description,
     state: raw.state,
+    progress: raw.progress,
+    health: raw.health,
+    currentProgress: raw.currentProgress,
+    milestones,
+    milestonesPageInfo,
+    milestonesTruncated,
     startDate: raw.startDate,
     targetDate: raw.targetDate,
     lead: raw.lead,
