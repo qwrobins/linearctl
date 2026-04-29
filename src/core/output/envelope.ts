@@ -65,8 +65,34 @@ export function formatCommandErrorHuman(error: CommandError): string {
       }
     }
   } else if (typeof details === "object" && details !== null) {
-    if ("candidates" in details && Array.isArray((details as Record<string, unknown>).candidates)) {
-      lines.push(`  Candidates: ${(details as Record<string, unknown[]>).candidates.join(", ")}`);
+    const obj = details as Record<string, unknown>;
+
+    if ("candidates" in obj && Array.isArray(obj.candidates)) {
+      const candidates = obj.candidates as Array<unknown>;
+      const labels = candidates
+        .map((c) => {
+          if (typeof c === "string") return c;
+          if (typeof c === "object" && c !== null) {
+            const rec = c as Record<string, unknown>;
+            return (typeof rec.display === "string" && rec.display) || (typeof rec.id === "string" && rec.id) || "";
+          }
+          return "";
+        })
+        .filter((s) => s !== "");
+      if (labels.length > 0) {
+        lines.push(`  Candidates: ${labels.join(", ")}`);
+      }
+    }
+
+    if ("path" in obj && Array.isArray(obj.path)) {
+      lines.push(`  Path: ${(obj.path as Array<string | number>).join(".")}`);
+    }
+
+    if ("extensions" in obj && typeof obj.extensions === "object" && obj.extensions !== null) {
+      const ext = obj.extensions as Record<string, unknown>;
+      if (typeof ext.code === "string") {
+        lines.push(`  Code: ${ext.code}`);
+      }
     }
   }
 

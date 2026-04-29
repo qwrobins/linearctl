@@ -67,14 +67,32 @@ describe("formatCommandErrorHuman", () => {
     expect(result).not.toContain("(at ");
   });
 
-  it("formats resolution error candidates", () => {
+  it("formats resolution error candidates from object shapes", () => {
     const result = formatCommandErrorHuman({
       category: "not-found",
       message: "State 'doing' not found",
-      details: { candidates: ["In Progress", "Done", "Backlog"] }
+      details: { candidates: [
+        { id: "in-progress", display: "In Progress" },
+        { id: "done", display: "Done" },
+        { id: "backlog", display: "Backlog" }
+      ] }
     });
     expect(result).toContain("State 'doing' not found");
     expect(result).toContain("Candidates: In Progress, Done, Backlog");
+  });
+
+  it("formats mapGraphQLErrors details with path and extensions", () => {
+    const result = formatCommandErrorHuman({
+      category: "general",
+      message: "Variable $teamId of type String! was provided invalid value",
+      details: {
+        path: ["query", "team"],
+        extensions: { code: "VARIABLE_NOT_VALID" }
+      }
+    });
+    expect(result).toContain("Variable $teamId");
+    expect(result).toContain("Path: query.team");
+    expect(result).toContain("Code: VARIABLE_NOT_VALID");
   });
 
   it("handles null details gracefully", () => {
