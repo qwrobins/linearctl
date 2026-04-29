@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.6] - 2026-04-28
+
+### Fixed
+
+- `linearctl gql query` (and all curated/generated commands) now surfaces GraphQL error details in human-readable output instead of only showing a generic "HTTP 400" message; field-level validation errors, paths, and extension codes are printed as indented bullet lines below the main error
+- Resolution error candidates (e.g., from ambiguous state/team/label names) no longer print `[object Object]`; the formatter now extracts the `display` field with `id` fallback from candidate objects
+- GraphQL errors returned with HTTP 200 (partial success) now render their `path` and `extensions.code` in human output; previously these details were silently dropped
+
 ## [0.5.5] - 2026-04-28
 
 ### Fixed
