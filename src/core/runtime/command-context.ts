@@ -147,7 +147,7 @@ export class CommandContext {
   mapGraphQLErrors(errors: GraphQLErrorPayload[] | undefined): CommandError[] {
     return (errors ?? []).map((error) => ({
       category: "general" as const,
-      message: error.message,
+      message: extractUserMessage(error),
       details: {
         ...(error.path === undefined ? {} : { path: error.path }),
         ...(error.extensions === undefined ? {} : { extensions: error.extensions }),
@@ -180,4 +180,37 @@ export class CommandContext {
  */
 export function createCommandContext(options: CommandContextOptions): CommandContext {
   return new CommandContext(options);
+}
+
+/**
+ * Extract a human-readable message from a GraphQL error payload.
+ * Linear API validation errors include a `userPresentableMessage` in extensions
+ * that is more specific than the generic top-level message (e.g., "description
+ * must be shorter than or equal to 255 characters" vs "Argument Validation Error").
+ */
+function extractUserMessage(error: GraphQLErrorPayload): string {
+  const ext = error.extensions;
+  if (ext === undefined) return error.message;
+
+  if (typeof ext.userPresentableMessage === "string") {
+    return ext.userPresentableMessage;
+  }
+
+  const validationErrors = ext.validationErrors;
+  if (Array.isArray(validationErrors) && validationErrors.length > 0) {
+    const messages: string[] = [];
+    for (const ve of validationErrors) {
+      if (typeof ve === "object" && ve !== null && "constraints" in ve) {
+        const constraints = (ve as { constraints: Record<string, string> }).constraints;
+        if (typeof constraints === "object" && constraints !== null) {
+          messages.push(...Object.values(constraints));
+        }
+      }
+    }
+    if (messages.length > 0) {
+      return messages.join("; ");
+    }
+  }
+
+  return error.message;
 }

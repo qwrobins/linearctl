@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.5] - 2026-04-28
+
+### Fixed
+
+- `project update` help text now includes `[--description ...]` (handler already supported it, but agents and humans could not discover the flag from help output)
+- Linear API validation errors (e.g., "description must be shorter than or equal to 255 characters") now surface the specific constraint message instead of the generic "Argument Validation Error"
+
 ## [0.5.4] - 2026-04-28
 
 ### Added
