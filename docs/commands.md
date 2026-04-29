@@ -27,8 +27,8 @@ linearctl issue create --title <title> --team <name|key|id> \
 
 # Update an issue
 linearctl issue update <identifier> [--title <text>] [--description <text>] \
-  [--priority <0-4>] [--estimate <n>] [--assignee <email|"me"|id>] [--state <name|id>] \
-  [--cycle <id>] [--project <id>] --json
+  [--priority <0-4>] [--estimate <n>] [--assignee <email|"me"|id>] [--label <name|id>] \
+  [--state <name|id>] [--cycle <id>] [--project <id>] --json
 
 # Close an issue (transitions to completed state, defaults to "Done")
 linearctl issue close <identifier> [--state <name>] --json

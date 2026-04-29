@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - `issue update --project <id>` now assigns an issue to a project instead of being parsed but ignored, which previously caused `issue update requires at least one field to update` when `--project` was the only update field
+- `issue update` help, docs, and bundled skill text now show the supported `--label <name|id>` option
 
 ## [0.5.6] - 2026-04-28
 
