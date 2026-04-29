@@ -1,5 +1,5 @@
 import { readFile } from "node:fs/promises";
-import { failureEnvelope, successEnvelope } from "../core/output/envelope.js";
+import { failureEnvelope, successEnvelope, formatCommandErrorHuman } from "../core/output/envelope.js";
 import type { JsonEnvelope, CommandError } from "../core/output/envelope.js";
 import { mapCommandFailure } from "../core/errors/command-failure.js";
 import { executeGraphQL } from "../core/transport/graphql.js";
@@ -290,5 +290,5 @@ function buildRawGraphQLEnvelope(input: {
 }
 
 function printCommandError(error: CommandError): void {
-  process.stderr.write(`Error: ${error.message}\n`);
+  process.stderr.write(`${formatCommandErrorHuman(error)}\n`);
 }

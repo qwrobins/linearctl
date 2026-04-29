@@ -48,6 +48,57 @@ export function successEnvelope<TData>(
   };
 }
 
+export function formatCommandErrorHuman(error: CommandError): string {
+  const lines = [`Error: ${error.message}`];
+
+  if (error.details == null) {
+    return lines.join("\n");
+  }
+
+  const details = error.details;
+
+  if (Array.isArray(details)) {
+    for (const entry of details) {
+      if (typeof entry === "object" && entry !== null && "message" in entry && typeof entry.message === "string") {
+        const path = "path" in entry && Array.isArray(entry.path) ? ` (at ${entry.path.join(".")})` : "";
+        lines.push(`  - ${entry.message}${path}`);
+      }
+    }
+  } else if (typeof details === "object" && details !== null) {
+    const obj = details as Record<string, unknown>;
+
+    if ("candidates" in obj && Array.isArray(obj.candidates)) {
+      const candidates = obj.candidates as Array<unknown>;
+      const labels = candidates
+        .map((c) => {
+          if (typeof c === "string") return c;
+          if (typeof c === "object" && c !== null) {
+            const rec = c as Record<string, unknown>;
+            return (typeof rec.display === "string" && rec.display) || (typeof rec.id === "string" && rec.id) || "";
+          }
+          return "";
+        })
+        .filter((s) => s !== "");
+      if (labels.length > 0) {
+        lines.push(`  Candidates: ${labels.join(", ")}`);
+      }
+    }
+
+    if ("path" in obj && Array.isArray(obj.path)) {
+      lines.push(`  Path: ${(obj.path as Array<string | number>).join(".")}`);
+    }
+
+    if ("extensions" in obj && typeof obj.extensions === "object" && obj.extensions !== null) {
+      const ext = obj.extensions as Record<string, unknown>;
+      if (typeof ext.code === "string") {
+        lines.push(`  Code: ${ext.code}`);
+      }
+    }
+  }
+
+  return lines.join("\n");
+}
+
 export function failureEnvelope(
   errors: CommandError[],
   meta: OutputMeta,

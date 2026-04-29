@@ -10,7 +10,7 @@ import { resolveStoredProfile } from "../auth/runtime.js";
 import type { ResolvedProfile } from "../auth/profile-resolution.js";
 import { executeGraphQL, type ExecutedGraphQLResponse, type FetchLike, type GraphQLErrorPayload } from "../transport/graphql.js";
 import { executeGraphQLWithRetry, type RetryOptions } from "../transport/retry.js";
-import { failureEnvelope, successEnvelope, type CommandSourceLayer, type PageInfo, type CommandError } from "../output/envelope.js";
+import { failureEnvelope, successEnvelope, formatCommandErrorHuman, type CommandSourceLayer, type PageInfo, type CommandError } from "../output/envelope.js";
 import { mapCommandFailure, type CommandFailure } from "../errors/command-failure.js";
 import { ExitCode } from "../errors/exit-codes.js";
 import type { ResolverOptions } from "../resolution/resolve.js";
@@ -122,7 +122,7 @@ export class CommandContext {
       const envelope = failureEnvelope(errors, { sourceLayer: this.layer, ...(profileName ? { profile: profileName } : {}) });
       process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
     } else {
-      process.stderr.write(`Error: ${errors[0]?.message ?? "command failed"}\n`);
+      process.stderr.write(`${formatCommandErrorHuman(errors[0] ?? { category: "general", message: "command failed" })}\n`);
     }
     return exitCode;
   }
