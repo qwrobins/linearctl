@@ -735,6 +735,9 @@ async function handleIssueUpdate(
   if (options.cycle !== undefined) {
     input.cycleId = options.cycle;
   }
+  if (options.project !== undefined) {
+    input.projectId = options.project;
+  }
 
   if (Object.keys(input).length === 0) {
     return emitValidationError("issue update requires at least one field to update.", options);

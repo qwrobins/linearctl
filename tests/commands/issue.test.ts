@@ -470,7 +470,7 @@ describe("handleIssueCommand — issue list", () => {
   it("passes --cycle filter to GraphQL query", async () => {
     const directory = await mkdtemp(join(tmpdir(), "linear-cli-issue-"));
     const paths = await writeProfileFiles(directory);
-    const fetchSpy = vi.fn(async () =>
+    const fetchSpy = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
       new Response(JSON.stringify({
         data: {
           issues: {
@@ -501,7 +501,7 @@ describe("handleIssueCommand — issue list", () => {
   it("passes --project filter to GraphQL query", async () => {
     const directory = await mkdtemp(join(tmpdir(), "linear-cli-issue-"));
     const paths = await writeProfileFiles(directory);
-    const fetchSpy = vi.fn(async () =>
+    const fetchSpy = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
       new Response(JSON.stringify({
         data: {
           issues: {
@@ -532,7 +532,7 @@ describe("handleIssueCommand — issue list", () => {
   it("combines --cycle and --project with other filters", async () => {
     const directory = await mkdtemp(join(tmpdir(), "linear-cli-issue-"));
     const paths = await writeProfileFiles(directory);
-    const fetchSpy = vi.fn(async () =>
+    const fetchSpy = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
       new Response(JSON.stringify({
         data: {
           issues: {
@@ -614,7 +614,7 @@ describe("handleIssueCommand — issue update", () => {
     const updatedIssue = makeRawIssue({
       cycle: { id: "cycle-2", number: 43, name: "Cycle 43" }
     });
-    const fetchSpy = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) =>
+    const fetchSpy = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
       new Response(JSON.stringify({
         data: { issueUpdate: { success: true, issue: updatedIssue } }
       }), { status: 200 })
@@ -635,6 +635,38 @@ describe("handleIssueCommand — issue update", () => {
 
       const parsed = JSON.parse(output.stdout.join(""));
       expect(parsed.cycle).toEqual({ id: "cycle-2", number: 43, name: "Cycle 43" });
+    } finally {
+      output.restore();
+    }
+  });
+
+  it("applies --project by sending projectId in issue update input", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-issue-"));
+    const paths = await writeProfileFiles(directory);
+    const updatedIssue = makeRawIssue({
+      project: { id: "project-2", name: "Distribution" }
+    });
+    const fetchSpy = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
+      new Response(JSON.stringify({
+        data: { issueUpdate: { success: true, issue: updatedIssue } }
+      }), { status: 200 })
+    );
+    const fetchImpl = fetchSpy as unknown as FetchLike;
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleIssueCommand(["update", "INF-2975"], {
+        ...baseOptions(paths),
+        project: "project-2",
+        fetchImpl
+      });
+
+      expect(exitCode).toBe(0);
+      const request = JSON.parse(String(fetchSpy.mock.calls[0]?.[1]?.body ?? "{}"));
+      expect(request.variables.input.projectId).toBe("project-2");
+
+      const parsed = JSON.parse(output.stdout.join(""));
+      expect(parsed.project).toEqual({ id: "project-2", name: "Distribution" });
     } finally {
       output.restore();
     }
