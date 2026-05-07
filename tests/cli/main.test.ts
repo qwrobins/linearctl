@@ -20,8 +20,44 @@ describe("CLI scaffold", () => {
     const { stdout: output } = await runCli(["--help"]);
 
     expect(output).toContain("curated");
+    expect(output).toContain("Curated resources:");
+    expect(output).toContain("Work items:");
+    expect(output).toContain("Planning:");
     expect(output).toContain("linearctl api");
     expect(output).toContain("linearctl gql");
+    expect(output).not.toContain("linearctl issue create --title");
+  });
+
+  it("prints resource-specific curated help", async () => {
+    const { stdout: output } = await runCli(["issue", "--help"]);
+
+    expect(output).toContain("linearctl issue");
+    expect(output).toContain("Issues and bulk issue changes");
+    expect(output).toContain("linearctl issue create --title <title>");
+    expect(output).toContain("linearctl --metadata curated --json");
+  });
+
+  it("keeps generated API help routed through the api command", async () => {
+    const { stdout: output } = await runCli(["api", "--help"]);
+
+    expect(output).toContain("linearctl api <resource> <operation>");
+    expect(output).toContain("Available resources:");
+    expect(output).toContain("Use: linearctl api <resource> --help for operations");
+  });
+
+  it("prints generated API resource help", async () => {
+    const { stdout: output } = await runCli(["api", "issue", "--help"]);
+
+    expect(output).toContain("linearctl api issue <operation>");
+    expect(output).toContain("Operations:");
+    expect(output).toContain("list");
+  });
+
+  it("does not treat mistyped resource help as bare resource help", async () => {
+    await expect(runCli(["issue", "bogus", "--help"])).rejects.toMatchObject({
+      code: 5,
+      stderr: expect.stringContaining("unsupported issue command")
+    });
   });
 
   it("prints curated metadata as JSON", async () => {
