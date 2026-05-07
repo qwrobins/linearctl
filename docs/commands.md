@@ -229,6 +229,15 @@ Auto-discovers installed agents (Claude Code, Codex) at project and user level a
 
 The generated layer covers any Linear API resource not handled by curated commands.
 
+For curated commands, use top-level help for a grouped overview and resource help
+for the full usage lines:
+
+```bash
+linearctl --help
+linearctl issue --help
+linearctl project --help
+```
+
 ```bash
 # List all available resources
 linearctl api --help

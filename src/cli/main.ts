@@ -2,13 +2,17 @@
 import { parseArgs } from "node:util";
 import { COMMAND_REGISTRY, findCommand } from "../core/registry/commands.js";
 import { OPTION_CATALOG, buildOptionDefinitions } from "../core/registry/option-catalog.js";
-import { generateTopLevelHelp } from "../core/registry/help.js";
-import type { ParsedCliArguments } from "../core/registry/types.js";
+import { generateCommandHelp, generateTopLevelHelp } from "../core/registry/help.js";
+import type { CommandRegistration, ParsedCliArguments } from "../core/registry/types.js";
 import { curatedCommandMetadata, defaultLinearConfigPaths, ExitCode } from "../index.js";
 import packageJson from "../../package.json" with { type: "json" };
 
 function printTopLevelHelp(): void {
   process.stdout.write(generateTopLevelHelp());
+}
+
+function printCommandHelp(registration: CommandRegistration): void {
+  process.stdout.write(generateCommandHelp(registration));
 }
 
 function printCuratedMetadata(): void {
@@ -256,7 +260,22 @@ async function main(argv: string[]): Promise<number> {
     return ExitCode.ValidationError;
   }
 
-  if (argv.length === 0 || args.help) {
+  if (args.help) {
+    const commandName = args.positionals[0];
+    const registration = commandName === undefined ? undefined : findCommand(commandName);
+
+    if (args.positionals.length === 0) {
+      printTopLevelHelp();
+      return ExitCode.Success;
+    }
+
+    if (args.positionals.length === 1 && registration !== undefined && commandName !== "api") {
+      printCommandHelp(registration);
+      return ExitCode.Success;
+    }
+  }
+
+  if (argv.length === 0) {
     printTopLevelHelp();
     return ExitCode.Success;
   }

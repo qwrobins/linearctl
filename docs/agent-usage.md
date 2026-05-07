@@ -91,8 +91,11 @@ linearctl api --help
 # Search generated commands
 linearctl api search "webhook"
 
-# Built-in help
+# Top-level overview
 linearctl --help
+
+# Curated resource help
+linearctl issue --help
 ```
 
 ## Anti-patterns

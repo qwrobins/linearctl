@@ -128,6 +128,8 @@ Raw GraphQL should not be used merely because it is possible. It is the fallback
 ## Generated commands
 
 When no curated command exists, use `linearctl api <resource> <operation>`:
+- `linearctl --help` — grouped overview of curated resources
+- `linearctl <resource> --help` — full usage lines for one curated resource
 - `linearctl api search <term>` — discover available generated commands
 - `linearctl api <resource> --help` — list operations for a resource
 - `linearctl api <resource> <operation> --id <id> --json` — execute a generated command
