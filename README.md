@@ -2,7 +2,7 @@
 
 Agent-first CLI for the Linear API. Built to be used by LLM coding agents like Claude Code and Codex, but works just as well for humans at the terminal.
 
-Three command layers: curated commands for common workflows, a generated API layer for full schema coverage, and raw GraphQL as a fallback. All output is machine-readable by default (`--json`), with stable contracts that agents can rely on.
+Three command layers: curated commands for common workflows, a generated API layer for full schema coverage, and raw GraphQL as a fallback. Human-readable output is the default; pass `--json` or `--json-envelope` for stable machine-readable contracts that agents can rely on.
 
 ## Install
 

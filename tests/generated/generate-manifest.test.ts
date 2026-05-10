@@ -173,6 +173,65 @@ describe("generateManifest", () => {
     expect(issueCreate!.inputTypeName).toBe("IssueCreateInput");
   });
 
+  it("does not classify optional id arguments as required --id commands", () => {
+    const manifest = generateManifest({
+      __schema: {
+        queryType: { name: "Query" },
+        mutationType: null,
+        types: [
+          {
+            kind: "OBJECT",
+            name: "Query",
+            fields: [
+              {
+                name: "comment",
+                type: { kind: "OBJECT", name: "Comment" },
+                args: [
+                  { name: "id", type: { kind: "SCALAR", name: "String" } },
+                  { name: "hash", type: { kind: "SCALAR", name: "String" } }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    });
+
+    expect(manifest[0]?.inputMode).toBe("json");
+  });
+
+  it("keeps required id-only commands in id mode", () => {
+    const manifest = generateManifest({
+      __schema: {
+        queryType: { name: "Query" },
+        mutationType: null,
+        types: [
+          {
+            kind: "OBJECT",
+            name: "Query",
+            fields: [
+              {
+                name: "issue",
+                type: { kind: "OBJECT", name: "Issue" },
+                args: [
+                  {
+                    name: "id",
+                    type: {
+                      kind: "NON_NULL",
+                      ofType: { kind: "SCALAR", name: "String" }
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    });
+
+    expect(manifest[0]?.inputMode).toBe("id");
+  });
+
   it("handles deprecated fields", () => {
     const schema = {
       __schema: {

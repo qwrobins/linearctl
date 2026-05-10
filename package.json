@@ -10,7 +10,7 @@
     "build": "bun run embed:skills && tsc -p tsconfig.build.json && bun run copy:assets",
     "build:binary": "bun run embed:skills && bun build src/cli/main.ts --compile --outfile dist/linearctl",
     "embed:skills": "bun scripts/embed-skills.ts",
-    "copy:assets": "mkdir -p dist/generated/manifest && cp src/generated/manifest/curated-commands.json dist/generated/manifest/curated-commands.json && cp src/generated/manifest/schema-meta.json dist/generated/manifest/schema-meta.json && (test -f src/generated/manifest/api-commands.json && cp src/generated/manifest/api-commands.json dist/generated/manifest/api-commands.json || true)",
+    "copy:assets": "mkdir -p dist/generated/manifest && cp src/generated/manifest/curated-commands.json dist/generated/manifest/curated-commands.json && cp src/generated/manifest/schema-meta.json dist/generated/manifest/schema-meta.json && (test -f src/generated/manifest/schema.json && cp src/generated/manifest/schema.json dist/generated/manifest/schema.json || true) && (test -f src/generated/manifest/api-commands.json && cp src/generated/manifest/api-commands.json dist/generated/manifest/api-commands.json || true)",
     "generate:api-manifest": "bun run src/generated/generate-manifest.ts",
     "regenerate:schema": "bun src/generated/regenerate.ts",
     "test": "vitest run",

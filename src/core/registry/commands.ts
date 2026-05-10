@@ -139,6 +139,8 @@ export const COMMAND_REGISTRY: readonly CommandRegistration[] = [
     buildOptions: (args, env) => ({
       ...baseOptions(args, env),
       jsonl: args.jsonl, quiet: args.quiet,
+      noRetry: args.noRetry,
+      ...pickFields(args, "maxRetries"),
       setDefault: args.setDefault,
       ...paginationOptions(args),
     }),
@@ -162,6 +164,8 @@ export const COMMAND_REGISTRY: readonly CommandRegistration[] = [
     buildOptions: (args, env) => ({
       ...baseOptions(args, env),
       jsonl: args.jsonl, quiet: args.quiet,
+      noRetry: args.noRetry,
+      ...pickFields(args, "maxRetries"),
       ...paginationOptions(args),
     }),
   },
@@ -303,6 +307,8 @@ export const COMMAND_REGISTRY: readonly CommandRegistration[] = [
     buildOptions: (args, env) => ({
       ...baseOptions(args, env),
       dryRun: args.dryRun,
+      noRetry: args.noRetry,
+      ...pickFields(args, "maxRetries"),
       ...pickFields(args, "issue", "output", "expiresIn"),
     }),
   },
@@ -355,8 +361,9 @@ export const COMMAND_REGISTRY: readonly CommandRegistration[] = [
     buildOptions: (args, env, stdin) => ({
       ...baseOptions(args, env),
       raw: args.raw, stdin: args.stdin,
+      noRetry: args.noRetry,
       vars: args.vars,
-      ...pickFields(args, "file", "varsFile"),
+      ...pickFields(args, "file", "varsFile", "maxRetries"),
       stdinStream: stdin,
     }),
   },
@@ -381,7 +388,8 @@ export const COMMAND_REGISTRY: readonly CommandRegistration[] = [
       ...baseOptions(args, env),
       raw: args.raw,
       inputStdin: args.inputStdin,
-      ...pickFields(args, "id", "inputJson", "inputFile", "fields"),
+      noRetry: args.noRetry,
+      ...pickFields(args, "id", "inputJson", "inputFile", "fields", "maxRetries"),
       stdinStream: stdin,
     }),
   },
@@ -402,7 +410,8 @@ export const COMMAND_REGISTRY: readonly CommandRegistration[] = [
     handler: handleSchemaCommand,
     buildOptions: (args, env) => ({
       ...baseOptions(args, env),
-      ...pickFields(args, "outputDir"),
+      noRetry: args.noRetry,
+      ...pickFields(args, "outputDir", "maxRetries"),
     }),
   },
 

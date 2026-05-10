@@ -4,6 +4,7 @@ import { mapCommandFailure } from "../core/errors/command-failure.js";
 import { ExitCode } from "../core/errors/exit-codes.js";
 import { executeGraphQL } from "../core/transport/graphql.js";
 import type { FetchLike, GraphQLErrorPayload } from "../core/transport/graphql.js";
+import { executeGraphQLWithRetry, type RetryOptions } from "../core/transport/retry.js";
 import { resolveStoredProfile } from "../core/auth/runtime.js";
 import { readAllStdin, isTtyInput } from "../core/io/stdin.js";
 import type { ApiCommandEntry, ApiCommandManifest } from "../generated/generate-manifest.js";
@@ -27,6 +28,9 @@ export interface ApiCommandOptions {
   env: Record<string, string | undefined>;
   stdinStream?: NodeJS.ReadableStream;
   fetchImpl?: FetchLike;
+  // retry flags
+  noRetry?: boolean;
+  maxRetries?: number;
   /** Override manifest path for testing */
   manifestPath?: string;
 }
@@ -125,12 +129,8 @@ function printSearchResults(results: ApiCommandEntry[], term: string): void {
 
 function buildGraphQLOperation(entry: ApiCommandEntry, fields?: string): string {
   const isConnection = entry.returnTypeName?.endsWith("Connection") === true;
-  const isPayload = entry.returnTypeName?.endsWith("Payload") === true;
-  const defaultFields = isConnection
-    ? "nodes { id }"
-    : isPayload
-      ? "success"
-      : "id";
+  const isScalar = isScalarReturnType(entry.returnTypeName);
+  const defaultFields = isConnection ? "nodes { id }" : "__typename";
   const fieldSelection = fields ?? defaultFields;
   const argDefs: string[] = [];
   const argPasses: string[] = [];
@@ -144,7 +144,25 @@ function buildGraphQLOperation(entry: ApiCommandEntry, fields?: string): string 
   const argsPass = argPasses.length > 0 ? `(${argPasses.join(", ")})` : "";
   const opType = entry.graphqlOperationType;
 
+  if (isScalar && fields === undefined) {
+    return `${opType} ApiGenerated${argsDefinition} { ${entry.graphqlField}${argsPass} }`;
+  }
+
   return `${opType} ApiGenerated${argsDefinition} { ${entry.graphqlField}${argsPass} { ${fieldSelection} } }`;
+}
+
+function isScalarReturnType(returnTypeName: string | null | undefined): boolean {
+  return returnTypeName !== undefined && returnTypeName !== null && [
+    "Boolean",
+    "DateTime",
+    "Float",
+    "ID",
+    "Int",
+    "JSONObject",
+    "String",
+    "TimelessDateScalar",
+    "URL",
+  ].includes(returnTypeName);
 }
 
 // ---------------------------------------------------------------------------
@@ -329,7 +347,7 @@ export async function handleApiCommand(
     const variables = buildVariables(entry, options.id, inputJson);
     const query = buildGraphQLOperation(entry, options.fields);
 
-    const response = await executeGraphQL<Record<string, unknown>>({
+    const graphqlInput = {
       query,
       ...(Object.keys(variables).length > 0 ? { variables } : {}),
       credentials: profile.credentials,
@@ -339,7 +357,12 @@ export async function handleApiCommand(
           : { apiUrl: profile.metadata.baseUrl }
         : { apiUrl: options.apiUrl }),
       ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl })
-    });
+    };
+
+    const response = await executeGeneratedGraphQL<Record<string, unknown>>(
+      graphqlInput,
+      retryOptions(options)
+    );
 
     if (hasErrors(response.body.errors)) {
       const errors = mapGraphQLErrors(response.body.errors);
@@ -388,6 +411,26 @@ export async function handleApiCommand(
 
     return failure.exitCode;
   }
+}
+
+function retryOptions(options: Pick<ApiCommandOptions, "noRetry" | "maxRetries">): RetryOptions | undefined {
+  if (options.noRetry === true || options.maxRetries !== undefined) {
+    return {
+      ...(options.noRetry === true ? { noRetry: true } : {}),
+      ...(options.maxRetries !== undefined ? { maxRetries: options.maxRetries } : {}),
+    };
+  }
+  return undefined;
+}
+
+function executeGeneratedGraphQL<TData>(
+  input: Parameters<typeof executeGraphQL<TData>>[0],
+  retry: RetryOptions | undefined
+) {
+  if (retry !== undefined) {
+    return executeGraphQLWithRetry<TData>({ ...input, retry });
+  }
+  return executeGraphQL<TData>(input);
 }
 
 function hasErrors(errors: GraphQLErrorPayload[] | undefined): boolean {

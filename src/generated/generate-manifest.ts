@@ -210,14 +210,14 @@ function isNonNull(ref: IntrospectionTypeRef): boolean {
 // ---------------------------------------------------------------------------
 
 function deriveInputMode(args: IntrospectionArg[]): "id" | "json" | "id-plus-json" | "none" {
-  const hasId = args.some((a) => a.name === "id");
+  const hasRequiredId = args.some((a) => a.name === "id" && isNonNull(a.type));
   const hasInputObject = args.some((a) => {
     const typeName = namedTypeName(a.type);
     return typeName !== null && typeName.endsWith("Input");
   });
 
-  if (hasId && hasInputObject) return "id-plus-json";
-  if (hasId) return "id";
+  if (hasRequiredId && hasInputObject) return "id-plus-json";
+  if (hasRequiredId && args.every((arg) => arg.name === "id" || !isNonNull(arg.type))) return "id";
   if (hasInputObject) return "json";
   if (args.length > 0) return "json";
   return "none";

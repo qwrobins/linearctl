@@ -673,7 +673,7 @@
     "graphqlField": "attachmentLinkDiscord",
     "graphqlOperationType": "mutation",
     "description": "Link an existing Discord message to an issue. This creates a rich attachment using the workspace's Discord integration.",
-    "inputMode": "id",
+    "inputMode": "json",
     "requiredArgs": [
       {
         "name": "issueId",
@@ -730,7 +730,7 @@
     "graphqlField": "attachmentLinkFront",
     "graphqlOperationType": "mutation",
     "description": "Link an existing Front conversation to an issue. This creates a rich attachment using the workspace's Front integration, enabling features like automated conversation updates.",
-    "inputMode": "id",
+    "inputMode": "json",
     "requiredArgs": [
       {
         "name": "conversationId",
@@ -777,7 +777,7 @@
     "graphqlField": "attachmentLinkIntercom",
     "graphqlOperationType": "mutation",
     "description": "Link an existing Intercom conversation to an issue. This creates a rich attachment using the workspace's Intercom integration, enabling features like automated conversation updates.",
-    "inputMode": "id",
+    "inputMode": "json",
     "requiredArgs": [
       {
         "name": "conversationId",
@@ -829,7 +829,7 @@
     "graphqlField": "attachmentLinkSalesforce",
     "graphqlOperationType": "mutation",
     "description": "Link an existing Salesforce case to an issue. This creates a rich attachment using the workspace's Salesforce integration.",
-    "inputMode": "id",
+    "inputMode": "json",
     "requiredArgs": [
       {
         "name": "issueId",
@@ -876,7 +876,7 @@
     "graphqlField": "attachmentLinkSlack",
     "graphqlOperationType": "mutation",
     "description": "Link an existing Slack message to an issue. This creates a rich attachment using the workspace's Slack integration.",
-    "inputMode": "id",
+    "inputMode": "json",
     "requiredArgs": [
       {
         "name": "issueId",
@@ -928,7 +928,7 @@
     "graphqlField": "attachmentLinkZendesk",
     "graphqlOperationType": "mutation",
     "description": "Link an existing Zendesk ticket to an issue. This creates a rich attachment using the workspace's Zendesk integration, enabling features like automated ticket reopening when the Linear issue is completed.",
-    "inputMode": "id",
+    "inputMode": "json",
     "requiredArgs": [
       {
         "name": "ticketId",
@@ -980,7 +980,7 @@
     "graphqlField": "attachmentLinkGitHubIssue",
     "graphqlOperationType": "mutation",
     "description": "Link a GitHub issue to a Linear issue. This creates a rich attachment using the workspace's GitHub integration, enabling features like automated status syncing.",
-    "inputMode": "id",
+    "inputMode": "json",
     "requiredArgs": [
       {
         "name": "issueId",
@@ -1027,7 +1027,7 @@
     "graphqlField": "attachmentLinkGitHubPR",
     "graphqlOperationType": "mutation",
     "description": "Link a GitHub pull request to an issue. This creates a rich attachment using the workspace's GitHub integration, enabling features like automated status syncing.",
-    "inputMode": "id",
+    "inputMode": "json",
     "requiredArgs": [
       {
         "name": "issueId",
@@ -1079,7 +1079,7 @@
     "graphqlField": "attachmentLinkGitLabMR",
     "graphqlOperationType": "mutation",
     "description": "Link an existing GitLab MR to an issue. This creates a rich attachment using the workspace's GitLab integration, enabling features like automated status syncing.",
-    "inputMode": "id",
+    "inputMode": "json",
     "requiredArgs": [
       {
         "name": "issueId",
@@ -1136,7 +1136,7 @@
     "graphqlField": "attachmentLinkJiraIssue",
     "graphqlOperationType": "mutation",
     "description": "Link an existing Jira issue to an issue. This creates a rich attachment using the workspace's Jira integration, enabling features like automated status syncing.",
-    "inputMode": "id",
+    "inputMode": "json",
     "requiredArgs": [
       {
         "name": "issueId",
@@ -1188,7 +1188,7 @@
     "graphqlField": "attachmentLinkURL",
     "graphqlOperationType": "mutation",
     "description": "Link any URL to an issue. If the workspace has a matching integration configured and the URL is recognized (e.g., Zendesk, GitHub, Slack), a rich attachment will be created that enables features like automated status updates. Otherwise, a basic attachment is created.",
-    "inputMode": "id",
+    "inputMode": "json",
     "requiredArgs": [
       {
         "name": "url",
@@ -1394,7 +1394,7 @@
     "graphqlField": "comment",
     "graphqlOperationType": "query",
     "description": "A specific comment.",
-    "inputMode": "id",
+    "inputMode": "json",
     "requiredArgs": [],
     "optionalArgs": [
       {
@@ -2175,7 +2175,7 @@
     "graphqlField": "customerNeed",
     "graphqlOperationType": "query",
     "description": "Retrieves a single customer need by ID or hash.",
-    "inputMode": "id",
+    "inputMode": "json",
     "requiredArgs": [],
     "optionalArgs": [
       {
@@ -6504,7 +6504,7 @@
     "graphqlField": "issueReminder",
     "graphqlOperationType": "mutation",
     "description": "Adds an issue reminder. Will cause a notification to be sent when the issue reminder time is reached.",
-    "inputMode": "id",
+    "inputMode": "json",
     "requiredArgs": [
       {
         "name": "reminderAt",
@@ -6715,7 +6715,7 @@
     "graphqlField": "issueAddLabel",
     "graphqlOperationType": "mutation",
     "description": "Adds a label to an issue.",
-    "inputMode": "id",
+    "inputMode": "json",
     "requiredArgs": [
       {
         "name": "labelId",
@@ -6788,7 +6788,7 @@
     "graphqlField": "issueDescriptionUpdateFromFront",
     "graphqlOperationType": "mutation",
     "description": "[INTERNAL] Updates an issue description from the Front app to handle Front attachments correctly.",
-    "inputMode": "id",
+    "inputMode": "json",
     "requiredArgs": [
       {
         "name": "description",
@@ -7007,7 +7007,7 @@
     "graphqlField": "issueImportCreateAsana",
     "graphqlOperationType": "mutation",
     "description": "Kicks off an Asana import job.",
-    "inputMode": "id",
+    "inputMode": "json",
     "requiredArgs": [
       {
         "name": "asanaToken",
@@ -7059,7 +7059,7 @@
     "graphqlField": "issueImportCreateClubhouse",
     "graphqlOperationType": "mutation",
     "description": "Kicks off a Shortcut (formerly Clubhouse) import job.",
-    "inputMode": "id",
+    "inputMode": "json",
     "requiredArgs": [
       {
         "name": "clubhouseToken",
@@ -7157,7 +7157,7 @@
     "graphqlField": "issueImportCreateJira",
     "graphqlOperationType": "mutation",
     "description": "Kicks off a Jira import job.",
-    "inputMode": "id",
+    "inputMode": "json",
     "requiredArgs": [
       {
         "name": "jiraToken",
@@ -7224,7 +7224,7 @@
     "graphqlField": "issueImportCreateLinearV2",
     "graphqlOperationType": "mutation",
     "description": "[INTERNAL] Kicks off a Linear to Linear import job.",
-    "inputMode": "id",
+    "inputMode": "json",
     "requiredArgs": [
       {
         "name": "linearSourceOrganizationId",
@@ -7586,7 +7586,7 @@
     "graphqlField": "issueRemoveLabel",
     "graphqlOperationType": "mutation",
     "description": "Removes a label from an issue.",
-    "inputMode": "id",
+    "inputMode": "json",
     "requiredArgs": [
       {
         "name": "labelId",
@@ -9158,7 +9158,7 @@
     "graphqlField": "projectAddLabel",
     "graphqlOperationType": "mutation",
     "description": "Adds a label to a project.",
-    "inputMode": "id",
+    "inputMode": "json",
     "requiredArgs": [
       {
         "name": "labelId",
@@ -9184,7 +9184,7 @@
     "graphqlField": "projectCreateSlackChannel",
     "graphqlOperationType": "mutation",
     "description": "[Internal] Creates a Slack channel for an existing project.",
-    "inputMode": "id",
+    "inputMode": "json",
     "requiredArgs": [
       {
         "name": "slackChannelName",
@@ -9751,7 +9751,7 @@
     "graphqlField": "projectRemoveLabel",
     "graphqlOperationType": "mutation",
     "description": "Removes a label from a project.",
-    "inputMode": "id",
+    "inputMode": "json",
     "requiredArgs": [
       {
         "name": "labelId",
@@ -12682,7 +12682,7 @@
     "graphqlField": "userChangeRole",
     "graphqlOperationType": "mutation",
     "description": "Changes the workspace role of a user. The requesting user must have a role equal to or higher than the target role. Requires workspace admin permissions.",
-    "inputMode": "id",
+    "inputMode": "json",
     "requiredArgs": [
       {
         "name": "role",
@@ -12781,7 +12781,7 @@
     "graphqlField": "userRevokeSession",
     "graphqlOperationType": "mutation",
     "description": "Revokes a specific authentication session for a user. The admin cannot revoke their own sessions with this mutation. Can only be called by a workspace admin or owner.",
-    "inputMode": "id",
+    "inputMode": "json",
     "requiredArgs": [
       {
         "name": "sessionId",
