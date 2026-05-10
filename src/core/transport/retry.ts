@@ -6,6 +6,11 @@ export interface RetryOptions {
   maxRetries?: number;
 }
 
+export interface RetryOptionInput {
+  noRetry?: boolean;
+  maxRetries?: number;
+}
+
 const DEFAULT_MAX_RETRIES = 3;
 const BASE_DELAY_MS = 1000;
 const MAX_DELAY_MS = 30_000;
@@ -46,6 +51,23 @@ export async function executeGraphQLWithRetry<TData>(
   }
 
   throw new Error("retry loop exhausted unexpectedly");
+}
+
+export function normalizeRetryOptions(input: RetryOptionInput): RetryOptions | undefined {
+  if (input.noRetry === true || input.maxRetries !== undefined) {
+    if (
+      input.maxRetries !== undefined &&
+      (!Number.isFinite(input.maxRetries) || !Number.isInteger(input.maxRetries) || input.maxRetries < 0)
+    ) {
+      throw new RangeError("maxRetries must be a finite integer greater than or equal to 0");
+    }
+
+    return {
+      ...(input.noRetry === true ? { noRetry: true } : {}),
+      ...(input.maxRetries !== undefined ? { maxRetries: input.maxRetries } : {}),
+    };
+  }
+  return undefined;
 }
 
 function isRetryableError(error: unknown): boolean {

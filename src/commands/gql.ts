@@ -4,6 +4,7 @@ import type { JsonEnvelope, CommandError } from "../core/output/envelope.js";
 import { mapCommandFailure } from "../core/errors/command-failure.js";
 import { executeGraphQL } from "../core/transport/graphql.js";
 import type { FetchLike, GraphQLErrorPayload } from "../core/transport/graphql.js";
+import { executeGraphQLWithRetry, normalizeRetryOptions } from "../core/transport/retry.js";
 import { resolveStoredProfile } from "../core/auth/runtime.js";
 import { isTtyInput, readAllStdin } from "../core/io/stdin.js";
 import { INTROSPECTION_QUERY } from "../core/schema/introspection-query.js";
@@ -23,6 +24,9 @@ export interface GqlCommandOptions {
   env: Record<string, string | undefined>;
   stdinStream: NodeJS.ReadableStream;
   fetchImpl?: FetchLike;
+  // retry flags
+  noRetry?: boolean;
+  maxRetries?: number;
 }
 
 export async function handleGqlCommand(
@@ -84,7 +88,7 @@ export async function handleGqlCommand(
       env: options.env
     });
 
-    const response = await executeGraphQL<unknown>({
+    const graphqlInput = {
       query: document,
       ...(Object.keys(variables).length === 0 ? {} : { variables }),
       credentials: profile.credentials,
@@ -94,7 +98,11 @@ export async function handleGqlCommand(
           : { apiUrl: profile.metadata.baseUrl }
         : { apiUrl: options.apiUrl }),
       ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl })
-    });
+    };
+    const retry = normalizeRetryOptions(options);
+    const response = retry === undefined
+      ? await executeGraphQL<unknown>(graphqlInput)
+      : await executeGraphQLWithRetry<unknown>({ ...graphqlInput, retry });
 
     const errors = mapGraphQLErrors(response.body.errors);
 

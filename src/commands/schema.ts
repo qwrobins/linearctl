@@ -7,6 +7,7 @@ import type { CommandError } from "../core/output/envelope.js";
 import { resolveStoredProfile } from "../core/auth/runtime.js";
 import { executeGraphQL } from "../core/transport/graphql.js";
 import type { FetchLike } from "../core/transport/graphql.js";
+import { executeGraphQLWithRetry, normalizeRetryOptions, type RetryOptions } from "../core/transport/retry.js";
 import { INTROSPECTION_QUERY } from "../core/schema/introspection-query.js";
 import {
   computeSchemaFingerprint,
@@ -30,6 +31,9 @@ export interface SchemaCommandOptions {
   outputDir?: string;
   env: Record<string, string | undefined>;
   fetchImpl?: FetchLike;
+  // retry flags
+  noRetry?: boolean;
+  maxRetries?: number;
 }
 
 export async function handleSchemaCommand(
@@ -101,7 +105,7 @@ async function handleSchemaPull(positionals: string[], options: SchemaCommandOpt
       env: options.env
     });
 
-    const response = await executeGraphQL<{ __schema: unknown }>({
+    const response = await executeSchemaGraphQL<{ __schema: unknown }>({
       query: INTROSPECTION_QUERY,
       credentials: profile.credentials,
       ...(options.apiUrl === undefined
@@ -110,7 +114,7 @@ async function handleSchemaPull(positionals: string[], options: SchemaCommandOpt
           : { apiUrl: profile.metadata.baseUrl }
         : { apiUrl: options.apiUrl }),
       ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl })
-    });
+    }, normalizeRetryOptions(options));
 
     if (response.body.data === undefined || response.body.data.__schema === undefined) {
       process.stderr.write("Error: introspection response did not contain schema data.\n");
@@ -198,7 +202,7 @@ async function handleSchemaCheck(positionals: string[], options: SchemaCommandOp
       env: options.env
     });
 
-    const response = await executeGraphQL<{ __schema: unknown }>({
+    const response = await executeSchemaGraphQL<{ __schema: unknown }>({
       query: INTROSPECTION_QUERY,
       credentials: profile.credentials,
       ...(options.apiUrl === undefined
@@ -207,7 +211,7 @@ async function handleSchemaCheck(positionals: string[], options: SchemaCommandOp
           : { apiUrl: profile.metadata.baseUrl }
         : { apiUrl: options.apiUrl }),
       ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl })
-    });
+    }, normalizeRetryOptions(options));
 
     if (response.body.data === undefined || response.body.data.__schema === undefined) {
       process.stderr.write("Error: introspection response did not contain schema data.\n");
@@ -286,6 +290,16 @@ function defaultSchemaOutputDir(): string {
   }
   // Development: write to src/generated/manifest/ regardless of CWD.
   return join(thisDir, "..", "generated", "manifest");
+}
+
+function executeSchemaGraphQL<TData>(
+  input: Parameters<typeof executeGraphQL<TData>>[0],
+  retry: RetryOptions | undefined
+) {
+  if (retry !== undefined) {
+    return executeGraphQLWithRetry<TData>({ ...input, retry });
+  }
+  return executeGraphQL<TData>(input);
 }
 
 function extractSchemaVersion(schema: Record<string, unknown>): string | null {
