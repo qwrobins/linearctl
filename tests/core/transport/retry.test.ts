@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { executeGraphQLWithRetry } from "../../../src/core/transport/retry.js";
+import { executeGraphQLWithRetry, normalizeRetryOptions } from "../../../src/core/transport/retry.js";
 import type { FetchLike } from "../../../src/core/transport/graphql.js";
 import { GraphQLTransportError } from "../../../src/core/transport/graphql.js";
 
@@ -130,5 +130,26 @@ describe("executeGraphQLWithRetry", () => {
     ).rejects.toThrow("Network failure");
 
     expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("normalizeRetryOptions", () => {
+  it("returns undefined when no retry options are set", () => {
+    expect(normalizeRetryOptions({})).toBeUndefined();
+  });
+
+  it("preserves noRetry and valid maxRetries values", () => {
+    expect(normalizeRetryOptions({ noRetry: true, maxRetries: 0 })).toEqual({
+      noRetry: true,
+      maxRetries: 0
+    });
+    expect(normalizeRetryOptions({ maxRetries: 2 })).toEqual({ maxRetries: 2 });
+  });
+
+  it("rejects invalid maxRetries values", () => {
+    expect(() => normalizeRetryOptions({ maxRetries: -1 })).toThrow(RangeError);
+    expect(() => normalizeRetryOptions({ maxRetries: 1.5 })).toThrow(RangeError);
+    expect(() => normalizeRetryOptions({ maxRetries: Number.NaN })).toThrow(RangeError);
+    expect(() => normalizeRetryOptions({ maxRetries: Number.POSITIVE_INFINITY })).toThrow(RangeError);
   });
 });

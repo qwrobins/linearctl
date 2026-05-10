@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.9] - 2026-05-10
+
+### Fixed
+
+- Generated API commands now handle optional `id` arguments, scalar returns, and payloads without assuming invalid GraphQL field selections
+- Retry option normalization is shared and validates programmatic `maxRetries` values before executing GraphQL requests
+- Packaged builds now include the bundled schema file for structural schema drift checks
+- Vitest no longer discovers copied agent worktree test suites
+
 ## [0.5.8] - 2026-05-07
 
 ### Changed

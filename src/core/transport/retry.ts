@@ -55,6 +55,13 @@ export async function executeGraphQLWithRetry<TData>(
 
 export function normalizeRetryOptions(input: RetryOptionInput): RetryOptions | undefined {
   if (input.noRetry === true || input.maxRetries !== undefined) {
+    if (
+      input.maxRetries !== undefined &&
+      (!Number.isFinite(input.maxRetries) || !Number.isInteger(input.maxRetries) || input.maxRetries < 0)
+    ) {
+      throw new RangeError("maxRetries must be a finite integer greater than or equal to 0");
+    }
+
     return {
       ...(input.noRetry === true ? { noRetry: true } : {}),
       ...(input.maxRetries !== undefined ? { maxRetries: input.maxRetries } : {}),
