@@ -4,7 +4,7 @@ import type { JsonEnvelope, CommandError } from "../core/output/envelope.js";
 import { mapCommandFailure } from "../core/errors/command-failure.js";
 import { executeGraphQL } from "../core/transport/graphql.js";
 import type { FetchLike, GraphQLErrorPayload } from "../core/transport/graphql.js";
-import { executeGraphQLWithRetry, type RetryOptions } from "../core/transport/retry.js";
+import { executeGraphQLWithRetry, normalizeRetryOptions } from "../core/transport/retry.js";
 import { resolveStoredProfile } from "../core/auth/runtime.js";
 import { isTtyInput, readAllStdin } from "../core/io/stdin.js";
 import { INTROSPECTION_QUERY } from "../core/schema/introspection-query.js";
@@ -99,7 +99,7 @@ export async function handleGqlCommand(
         : { apiUrl: options.apiUrl }),
       ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl })
     };
-    const retry = retryOptions(options);
+    const retry = normalizeRetryOptions(options);
     const response = retry === undefined
       ? await executeGraphQL<unknown>(graphqlInput)
       : await executeGraphQLWithRetry<unknown>({ ...graphqlInput, retry });
@@ -149,16 +149,6 @@ export async function handleGqlCommand(
 
     return failure.exitCode;
   }
-}
-
-function retryOptions(options: Pick<GqlCommandOptions, "noRetry" | "maxRetries">): RetryOptions | undefined {
-  if (options.noRetry === true || options.maxRetries !== undefined) {
-    return {
-      ...(options.noRetry === true ? { noRetry: true } : {}),
-      ...(options.maxRetries !== undefined ? { maxRetries: options.maxRetries } : {}),
-    };
-  }
-  return undefined;
 }
 
 async function resolveGraphQLDocument(

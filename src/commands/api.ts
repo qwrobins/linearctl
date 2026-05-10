@@ -4,7 +4,7 @@ import { mapCommandFailure } from "../core/errors/command-failure.js";
 import { ExitCode } from "../core/errors/exit-codes.js";
 import { executeGraphQL } from "../core/transport/graphql.js";
 import type { FetchLike, GraphQLErrorPayload } from "../core/transport/graphql.js";
-import { executeGraphQLWithRetry, type RetryOptions } from "../core/transport/retry.js";
+import { executeGraphQLWithRetry, normalizeRetryOptions, type RetryOptions } from "../core/transport/retry.js";
 import { resolveStoredProfile } from "../core/auth/runtime.js";
 import { readAllStdin, isTtyInput } from "../core/io/stdin.js";
 import type { ApiCommandEntry, ApiCommandManifest } from "../generated/generate-manifest.js";
@@ -361,7 +361,7 @@ export async function handleApiCommand(
 
     const response = await executeGeneratedGraphQL<Record<string, unknown>>(
       graphqlInput,
-      retryOptions(options)
+      normalizeRetryOptions(options)
     );
 
     if (hasErrors(response.body.errors)) {
@@ -411,16 +411,6 @@ export async function handleApiCommand(
 
     return failure.exitCode;
   }
-}
-
-function retryOptions(options: Pick<ApiCommandOptions, "noRetry" | "maxRetries">): RetryOptions | undefined {
-  if (options.noRetry === true || options.maxRetries !== undefined) {
-    return {
-      ...(options.noRetry === true ? { noRetry: true } : {}),
-      ...(options.maxRetries !== undefined ? { maxRetries: options.maxRetries } : {}),
-    };
-  }
-  return undefined;
 }
 
 function executeGeneratedGraphQL<TData>(
