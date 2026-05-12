@@ -240,6 +240,7 @@ function toParsedCliArguments(values: Record<string, unknown>, positionals: stri
     quiet: values.quiet === true,
     allTeams: values["all-teams"] === true,
     ...(typeof values.scope === "string" ? { scope: values.scope } : {}),
+    ...(typeof values.parent === "string" ? { parent: values.parent } : {}),
     noRetry: values["no-retry"] === true,
     ...(typeof values["max-retries"] === "string" ? { maxRetries: parsePositiveInt(values["max-retries"], "max-retries") } : {}),
     positionals

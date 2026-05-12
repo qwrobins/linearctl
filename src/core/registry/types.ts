@@ -99,6 +99,7 @@ export interface ParsedCliArguments {
   quiet: boolean;
   allTeams: boolean;
   scope?: string;
+  parent?: string;
   noRetry: boolean;
   maxRetries?: number;
   positionals: string[];
