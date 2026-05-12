@@ -85,6 +85,7 @@ export const OPTION_CATALOG: Record<string, OptionSpec> = {
   "status-type": { type: "string" },
   position: { type: "string" },
   scope: { type: "string" },
+  parent: { type: "string" },
 };
 
 /** Reusable option groups that commands compose from */

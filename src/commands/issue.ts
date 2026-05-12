@@ -46,6 +46,8 @@ export interface IssueCommandOptions {
   // issue attach-slack flags
   url?: string;
   sync?: boolean;
+  // parent issue flag
+  parent?: string;
   // issue list flags
   cycle?: string;
   project?: string;
@@ -388,6 +390,9 @@ async function handleIssueCreate(options: IssueCommandOptions): Promise<number> 
   if (options.project !== undefined) {
     input.projectId = options.project;
   }
+  if (options.parent !== undefined) {
+    input.parentId = options.parent;
+  }
   input.teamId = teamId;
 
   if (options.dryRun === true) {
@@ -411,6 +416,23 @@ async function handleIssueCreate(options: IssueCommandOptions): Promise<number> 
     }
     if (options.state !== undefined) {
       input.stateId = looksLikeId(options.state) ? options.state : await resolveStateId(options.state, resolvedTeamId, resolverOpts);
+    }
+    if (options.parent !== undefined) {
+      if (looksLikeId(options.parent)) {
+        input.parentId = options.parent;
+      } else {
+        const parentData = await ctx.graphql<{ issue: { id: string } | null }>(
+          `query IssueResolve($id: String!) { issue(id: $id) { id } }`,
+          { id: options.parent }
+        );
+        if (ctx.hasErrors(parentData.body.errors)) {
+          return ctx.emitFailure(ctx.mapGraphQLErrors(parentData.body.errors));
+        }
+        if (parentData.body.data?.issue?.id === undefined) {
+          return emitValidationError(`Could not resolve parent issue "${options.parent}".`, options);
+        }
+        input.parentId = parentData.body.data.issue.id;
+      }
     }
 
     const response = await ctx.graphql<{
@@ -738,6 +760,9 @@ async function handleIssueUpdate(
   if (options.project !== undefined) {
     input.projectId = options.project;
   }
+  if (options.parent !== undefined) {
+    input.parentId = options.parent;
+  }
 
   if (Object.keys(input).length === 0) {
     return emitValidationError("issue update requires at least one field to update.", options);
@@ -774,6 +799,23 @@ async function handleIssueUpdate(
     }
     if (options.state !== undefined && !looksLikeId(options.state)) {
       input.stateId = await resolveStateId(options.state, issueTeamId!, resolverOpts);
+    }
+    if (options.parent !== undefined) {
+      if (looksLikeId(options.parent)) {
+        input.parentId = options.parent;
+      } else {
+        const parentData = await ctx.graphql<{ issue: { id: string } | null }>(
+          `query IssueResolve($id: String!) { issue(id: $id) { id } }`,
+          { id: options.parent }
+        );
+        if (ctx.hasErrors(parentData.body.errors)) {
+          return ctx.emitFailure(ctx.mapGraphQLErrors(parentData.body.errors));
+        }
+        if (parentData.body.data?.issue?.id === undefined) {
+          return emitValidationError(`Could not resolve parent issue "${options.parent}".`, options);
+        }
+        input.parentId = parentData.body.data.issue.id;
+      }
     }
 
     if (options.dryRun === true) {
