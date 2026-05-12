@@ -425,6 +425,9 @@ async function handleIssueCreate(options: IssueCommandOptions): Promise<number> 
           `query IssueResolve($id: String!) { issue(id: $id) { id } }`,
           { id: options.parent }
         );
+        if (ctx.hasErrors(parentData.body.errors)) {
+          return ctx.emitFailure(ctx.mapGraphQLErrors(parentData.body.errors));
+        }
         if (parentData.body.data?.issue?.id === undefined) {
           return emitValidationError(`Could not resolve parent issue "${options.parent}".`, options);
         }
@@ -805,6 +808,9 @@ async function handleIssueUpdate(
           `query IssueResolve($id: String!) { issue(id: $id) { id } }`,
           { id: options.parent }
         );
+        if (ctx.hasErrors(parentData.body.errors)) {
+          return ctx.emitFailure(ctx.mapGraphQLErrors(parentData.body.errors));
+        }
         if (parentData.body.data?.issue?.id === undefined) {
           return emitValidationError(`Could not resolve parent issue "${options.parent}".`, options);
         }
