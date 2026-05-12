@@ -63,6 +63,8 @@ linearctl auth login --profile work --api-key-env LINEAR_API_KEY --set-default
 linearctl team get <team-key> --set-default
 ```
 
+Your key is now stored in `~/.config/linear/credentials` (permissions `0600`) and loaded automatically on every run. No env vars to export in your shell profile, no secrets in dotfiles. You only need `LINEAR_API_KEY` for that initial login.
+
 ### OAuth (browser-based)
 
 Create an OAuth app at https://linear.app/settings/api/applications, then:
@@ -73,7 +75,7 @@ linearctl auth login --profile work --oauth --oauth-client-id <id> --set-default
 
 ### Usage
 
-Credentials are stored in `~/.config/linear/credentials` (permissions `0600`). Profile metadata is in `~/.config/linear/config`. See [auth and profiles](docs/auth-and-profiles.md) for the full file layout.
+Profile metadata is in `~/.config/linear/config`. See [auth and profiles](docs/auth-and-profiles.md) for the full file layout.
 
 ```bash
 linearctl issue list
