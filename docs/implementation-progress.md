@@ -124,7 +124,7 @@ Completed:
   - Multi-organization selector: `linearctl auth whoami`, `linearctl workspace list`, workspace metadata stored on login
   - Profile resolution hints listing available profiles with workspace context on ambiguity
   - Name/identifier resolution: team name/key, user email/"me", label name, state name → ID
-  - Resolution applied to issue create/update/assign/list, project create, cycle create/list, label create/list
+  - Resolution applied to issue create/update/assign/list, project get/create, cycle create/list, label create/list
   - `--dry-run` for all destructive/mutating commands (18 operations across 7 resource handlers)
 
 ## Architecture improvements (v0.5.0)

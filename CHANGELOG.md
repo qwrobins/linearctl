@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.1] - 2026-05-13
+
+### Added
+
+- `issue create` now accepts `--project-milestone <id>` and `--milestone <id>` to set the project milestone at creation time.
+
+### Fixed
+
+- `project get <name>` now resolves project names through GraphQL variables, including names with special characters such as `&`.
+- `issue list --project <name>` now resolves project names before filtering instead of passing names to Linear as IDs.
+- `project list --json` keeps machine-readable output on stdout, with regression coverage for clean stderr/stdout separation.
+
 ## [0.5.9] - 2026-05-10
 
 ### Fixed

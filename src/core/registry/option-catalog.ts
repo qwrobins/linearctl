@@ -54,6 +54,8 @@ export const OPTION_CATALOG: Record<string, OptionSpec> = {
   "completed-after": { type: "string" },
   cycle: { type: "string" },
   project: { type: "string" },
+  milestone: { type: "string" },
+  "project-milestone": { type: "string" },
   "order-by": { type: "string" },
   "order-dir": { type: "string" },
   all: { type: "boolean" },

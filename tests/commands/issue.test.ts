@@ -320,6 +320,7 @@ describe("handleIssueCommand — issue create", () => {
         assignee: "b0000000-0000-0000-0000-000000000001",
         label: "c0000000-0000-0000-0000-000000000001",
         state: "d0000000-0000-0000-0000-000000000001",
+        projectMilestone: "e0000000-0000-0000-0000-000000000001",
         fetchImpl
       });
 
@@ -331,6 +332,35 @@ describe("handleIssueCommand — issue create", () => {
       expect(input.assigneeId).toBe("b0000000-0000-0000-0000-000000000001");
       expect(input.labelIds).toEqual(["c0000000-0000-0000-0000-000000000001"]);
       expect(input.stateId).toBe("d0000000-0000-0000-0000-000000000001");
+      expect(input.projectMilestoneId).toBe("e0000000-0000-0000-0000-000000000001");
+    } finally {
+      output.restore();
+    }
+  });
+
+  it("accepts --milestone as an alias for projectMilestoneId", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-issue-"));
+    const paths = await writeProfileFiles(directory);
+    const fetchSpy = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
+      new Response(JSON.stringify({
+        data: { issueCreate: { success: true, issue: makeRawIssue() } }
+      }), { status: 200 })
+    );
+    const fetchImpl = fetchSpy as unknown as FetchLike;
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleIssueCommand(["create"], {
+        ...baseOptions(paths),
+        title: "Bug fix",
+        team: "a0000000-0000-0000-0000-000000000001",
+        milestone: "e0000000-0000-0000-0000-000000000001",
+        fetchImpl
+      });
+
+      expect(exitCode).toBe(0);
+      const fetchBody = JSON.parse(String((fetchSpy as ReturnType<typeof vi.fn>).mock.calls[0]?.[1]?.body));
+      expect(fetchBody.variables.input.projectMilestoneId).toBe("e0000000-0000-0000-0000-000000000001");
     } finally {
       output.restore();
     }
@@ -517,13 +547,79 @@ describe("handleIssueCommand — issue list", () => {
     try {
       const exitCode = await handleIssueCommand(["list"], {
         ...baseOptions(paths),
-        project: "project-uuid-1",
+        project: "00000000-0000-0000-0000-000000000001",
         fetchImpl
       });
 
       expect(exitCode).toBe(0);
       const callBody = JSON.parse(String((fetchSpy as ReturnType<typeof vi.fn>).mock.calls[0]?.[1]?.body));
-      expect(callBody.variables.filter.project).toEqual({ id: { eq: "project-uuid-1" } });
+      expect(callBody.variables.filter.project).toEqual({ id: { eq: "00000000-0000-0000-0000-000000000001" } });
+    } finally {
+      output.restore();
+    }
+  });
+
+  it("resolves --project names with team scope before filtering", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-issue-"));
+    const paths = await writeProfileFiles(directory);
+    const fetchSpy = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body ?? "{}")) as { query: string; variables?: Record<string, unknown> };
+
+      if (body.query.includes("ResolveTeam")) {
+        return new Response(JSON.stringify({
+          data: { teams: { nodes: [{ id: "team-1", key: "INF", name: "Infrastructure" }] } }
+        }), { status: 200 });
+      }
+
+      if (body.query.includes("ResolveProject")) {
+        expect(body.variables?.filter).toEqual({
+          and: [
+            { name: { eq: "GCP Hardening & GitOps" } },
+            { accessibleTeams: { some: { id: { eq: "team-1" } } } }
+          ]
+        });
+        return new Response(JSON.stringify({
+          data: {
+            projects: {
+              nodes: [{
+                id: "project-special-1",
+                name: "GCP Hardening & GitOps",
+                teams: { nodes: [{ id: "team-1", key: "INF", name: "Infrastructure" }] }
+              }]
+            }
+          }
+        }), { status: 200 });
+      }
+
+      expect(body.variables?.filter).toMatchObject({
+        team: { id: { eq: "team-1" } },
+        project: { id: { eq: "project-special-1" } }
+      });
+      return new Response(JSON.stringify({
+        data: {
+          issues: {
+            nodes: [makeRawIssue({ project: { id: "project-special-1", name: "GCP Hardening & GitOps" } })],
+            pageInfo: { hasNextPage: false, endCursor: null }
+          }
+        }
+      }), { status: 200 });
+    });
+    const fetchImpl = fetchSpy as unknown as FetchLike;
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleIssueCommand(["list"], {
+        ...baseOptions(paths),
+        team: "INF",
+        project: "GCP Hardening & GitOps",
+        fetchImpl
+      });
+
+      expect(exitCode).toBe(0);
+      const parsed = JSON.parse(output.stdout.join(""));
+      expect(parsed[0].project.name).toBe("GCP Hardening & GitOps");
+      expect(output.stderr.join("")).toBe("");
+      expect(fetchSpy).toHaveBeenCalledTimes(3);
     } finally {
       output.restore();
     }
@@ -549,7 +645,7 @@ describe("handleIssueCommand — issue list", () => {
       const exitCode = await handleIssueCommand(["list"], {
         ...baseOptions(paths),
         cycle: "cycle-uuid-1",
-        project: "project-uuid-1",
+        project: "00000000-0000-0000-0000-000000000001",
         state: "In Progress",
         fetchImpl
       });
@@ -557,7 +653,7 @@ describe("handleIssueCommand — issue list", () => {
       expect(exitCode).toBe(0);
       const callBody = JSON.parse(String((fetchSpy as ReturnType<typeof vi.fn>).mock.calls[0]?.[1]?.body));
       expect(callBody.variables.filter.cycle).toEqual({ id: { eq: "cycle-uuid-1" } });
-      expect(callBody.variables.filter.project).toEqual({ id: { eq: "project-uuid-1" } });
+      expect(callBody.variables.filter.project).toEqual({ id: { eq: "00000000-0000-0000-0000-000000000001" } });
       expect(callBody.variables.filter.state).toEqual({ name: { eq: "In Progress" } });
     } finally {
       output.restore();

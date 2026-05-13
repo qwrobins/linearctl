@@ -12,7 +12,7 @@ linearctl issue get <identifier> --json
 
 # List issues with filters
 linearctl issue list [--team <name|key|id>] [--state <name|id>] [--assignee <email|"me"|id>] \
-  [--label <name|id>] [--priority <0-4>] [--cycle <id>] [--project <id>] \
+  [--label <name|id>] [--priority <0-4>] [--cycle <id>] [--project <name|id>] \
   [--created-after <date>] [--updated-after <date>] [--completed-after <date>] \
   [--all-teams] [--filter-json <json>] [--order-by <field>] \
   [--all] [--max <n>] [--page-size <n>] [--after <cursor>] --json
@@ -23,7 +23,8 @@ linearctl issue search --query <text> [--all] --json
 # Create an issue
 linearctl issue create --title <title> --team <name|key|id> \
   [--description <text>] [--priority <0-4>] [--estimate <n>] [--assignee <email|"me"|id>] \
-  [--label <name|id>] [--state <name|id>] [--cycle <id>] [--project <id>] \
+  [--label <name|id>] [--state <name|id>] [--cycle <id>] [--project <name|id>] \
+  [--project-milestone <id>|--milestone <id>] \
   [--parent <identifier>] --json
 
 # Update an issue
@@ -63,7 +64,7 @@ Bulk operations report partial success. Check the response for per-item results.
 ## Project
 
 ```bash
-linearctl project get <id> --json                  # richer detail payload: progress/health/currentProgress, milestones
+linearctl project get <name|id> --json             # richer detail payload: progress/health/currentProgress, milestones
 linearctl project list [--team <name|key|id>] [--state <status-type>] [--all-teams] --json
 linearctl project create --name <name> [--description <text>] [--team <name|key|id>] --json
 linearctl project create-with-issues --name <name> --team <name|key|id> \

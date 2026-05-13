@@ -43,12 +43,12 @@ export const COMMAND_REGISTRY: readonly CommandRegistration[] = [
       "title", "team", "description", "priority", "estimate", "assignee",
       "label", "state", "input-json", "ids", "body", "url", "sync", "query",
       "filter-json", "created-after", "updated-after", "completed-after",
-      "cycle", "project", "order-by", "order-dir", "parent",
+      "cycle", "project", "milestone", "project-milestone", "order-by", "order-dir", "parent",
     ],
     subcommands: {
       get:            { usage: "linearctl issue get <identifier> [--json]" },
-      create:         { usage: "linearctl issue create --title <title> --team <id> [--description <text>] [--priority <0-4>] [--estimate <n>] [--assignee <id>] [--label <id>] [--state <id>] [--cycle <id>] [--project <id>] [--parent <identifier>] [--json]" },
-      list:           { usage: "linearctl issue list [--state <name>] [--assignee <id>] [--team <id>] [--label <name|id>] [--priority <0-4>] [--cycle <id>] [--project <id>] [--created-after <date>] [--updated-after <date>] [--completed-after <date>] [--order-by <field>] [--all-teams] [--all] [--json]" },
+      create:         { usage: "linearctl issue create --title <title> --team <id> [--description <text>] [--priority <0-4>] [--estimate <n>] [--assignee <id>] [--label <id>] [--state <id>] [--cycle <id>] [--project <id|name>] [--project-milestone <id>|--milestone <id>] [--parent <identifier>] [--json]" },
+      list:           { usage: "linearctl issue list [--state <name>] [--assignee <id>] [--team <id>] [--label <name|id>] [--priority <0-4>] [--cycle <id>] [--project <id|name>] [--created-after <date>] [--updated-after <date>] [--completed-after <date>] [--order-by <field>] [--all-teams] [--all] [--json]" },
       search:         { usage: "linearctl issue search --query <text> [--all] [--json]" },
       update:         { usage: "linearctl issue update <identifier> [--title <text>] [--description <text>] [--priority <0-4>] [--estimate <n>] [--assignee <id>] [--label <name|id>] [--state <id>] [--cycle <id>] [--project <id>] [--parent <identifier>] [--json]" },
       close:          { usage: "linearctl issue close <identifier> [--state <name>] [--json]" },
@@ -68,7 +68,7 @@ export const COMMAND_REGISTRY: readonly CommandRegistration[] = [
       ...pickFields(args, "title", "description", "priority", "estimate", "assignee",
         "label", "state", "inputJson", "ids", "body", "url", "query",
         "filterJson", "createdAfter", "updatedAfter", "completedAfter",
-        "cycle", "project", "orderBy", "orderDir", "parent"),
+        "cycle", "project", "milestone", "projectMilestone", "orderBy", "orderDir", "parent"),
     }),
   },
 
@@ -81,7 +81,7 @@ export const COMMAND_REGISTRY: readonly CommandRegistration[] = [
       "name", "description", "team", "state", "target-date", "issues-json",
     ],
     subcommands: {
-      get:                  { usage: "linearctl project get <id> [--json]" },
+      get:                  { usage: "linearctl project get <name|id> [--json]" },
       list:                 { usage: "linearctl project list [--team <id>] [--state <status-type>] [--all-teams] [--json]" },
       create:               { usage: "linearctl project create --name <name> [--description ...] [--team <id>] [--json]" },
       update:               { usage: "linearctl project update <id> [--name ...] [--description ...] [--state ...] [--target-date <date>] [--json]" },
