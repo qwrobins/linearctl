@@ -229,6 +229,8 @@ function toParsedCliArguments(values: Record<string, unknown>, positionals: stri
     ...(typeof values["completed-after"] === "string" ? { completedAfter: values["completed-after"] } : {}),
     ...(typeof values.cycle === "string" ? { cycle: values.cycle } : {}),
     ...(typeof values.project === "string" ? { project: values.project } : {}),
+    ...(typeof values.milestone === "string" ? { milestone: values.milestone } : {}),
+    ...(typeof values["project-milestone"] === "string" ? { projectMilestone: values["project-milestone"] } : {}),
     ...(typeof values["order-by"] === "string" ? { orderBy: values["order-by"] } : {}),
     ...(typeof values["order-dir"] === "string" ? { orderDir: values["order-dir"] } : {}),
     all: values.all === true,

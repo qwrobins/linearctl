@@ -9,7 +9,7 @@ import { resolveStoredProfile } from "../core/auth/runtime.js";
 import { paginateGraphQL, validatePaginationOptions, type PaginationOptions } from "../core/pagination/pagination.js";
 import { streamPaginateGraphQL } from "../core/pagination/streaming.js";
 import { emitDryRunResult } from "../core/output/dry-run.js";
-import { resolveTeamId, looksLikeId } from "../core/resolution/resolve.js";
+import { resolveProjectId, resolveTeamId, looksLikeId } from "../core/resolution/resolve.js";
 import type { ResolverOptions } from "../core/resolution/resolve.js";
 import { CommandContext } from "../core/runtime/command-context.js";
 import { runTwoStepWorkflow } from "../core/runtime/workflow.js";
@@ -438,9 +438,23 @@ async function handleProjectGet(
   const ctx = buildContext(options);
 
   try {
+    let projectId = id;
+    if (!looksLikeId(id)) {
+      const profile = await ctx.resolveProfile();
+      const resolverOpts = await ctx.resolverOptions();
+      const effectiveTeam = options.allTeams ? undefined : (options.team ?? profile.metadata.defaultTeam);
+      const teamId =
+        effectiveTeam === undefined
+          ? undefined
+          : looksLikeId(effectiveTeam)
+            ? effectiveTeam
+            : await resolveTeamId(effectiveTeam, resolverOpts);
+      projectId = await resolveProjectId(id, teamId, resolverOpts);
+    }
+
     const response = await ctx.graphql<{ project: RawProjectDetail | null }>(
       PROJECT_GET_QUERY,
-      { id }
+      { id: projectId }
     );
 
     if (ctx.hasErrors(response.body.errors)) {

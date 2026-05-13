@@ -256,3 +256,67 @@ export async function resolveStateId(
     matches.map((s) => ({ id: s.id, display: `${s.name} (${s.type})` }))
   );
 }
+
+// ---------------------------------------------------------------------------
+// Project: exact name → ID (optionally scoped to team)
+// ---------------------------------------------------------------------------
+
+const PROJECT_RESOLVE_QUERY = `
+query ResolveProject($filter: ProjectFilter!) {
+  projects(filter: $filter) {
+    nodes {
+      id
+      name
+      teams { nodes { id key name } }
+    }
+  }
+}`;
+
+interface ProjectNode {
+  id: string;
+  name: string;
+  teams: { nodes: Array<{ id: string; key: string; name: string }> };
+}
+
+export async function resolveProjectId(
+  name: string,
+  teamId: string | undefined,
+  options: ResolverOptions
+): Promise<string> {
+  const nameFilter: Record<string, unknown> = { name: { eq: name } };
+  const filter =
+    teamId !== undefined
+      ? { and: [nameFilter, { accessibleTeams: { some: { id: { eq: teamId } } } }] }
+      : nameFilter;
+
+  const data = await requestGraphQL<{ projects: { nodes: ProjectNode[] } }>({
+    query: PROJECT_RESOLVE_QUERY,
+    variables: { filter },
+    credentials: options.credentials,
+    ...(options.apiUrl === undefined ? {} : { apiUrl: options.apiUrl }),
+    ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl })
+  });
+
+  const nodes = data.projects.nodes;
+
+  if (nodes.length === 1) {
+    return nodes[0]!.id;
+  }
+
+  const scope = teamId !== undefined ? ` in team ${teamId}` : "";
+  if (nodes.length === 0) {
+    throw new ResolutionError(
+      `No project found matching "${name}"${scope}. Use a direct project ID instead.`,
+      "not-found"
+    );
+  }
+
+  throw new ResolutionError(
+    `Ambiguous project "${name}"${scope} — matches: ${nodes.map((p) => `${p.name} (${p.id})`).join(", ")}. Use a direct project ID instead.`,
+    "ambiguous",
+    nodes.map((p) => ({
+      id: p.id,
+      display: `${p.name}${p.teams.nodes.length > 0 ? ` (${p.teams.nodes.map((t) => t.key).join(", ")})` : ""}`
+    }))
+  );
+}

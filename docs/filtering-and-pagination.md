@@ -54,7 +54,7 @@ Issue list supports these filter flags:
 | `--label <value>` | Filter by label | Name or UUID |
 | `--priority <n>` | Filter by priority | Integer 0-4 (0 = no priority, 1 = urgent, 4 = low) |
 | `--cycle <value>` | Filter by cycle | UUID |
-| `--project <value>` | Filter by project | UUID |
+| `--project <value>` | Filter by project | project name or UUID |
 | `--created-after <date>` | Issues created on or after date | ISO 8601 date (e.g. `2024-01-01`) |
 | `--updated-after <date>` | Issues updated on or after date | ISO 8601 date |
 | `--completed-after <date>` | Issues completed on or after date | ISO 8601 date |
@@ -110,4 +110,4 @@ Curated commands automatically resolve friendly names to Linear UUIDs:
 
 If a value looks like a UUID, it is passed through directly. On ambiguous matches, the CLI errors and lists candidates.
 
-Name resolution works on: issue create, issue update, issue assign, issue list, project create, cycle create, cycle list, label create, label list.
+Name resolution works on: issue create, issue update, issue assign, issue list, project get, project create, cycle create, cycle list, label create, label list.

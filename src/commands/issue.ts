@@ -12,6 +12,7 @@ import {
   resolveUserId,
   resolveLabelId,
   resolveStateId,
+  resolveProjectId,
   looksLikeId,
   ResolutionError
 } from "../core/resolution/resolve.js";
@@ -38,6 +39,8 @@ export interface IssueCommandOptions {
   assignee?: string;
   label?: string;
   state?: string;
+  milestone?: string;
+  projectMilestone?: string;
   inputJson?: string;
   // bulk operation flags
   ids?: string;
@@ -390,6 +393,10 @@ async function handleIssueCreate(options: IssueCommandOptions): Promise<number> 
   if (options.project !== undefined) {
     input.projectId = options.project;
   }
+  const projectMilestone = options.projectMilestone ?? options.milestone;
+  if (projectMilestone !== undefined) {
+    input.projectMilestoneId = projectMilestone;
+  }
   if (options.parent !== undefined) {
     input.parentId = options.parent;
   }
@@ -416,6 +423,9 @@ async function handleIssueCreate(options: IssueCommandOptions): Promise<number> 
     }
     if (options.state !== undefined) {
       input.stateId = looksLikeId(options.state) ? options.state : await resolveStateId(options.state, resolvedTeamId, resolverOpts);
+    }
+    if (options.project !== undefined) {
+      input.projectId = looksLikeId(options.project) ? options.project : await resolveProjectId(options.project, resolvedTeamId, resolverOpts);
     }
     if (options.parent !== undefined) {
       if (looksLikeId(options.parent)) {
@@ -540,7 +550,10 @@ async function handleIssueList(options: IssueCommandOptions): Promise<number> {
         buildFilter.cycle = { id: { eq: options.cycle } };
       }
       if (options.project !== undefined) {
-        buildFilter.project = { id: { eq: options.project } };
+        const projectId = looksLikeId(options.project)
+          ? options.project
+          : await resolveProjectId(options.project, resolvedTeamId, resolverOpts);
+        buildFilter.project = { id: { eq: projectId } };
       }
       if (options.createdAfter !== undefined) {
         buildFilter.createdAt = { gte: options.createdAfter };

@@ -54,7 +54,7 @@ async function writeProfileFiles(directory: string): Promise<{ configFile: strin
 
 function makeRawProject(overrides?: Partial<Record<string, unknown>>) {
   return {
-    id: "proj-uuid-1",
+    id: "00000000-0000-0000-0000-000000000001",
     name: "Auth hardening",
     description: "Harden authentication flows",
     state: "started",
@@ -169,7 +169,7 @@ describe("normalizeProjectDetail", () => {
     const raw = makeRawProjectDetail();
     const normalized = normalizeProjectDetail(raw as Parameters<typeof normalizeProjectDetail>[0]);
 
-    expect(normalized.id).toBe("proj-uuid-1");
+    expect(normalized.id).toBe("00000000-0000-0000-0000-000000000001");
     expect(normalized.progress).toBe(45);
     expect(normalized.health).toBe("onTrack");
     expect(normalized.currentProgress).toBe(48);
@@ -204,14 +204,14 @@ describe("handleProjectCommand — project get", () => {
     const output = captureOutput();
 
     try {
-      const exitCode = await handleProjectCommand(["get", "proj-uuid-1"], {
+      const exitCode = await handleProjectCommand(["get", "00000000-0000-0000-0000-000000000001"], {
         ...baseOptions(paths),
         fetchImpl
       });
 
       expect(exitCode).toBe(0);
       const parsed = JSON.parse(output.stdout.join(""));
-      expect(parsed.id).toBe("proj-uuid-1");
+      expect(parsed.id).toBe("00000000-0000-0000-0000-000000000001");
       expect(parsed.name).toBe("Auth hardening");
       expect(parsed.teams).toEqual([
         { id: "team-1", key: "INF", name: "Infrastructure" }
@@ -225,6 +225,52 @@ describe("handleProjectCommand — project get", () => {
     }
   });
 
+  it("resolves project names with special characters before fetching details", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-project-"));
+    const paths = await writeProfileFiles(directory);
+    const fetchSpy = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body ?? "{}")) as { query: string; variables?: Record<string, unknown> };
+
+      if (body.query.includes("ResolveProject")) {
+        expect(body.variables?.filter).toEqual({ name: { eq: "GCP Hardening & GitOps" } });
+        return new Response(JSON.stringify({
+          data: {
+            projects: {
+              nodes: [{
+                id: "project-special-1",
+                name: "GCP Hardening & GitOps",
+                teams: { nodes: [{ id: "team-1", key: "INF", name: "Infrastructure" }] }
+              }]
+            }
+          }
+        }), { status: 200 });
+      }
+
+      expect(body.variables?.id).toBe("project-special-1");
+      return new Response(JSON.stringify({
+        data: { project: makeRawProjectDetail({ id: "project-special-1", name: "GCP Hardening & GitOps" }) }
+      }), { status: 200 });
+    });
+    const fetchImpl = fetchSpy as unknown as FetchLike;
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleProjectCommand(["get", "GCP Hardening & GitOps"], {
+        ...baseOptions(paths),
+        fetchImpl
+      });
+
+      expect(exitCode).toBe(0);
+      const parsed = JSON.parse(output.stdout.join(""));
+      expect(parsed.id).toBe("project-special-1");
+      expect(parsed.name).toBe("GCP Hardening & GitOps");
+      expect(output.stderr.join("")).toBe("");
+      expect(fetchSpy).toHaveBeenCalledTimes(2);
+    } finally {
+      output.restore();
+    }
+  });
+
   it("returns exit code 4 when project is not found", async () => {
     const directory = await mkdtemp(join(tmpdir(), "linear-cli-project-"));
     const paths = await writeProfileFiles(directory);
@@ -232,7 +278,7 @@ describe("handleProjectCommand — project get", () => {
     const output = captureOutput();
 
     try {
-      const exitCode = await handleProjectCommand(["get", "nonexistent"], {
+      const exitCode = await handleProjectCommand(["get", "00000000-0000-0000-0000-000000000404"], {
         ...baseOptions(paths),
         fetchImpl
       });
@@ -673,6 +719,7 @@ describe("handleProjectCommand — project list", () => {
       expect(parsed).toHaveLength(2);
       expect(parsed[0].name).toBe("Auth hardening");
       expect(parsed[1].name).toBe("Second project");
+      expect(output.stderr.join("")).toBe("");
     } finally {
       output.restore();
     }

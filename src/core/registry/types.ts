@@ -88,6 +88,8 @@ export interface ParsedCliArguments {
   completedAfter?: string;
   cycle?: string;
   project?: string;
+  milestone?: string;
+  projectMilestone?: string;
   orderBy?: string;
   orderDir?: string;
   all: boolean;
