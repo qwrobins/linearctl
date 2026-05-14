@@ -114,6 +114,25 @@ fragment CuratedIssue on Issue {
   updatedAt
 }`;
 
+const CURATED_ISSUE_SEARCH_RESULT_FRAGMENT = `
+fragment CuratedIssueSearchResult on IssueSearchResult {
+  id
+  identifier
+  title
+  description
+  priority
+  state { id name type }
+  team { id key name }
+  assignee { id name email }
+  creator { id name email }
+  cycle { id number name }
+  project { id name }
+  labels { nodes { id name } }
+  url
+  createdAt
+  updatedAt
+}`;
+
 const ISSUE_GET_QUERY = `
 query IssueGet($id: String!) {
   issue(id: $id) {
@@ -148,10 +167,10 @@ query IssueList($first: Int!, $after: String, $filter: IssueFilter, $orderBy: Pa
 ${CURATED_ISSUE_FRAGMENT}`;
 
 const ISSUE_SEARCH_QUERY = `
-query IssueSearch($first: Int!, $after: String, $query: String!) {
-  issueSearch(first: $first, after: $after, query: $query) {
+query IssueSearch($first: Int!, $after: String, $term: String!) {
+  searchIssues(first: $first, after: $after, term: $term) {
     nodes {
-      ...CuratedIssue
+      ...CuratedIssueSearchResult
     }
     pageInfo {
       hasNextPage
@@ -159,7 +178,7 @@ query IssueSearch($first: Int!, $after: String, $query: String!) {
     }
   }
 }
-${CURATED_ISSUE_FRAGMENT}`;
+${CURATED_ISSUE_SEARCH_RESULT_FRAGMENT}`;
 
 const ISSUE_UPDATE_MUTATION = `
 mutation IssueUpdate($id: String!, $input: IssueUpdateInput!) {
@@ -659,7 +678,7 @@ async function handleIssueSearch(options: IssueCommandOptions): Promise<number> 
     const commonPaginateInput = {
       query: ISSUE_SEARCH_QUERY,
       variables: {
-        query: trimmedQuery
+        term: trimmedQuery
       },
       credentials: profile.credentials,
       ...(options.apiUrl === undefined
@@ -669,8 +688,8 @@ async function handleIssueSearch(options: IssueCommandOptions): Promise<number> 
         : { apiUrl: options.apiUrl }),
       ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl }),
       extractConnection: (data: unknown) => {
-        const d = data as { issueSearch: { nodes: RawIssue[]; pageInfo: PageInfo } };
-        return d.issueSearch;
+        const d = data as { searchIssues: { nodes: RawIssue[]; pageInfo: PageInfo } };
+        return d.searchIssues;
       }
     };
 

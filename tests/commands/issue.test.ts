@@ -661,6 +661,41 @@ describe("handleIssueCommand — issue list", () => {
   });
 });
 
+describe("handleIssueCommand — issue search", () => {
+  it("uses the non-deprecated searchIssues endpoint", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-issue-"));
+    const paths = await writeProfileFiles(directory);
+    const fetchImpl = makeFetch({
+      data: {
+        searchIssues: {
+          nodes: [makeRawIssue()],
+          pageInfo: { hasNextPage: false, endCursor: null }
+        }
+      }
+    });
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleIssueCommand(["search"], {
+        ...baseOptions(paths),
+        query: "vault upgrade",
+        fetchImpl
+      });
+
+      expect(exitCode).toBe(0);
+      const parsed = JSON.parse(output.stdout.join(""));
+      expect(parsed[0].identifier).toBe("INF-2975");
+
+      const callBody = JSON.parse(String((fetchImpl as ReturnType<typeof vi.fn>).mock.calls[0]?.[1]?.body));
+      expect(callBody.query).toContain("searchIssues");
+      expect(callBody.query).not.toContain("issueSearch");
+      expect(callBody.variables.term).toBe("vault upgrade");
+    } finally {
+      output.restore();
+    }
+  });
+});
+
 describe("handleIssueCommand — issue update", () => {
   it("returns updated issue", async () => {
     const directory = await mkdtemp(join(tmpdir(), "linear-cli-issue-"));

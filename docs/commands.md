@@ -92,6 +92,7 @@ linearctl cycle update <id> [--name <text>] [--starts-at <date>] [--ends-at <dat
 ```bash
 linearctl team get <id-or-key> --json
 linearctl team list --json
+linearctl team members <id-or-key> [--all] --json
 ```
 
 ## User

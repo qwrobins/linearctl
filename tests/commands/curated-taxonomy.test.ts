@@ -27,6 +27,7 @@ describe("curated command taxonomy", () => {
       "linearctl cycle update",
       "linearctl team list",
       "linearctl team get",
+      "linearctl team members",
       "linearctl user list",
       "linearctl user get",
       "linearctl user me",

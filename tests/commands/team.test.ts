@@ -2,7 +2,7 @@ import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import { handleTeamCommand, normalizeTeam } from "../../src/commands/team.js";
+import { handleTeamCommand, normalizeTeam, normalizeTeamMember } from "../../src/commands/team.js";
 import { writeCredentialsFile } from "../../src/core/auth/credentials.js";
 import { writeLinearConfigFile } from "../../src/core/config/config-file.js";
 import type { FetchLike } from "../../src/core/transport/graphql.js";
@@ -70,6 +70,16 @@ function makeFetch(responseBody: unknown): FetchLike {
   ) as FetchLike;
 }
 
+function makeRawTeamMember(overrides?: Partial<Record<string, unknown>>) {
+  return {
+    id: "user-uuid-1",
+    displayName: "Quentin Robins",
+    email: "quentin@example.com",
+    active: true,
+    ...overrides
+  };
+}
+
 function baseOptions(paths: { configFile: string; credentialsFile: string }) {
   return {
     json: true,
@@ -88,6 +98,19 @@ describe("normalizeTeam", () => {
     expect(normalized.key).toBe("INF");
     expect(normalized.name).toBe("Infrastructure");
     expect(normalized.description).toBe("Infra team");
+  });
+});
+
+describe("normalizeTeamMember", () => {
+  it("returns the team member roster shape", () => {
+    const raw = makeRawTeamMember();
+    const normalized = normalizeTeamMember(raw as Parameters<typeof normalizeTeamMember>[0]);
+    expect(normalized).toEqual({
+      id: "user-uuid-1",
+      displayName: "Quentin Robins",
+      email: "quentin@example.com",
+      active: true
+    });
   });
 });
 
@@ -160,6 +183,77 @@ describe("handleTeamCommand — team list", () => {
       expect(parsed).toHaveLength(2);
       expect(parsed[0].key).toBe("INF");
       expect(parsed[1].key).toBe("ENG");
+    } finally {
+      output.restore();
+    }
+  });
+});
+
+describe("handleTeamCommand — team members", () => {
+  it("returns team members with useful user fields", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-team-"));
+    const paths = await writeProfileFiles(directory);
+    const fetchImpl = makeFetch({
+      data: {
+        team: {
+          members: {
+            nodes: [
+              makeRawTeamMember(),
+              makeRawTeamMember({ id: "user-uuid-2", displayName: "Alice", email: null, active: false })
+            ],
+            pageInfo: { hasNextPage: false, endCursor: null }
+          }
+        }
+      }
+    });
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleTeamCommand(["members", "INF"], {
+        ...baseOptions(paths),
+        fetchImpl
+      });
+
+      expect(exitCode).toBe(0);
+      const parsed = JSON.parse(output.stdout.join(""));
+      expect(parsed).toEqual([
+        {
+          id: "user-uuid-1",
+          displayName: "Quentin Robins",
+          email: "quentin@example.com",
+          active: true
+        },
+        {
+          id: "user-uuid-2",
+          displayName: "Alice",
+          email: null,
+          active: false
+        }
+      ]);
+
+      const callBody = JSON.parse(String((fetchImpl as ReturnType<typeof vi.fn>).mock.calls[0]?.[1]?.body));
+      expect(callBody.query).toContain("team(id: $id)");
+      expect(callBody.query).toContain("members(first: $first, after: $after)");
+      expect(callBody.variables).toEqual({ id: "INF", first: 50 });
+    } finally {
+      output.restore();
+    }
+  });
+
+  it("returns exit code 4 when the team is not found", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-team-"));
+    const paths = await writeProfileFiles(directory);
+    const fetchImpl = makeFetch({ data: { team: null } });
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleTeamCommand(["members", "NOPE"], {
+        ...baseOptions(paths),
+        fetchImpl
+      });
+
+      expect(exitCode).toBe(4);
+      expect(output.stderr.join("")).toContain("Team not found");
     } finally {
       output.restore();
     }
