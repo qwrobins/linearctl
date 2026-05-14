@@ -130,7 +130,7 @@ function printSearchResults(results: ApiCommandEntry[], term: string): void {
 function buildGraphQLOperation(entry: ApiCommandEntry, fields?: string): string {
   const isConnection = entry.returnTypeName?.endsWith("Connection") === true;
   const isScalar = isScalarReturnType(entry.returnTypeName);
-  const defaultFields = isConnection ? "nodes { id }" : "__typename";
+  const defaultFields = getDefaultFields(entry);
   const fieldSelection = fields ?? defaultFields;
   const argDefs: string[] = [];
   const argPasses: string[] = [];
@@ -149,6 +149,22 @@ function buildGraphQLOperation(entry: ApiCommandEntry, fields?: string): string 
   }
 
   return `${opType} ApiGenerated${argsDefinition} { ${entry.graphqlField}${argsPass} { ${fieldSelection} } }`;
+}
+
+function getDefaultFields(entry: ApiCommandEntry): string {
+  if (entry.returnTypeName === "TeamMembershipConnection") {
+    return "nodes { id createdAt updatedAt owner sortOrder user { id displayName email } team { id key name } }";
+  }
+
+  if (entry.returnTypeName === "TeamMembership") {
+    return "id createdAt updatedAt owner sortOrder user { id displayName email } team { id key name }";
+  }
+
+  if (entry.returnTypeName?.endsWith("Connection") === true) {
+    return "nodes { id }";
+  }
+
+  return "__typename";
 }
 
 function isScalarReturnType(returnTypeName: string | null | undefined): boolean {

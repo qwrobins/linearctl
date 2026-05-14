@@ -139,6 +139,21 @@ const MOCK_MANIFEST: ApiCommandManifest = [
     deprecation: null
   },
   {
+    commandPath: "linearctl api team-membership list",
+    resource: "team-membership",
+    operation: "list",
+    graphqlField: "teamMemberships",
+    graphqlOperationType: "query",
+    description: "List team memberships",
+    inputMode: "none",
+    requiredArgs: [],
+    optionalArgs: [],
+    inputTypeName: null,
+    returnTypeName: "TeamMembershipConnection",
+    supportsFields: true,
+    deprecation: null
+  },
+  {
     commandPath: "linearctl api comment get",
     resource: "comment",
     operation: "get",
@@ -403,6 +418,36 @@ describe("handleApiCommand", () => {
       const callBody = JSON.parse(String(callArgs?.[1]?.body));
       expect(callBody.query).toContain("issueFilterSuggestion(prompt: $prompt) { __typename }");
       expect(callBody.query).not.toContain("success");
+    });
+
+    it("expands team membership list defaults beyond bare IDs", async () => {
+      const manifestPath = await writeManifest(tmpDir);
+      const paths = await writeProfileFiles(tmpDir);
+      const fetchImpl = makeFetch({
+        data: {
+          teamMemberships: {
+            nodes: [
+              {
+                id: "membership-1",
+                owner: true,
+                user: { id: "user-1", displayName: "Quentin", email: "quentin@example.com" },
+                team: { id: "team-1", key: "INF", name: "Infrastructure" }
+              }
+            ]
+          }
+        }
+      });
+
+      const result = await handleApiCommand(["team-membership", "list"], {
+        ...baseOptions(paths, manifestPath),
+        json: true,
+        fetchImpl
+      });
+
+      expect(result).toBe(0);
+      const callArgs = (fetchImpl as ReturnType<typeof vi.fn>).mock.calls[0];
+      const callBody = JSON.parse(String(callArgs?.[1]?.body));
+      expect(callBody.query).toContain("nodes { id createdAt updatedAt owner sortOrder user { id displayName email } team { id key name } }");
     });
 
     it("retries generated requests when retry options are configured", async () => {

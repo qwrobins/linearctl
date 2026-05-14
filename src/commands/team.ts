@@ -40,6 +40,13 @@ interface RawTeam {
   updatedAt: string;
 }
 
+interface RawTeamMember {
+  id: string;
+  displayName: string;
+  email: string | null;
+  active: boolean;
+}
+
 export interface NormalizedTeam {
   id: string;
   key: string;
@@ -47,6 +54,20 @@ export interface NormalizedTeam {
   description: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface NormalizedTeamMember {
+  id: string;
+  displayName: string;
+  email: string | null;
+  active: boolean;
+}
+
+export class TeamNotFoundError extends Error {
+  constructor() {
+    super("Team not found");
+    this.name = "TeamNotFoundError";
+  }
 }
 
 const CURATED_TEAM_FRAGMENT = `
@@ -81,6 +102,24 @@ query TeamList($first: Int!, $after: String) {
 }
 ${CURATED_TEAM_FRAGMENT}`;
 
+const TEAM_MEMBERS_QUERY = `
+query TeamMembers($id: String!, $first: Int!, $after: String) {
+  team(id: $id) {
+    members(first: $first, after: $after) {
+      nodes {
+        id
+        displayName
+        email
+        active
+      }
+      pageInfo {
+        hasNextPage
+        endCursor
+      }
+    }
+  }
+}`;
+
 export function normalizeTeam(raw: RawTeam): NormalizedTeam {
   return {
     id: raw.id,
@@ -92,11 +131,26 @@ export function normalizeTeam(raw: RawTeam): NormalizedTeam {
   };
 }
 
+export function normalizeTeamMember(raw: RawTeamMember): NormalizedTeamMember {
+  return {
+    id: raw.id,
+    displayName: raw.displayName,
+    email: raw.email,
+    active: raw.active
+  };
+}
+
 function printHumanTeam(team: NormalizedTeam): void {
   process.stdout.write(`${team.key}  ${team.name}\n`);
   if (team.description !== null) {
     process.stdout.write(`  Description: ${team.description}\n`);
   }
+}
+
+function printHumanTeamMember(member: NormalizedTeamMember): void {
+  const email = member.email ?? "";
+  const status = member.active ? "active" : "inactive";
+  process.stdout.write(`${member.displayName}\t${email}\t${status}\n`);
 }
 
 /** Build a CommandContext from team handler options */
@@ -239,6 +293,85 @@ async function handleTeamList(options: TeamCommandOptions): Promise<number> {
   }
 }
 
+async function handleTeamMembers(
+  identifier: string,
+  options: TeamCommandOptions
+): Promise<number> {
+  const paginationOptions: PaginationOptions = {
+    all: options.all,
+    max: options.max,
+    pageSize: options.pageSize,
+    after: options.after,
+    quiet: options.quiet
+  };
+
+  const validationError = validatePaginationOptions(paginationOptions);
+  if (validationError !== undefined) {
+    return emitValidationError(validationError, options);
+  }
+
+  const ctx = buildContext(options);
+
+  try {
+    const profile = await ctx.resolveProfile();
+
+    const commonPaginateInput = {
+      query: TEAM_MEMBERS_QUERY,
+      variables: {
+        id: identifier
+      },
+      credentials: profile.credentials,
+      ...(options.apiUrl === undefined
+        ? profile.metadata.baseUrl === undefined
+          ? {}
+          : { apiUrl: profile.metadata.baseUrl }
+        : { apiUrl: options.apiUrl }),
+      ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl }),
+      extractConnection: (data: unknown) => {
+        const d = data as { team: { members: { nodes: RawTeamMember[]; pageInfo: PageInfo } } | null };
+        if (d.team === null) {
+          throw new TeamNotFoundError();
+        }
+        return d.team.members;
+      }
+    };
+
+    if (options.jsonl === true) {
+      await streamPaginateGraphQL<RawTeamMember>({
+        ...commonPaginateInput,
+        options: { ...paginationOptions, all: paginationOptions.all ?? true },
+        onItem: (raw) => {
+          process.stdout.write(`${JSON.stringify(normalizeTeamMember(raw))}\n`);
+        }
+      });
+    } else {
+      const { items, pageInfo } = await paginateGraphQL<RawTeamMember>({
+        ...commonPaginateInput,
+        options: paginationOptions
+      });
+
+      const members = items.map(normalizeTeamMember);
+
+      if (options.jsonEnvelope) {
+        return ctx.emitSuccess(members, pageInfo);
+      } else if (options.json) {
+        process.stdout.write(`${JSON.stringify(members, null, 2)}\n`);
+      } else {
+        for (const member of members) {
+          printHumanTeamMember(member);
+        }
+      }
+    }
+
+    return ExitCode.Success;
+  } catch (error) {
+    if (error instanceof TeamNotFoundError) {
+      return ctx.emitNotFound("Team not found");
+    }
+    return ctx.emitCaughtError(error);
+  }
+}
+
 export async function handleTeamCommand(
   positionals: string[],
   options: TeamCommandOptions
@@ -266,5 +399,19 @@ export async function handleTeamCommand(
     return handleTeamList(options);
   }
 
-  return emitValidationError("unsupported team command. Try linearctl team get or linearctl team list.", options);
+  if (subcommand === "members") {
+    const identifier = rest[0];
+    if (identifier === undefined || identifier === "") {
+      return emitValidationError("usage: linearctl team members <id-or-key>", options);
+    }
+    if (rest.length > 1) {
+      return emitValidationError("team members accepts exactly one identifier.", options);
+    }
+    if (options.setDefault) {
+      return emitValidationError("--set-default is only supported on team get.", options);
+    }
+    return handleTeamMembers(identifier, options);
+  }
+
+  return emitValidationError("unsupported team command. Try linearctl team get, linearctl team list, or linearctl team members.", options);
 }

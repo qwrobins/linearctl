@@ -72,6 +72,7 @@ Raw GraphQL should not be used merely because it is possible. It is the fallback
 ### Teams
 - `linearctl team get <id-or-key> [--set-default] --json` — fetch team; --set-default saves as profile default
 - `linearctl team list --json`
+- `linearctl team members <id-or-key> [--all] --json` — list team members with `id`, `displayName`, `email`, and `active`
 
 ### Users
 - `linearctl user get <id> --json`

@@ -268,6 +268,18 @@
     "supportedOutputModes": ["human", "json", "json-envelope"]
   },
   {
+    "commandPath": "linearctl team members",
+    "layer": "curated",
+    "resource": "team",
+    "operation": "members",
+    "stability": "stable",
+    "preferredForAgents": true,
+    "safety": "safe",
+    "inputMode": "id",
+    "outputShape": "array",
+    "supportedOutputModes": ["human", "json", "json-envelope"]
+  },
+  {
     "commandPath": "linearctl user list",
     "layer": "curated",
     "resource": "user",

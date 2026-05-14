@@ -132,8 +132,9 @@ export const COMMAND_REGISTRY: readonly CommandRegistration[] = [
       "set-default",
     ],
     subcommands: {
-      get:  { usage: "linearctl team get <id-or-key> [--set-default] [--json]" },
-      list: { usage: "linearctl team list [--json]" },
+      get:     { usage: "linearctl team get <id-or-key> [--set-default] [--json]" },
+      list:    { usage: "linearctl team list [--json]" },
+      members: { usage: "linearctl team members <id-or-key> [--all] [--json]" },
     },
     handler: handleTeamCommand,
     buildOptions: (args, env) => ({
