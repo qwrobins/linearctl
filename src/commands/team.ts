@@ -63,6 +63,13 @@ export interface NormalizedTeamMember {
   active: boolean;
 }
 
+export class TeamNotFoundError extends Error {
+  constructor() {
+    super("Team not found");
+    this.name = "TeamNotFoundError";
+  }
+}
+
 const CURATED_TEAM_FRAGMENT = `
 fragment CuratedTeam on Team {
   id
@@ -323,7 +330,7 @@ async function handleTeamMembers(
       extractConnection: (data: unknown) => {
         const d = data as { team: { members: { nodes: RawTeamMember[]; pageInfo: PageInfo } } | null };
         if (d.team === null) {
-          throw new Error("Team not found");
+          throw new TeamNotFoundError();
         }
         return d.team.members;
       }
@@ -358,7 +365,7 @@ async function handleTeamMembers(
 
     return ExitCode.Success;
   } catch (error) {
-    if (error instanceof Error && error.message === "Team not found") {
+    if (error instanceof TeamNotFoundError) {
       return ctx.emitNotFound("Team not found");
     }
     return ctx.emitCaughtError(error);

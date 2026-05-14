@@ -254,6 +254,7 @@ describe("handleTeamCommand — team members", () => {
 
       expect(exitCode).toBe(4);
       expect(output.stderr.join("")).toContain("Team not found");
+      expect(output.stdout.join("")).toBe("");
     } finally {
       output.restore();
     }
