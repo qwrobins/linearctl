@@ -69,11 +69,15 @@ linearctl project list [--team <name|key|id>] [--state <status-type>] [--all-tea
 linearctl project create --name <name> [--description <text>] [--team <name|key|id>] --json
 linearctl project create-with-issues --name <name> --team <name|key|id> \
   --issues-json '[{"title":"...","teamId":"..."}]' [--description <text>] --json
-linearctl project update <id> [--name <text>] [--description <text>] [--state <name|type>] [--target-date <YYYY-MM-DD>] --json
+linearctl project update <id> [--name <text>] [--description <text>] \
+  [--status <name|type>|--state <name|type>] [--lead <user-id|email|"me">] \
+  [--start-date <YYYY-MM-DD>] [--target-date <YYYY-MM-DD>] --json
 linearctl project delete <id> --json              # [destructive]
 ```
 
-`project list --json` includes portfolio fields such as `progress`, `health`, `currentProgress`, a normalized `milestones` array, and milestone pagination metadata (`milestonesPageInfo`, `milestonesTruncated`) so clients can detect truncation.
+`project list --json` includes portfolio fields such as `progress`, `health`, `description`, `updatedAt`, `currentProgress`, a normalized `milestones` array with `name`, `targetDate`, `progress`, and `status`, and milestone pagination metadata (`milestonesPageInfo`, `milestonesTruncated`) so clients can detect truncation. Human output also shows progress, health, description, updated time, and milestone summaries.
+
+For `project update`, `--status` accepts a status name, status type, or status ID. `--state` remains supported as an alias for compatibility.
 
 For `project list`, `--state` accepts project status types: `backlog`, `planned`, `started`, `paused`, `completed`, or `canceled`.
 

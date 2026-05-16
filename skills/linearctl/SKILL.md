@@ -50,10 +50,10 @@ Raw GraphQL should not be used merely because it is possible. It is the fallback
 
 ### Projects
 - `linearctl project get <name|id> --json` — richer single-project detail payload than `project list` (includes progress/health/currentProgress, and milestones with id, name, description, targetDate, sortOrder, createdAt, updatedAt)
-- `linearctl project list [--team <id>] [--state <status-type>] [--all-teams] --json` — includes portfolio fields (`progress`, `health`, `currentProgress`), normalized `milestones`, and milestone truncation metadata (`milestonesPageInfo`, `milestonesTruncated`) in JSON output; `--state` values: backlog, planned, started, paused, completed, canceled
+- `linearctl project list [--team <id>] [--state <status-type>] [--all-teams] --json` — includes portfolio fields (`progress`, `health`, `description`, `updatedAt`, `currentProgress`), normalized `milestones` with `name`, `targetDate`, `progress`, and `status`, and milestone truncation metadata (`milestonesPageInfo`, `milestonesTruncated`) in JSON output; human output shows progress, health, description, updated time, and milestone summaries; `--state` values: backlog, planned, started, paused, completed, canceled
 - `linearctl project create --name <name> [--description <text>] [--team <id>] --json`
 - `linearctl project create-with-issues --name <name> --team <id> --issues-json <json> [--description <text>] --json` — create a project then batch-create linked issues (reports partial success if issue creation fails after project was created)
-- `linearctl project update <id> [--name <text>] [--description <text>] [--state <name|type>] [--target-date <YYYY-MM-DD>] --json` — `--state` resolves status names (e.g. "Paused", "Active Development") or state types (e.g. "completed", "backlog") to IDs automatically
+- `linearctl project update <id> [--name <text>] [--description <text>] [--status <name|type>|--state <name|type>] [--lead <user-id|email|"me">] [--start-date <YYYY-MM-DD>] [--target-date <YYYY-MM-DD>] --json` — `--status` resolves status names (e.g. "Paused", "Active Development") or state types (e.g. "completed", "backlog") to IDs automatically; `--state` remains an alias
 - `linearctl project delete <id> --json`
 
 ### Project statuses

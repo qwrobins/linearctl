@@ -78,13 +78,13 @@ export const COMMAND_REGISTRY: readonly CommandRegistration[] = [
     optionKeys: [
       ...CURATED_BASE,
       ...OPTION_GROUPS.allTeams,
-      "name", "description", "team", "state", "target-date", "issues-json",
+      "name", "description", "team", "state", "status", "lead", "start-date", "target-date", "issues-json",
     ],
     subcommands: {
       get:                  { usage: "linearctl project get <name|id> [--json]" },
       list:                 { usage: "linearctl project list [--team <id>] [--state <status-type>] [--all-teams] [--json]" },
       create:               { usage: "linearctl project create --name <name> [--description ...] [--team <id>] [--json]" },
-      update:               { usage: "linearctl project update <id> [--name ...] [--description ...] [--state ...] [--target-date <date>] [--json]" },
+      update:               { usage: "linearctl project update <id> [--name ...] [--description ...] [--status <name|type>|--state <name|type>] [--lead <user>] [--start-date <date>] [--target-date <date>] [--json]" },
       "create-with-issues": { usage: "linearctl project create-with-issues --name <name> --team <id> --issues-json <json> [--description <text>] [--json]" },
       delete:               { usage: "linearctl project delete <id> [--json]" },
     },
@@ -93,7 +93,7 @@ export const COMMAND_REGISTRY: readonly CommandRegistration[] = [
       ...curatedOptions(args, env),
       ...paginationOptions(args),
       ...teamFilterOptions(args),
-      ...pickFields(args, "name", "description", "state", "targetDate", "issuesJson"),
+      ...pickFields(args, "name", "description", "state", "status", "lead", "startDate", "targetDate", "issuesJson"),
     }),
   },
 

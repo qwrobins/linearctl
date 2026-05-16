@@ -9,7 +9,7 @@ import { resolveStoredProfile } from "../core/auth/runtime.js";
 import { paginateGraphQL, validatePaginationOptions, type PaginationOptions } from "../core/pagination/pagination.js";
 import { streamPaginateGraphQL } from "../core/pagination/streaming.js";
 import { emitDryRunResult } from "../core/output/dry-run.js";
-import { resolveProjectId, resolveTeamId, looksLikeId } from "../core/resolution/resolve.js";
+import { resolveProjectId, resolveTeamId, resolveUserId, looksLikeId } from "../core/resolution/resolve.js";
 import type { ResolverOptions } from "../core/resolution/resolve.js";
 import { CommandContext } from "../core/runtime/command-context.js";
 import { runTwoStepWorkflow } from "../core/runtime/workflow.js";
@@ -32,6 +32,9 @@ export interface ProjectCommandOptions {
   issuesJson?: string;
   allTeams?: boolean;
   state?: string;
+  status?: string;
+  lead?: string;
+  startDate?: string;
   targetDate?: string;
   // pagination flags
   all?: boolean;
@@ -165,6 +168,8 @@ fragment CuratedProject on Project {
       id
       name
       targetDate
+      progress
+      status
     }
   }
   startDate
@@ -188,6 +193,8 @@ fragment CuratedProjectDetail on Project {
       name
       description
       targetDate
+      progress
+      status
       sortOrder
       createdAt
       updatedAt
@@ -282,6 +289,8 @@ interface RawProject {
       id: string;
       name: string;
       targetDate: string | null;
+      progress: number | null;
+      status: string | null;
     }> | null;
   } | null;
   startDate: string | null;
@@ -298,6 +307,8 @@ interface RawProjectMilestone {
   name: string;
   description: string | null;
   targetDate: string | null;
+  progress: number | null;
+  status: string | null;
   sortOrder: number;
   createdAt: string;
   updatedAt: string;
@@ -328,6 +339,8 @@ export interface NormalizedProject {
     id: string;
     name: string;
     targetDate: string | null;
+    progress: number | null;
+    status: string | null;
   }>;
   milestonesPageInfo: {
     hasNextPage: boolean;
@@ -352,6 +365,8 @@ export interface NormalizedProjectDetail extends NormalizedProject {
     name: string;
     description: string | null;
     targetDate: string | null;
+    progress: number | null;
+    status: string | null;
     sortOrder: number;
     createdAt: string;
     updatedAt: string;
@@ -397,6 +412,13 @@ export function normalizeProjectDetail(raw: RawProjectDetail): NormalizedProject
 function printHumanProject(project: NormalizedProject): void {
   process.stdout.write(`${project.name}\n`);
   process.stdout.write(`  State:  ${project.state}\n`);
+  if (project.progress !== null) {
+    const percent = project.progress <= 1 ? project.progress * 100 : project.progress;
+    process.stdout.write(`  Progress: ${Math.round(percent)}%\n`);
+  }
+  if (project.health !== null) {
+    process.stdout.write(`  Health: ${project.health}\n`);
+  }
   if (project.lead !== null) {
     process.stdout.write(`  Lead:   ${project.lead.name}\n`);
   }
@@ -406,7 +428,45 @@ function printHumanProject(project: NormalizedProject): void {
   if (project.targetDate !== null) {
     process.stdout.write(`  Target: ${project.targetDate}\n`);
   }
+  if (project.updatedAt !== "") {
+    process.stdout.write(`  Updated: ${project.updatedAt}\n`);
+  }
+  if (project.description !== null && project.description !== "") {
+    process.stdout.write(`  Description: ${project.description}\n`);
+  }
+  if (project.milestones.length > 0) {
+    process.stdout.write("  Milestones:\n");
+    for (const milestone of project.milestones) {
+      const parts = [milestone.name];
+      if (milestone.targetDate !== null) {
+        parts.push(`target ${milestone.targetDate}`);
+      }
+      if (milestone.progress !== null) {
+        const percent = milestone.progress <= 1 ? milestone.progress * 100 : milestone.progress;
+        parts.push(`${Math.round(percent)}%`);
+      }
+      if (milestone.status !== null) {
+        parts.push(milestone.status);
+      }
+      process.stdout.write(`    - ${parts.join(" | ")}\n`);
+    }
+    if (project.milestonesTruncated) {
+      process.stdout.write("    - ... more milestones available via --json metadata\n");
+    }
+  }
   process.stdout.write(`  URL:    ${project.url}\n`);
+}
+
+function validateIsoDate(value: string, flagName: string, options: ProjectCommandOptions): number | undefined {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return emitValidationError(`Invalid --${flagName}, expected YYYY-MM-DD.`, options);
+  }
+  const [y, m, d] = value.split("-").map(Number) as [number, number, number];
+  const parsed = new Date(y, m - 1, d);
+  if (parsed.getFullYear() !== y || parsed.getMonth() !== m - 1 || parsed.getDate() !== d) {
+    return emitValidationError(`Invalid --${flagName}: ${value} is not a real calendar date.`, options);
+  }
+  return undefined;
 }
 
 /** Build a CommandContext from project handler options */
@@ -638,29 +698,41 @@ async function handleProjectUpdate(
   if (options.description !== undefined) {
     input.description = options.description;
   }
-  if (options.targetDate !== undefined) {
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(options.targetDate)) {
-      return emitValidationError("Invalid --target-date, expected YYYY-MM-DD.", options);
+  if (options.startDate !== undefined) {
+    const validation = validateIsoDate(options.startDate, "start-date", options);
+    if (validation !== undefined) {
+      return validation;
     }
-    const [y, m, d] = options.targetDate.split("-").map(Number) as [number, number, number];
-    const parsed = new Date(y, m - 1, d);
-    if (parsed.getFullYear() !== y || parsed.getMonth() !== m - 1 || parsed.getDate() !== d) {
-      return emitValidationError(`Invalid --target-date: ${options.targetDate} is not a real calendar date.`, options);
+    input.startDate = options.startDate;
+  }
+  if (options.targetDate !== undefined) {
+    const validation = validateIsoDate(options.targetDate, "target-date", options);
+    if (validation !== undefined) {
+      return validation;
     }
     input.targetDate = options.targetDate;
   }
 
-  const needsStateResolution = options.state !== undefined;
+  const statusValue = options.status ?? options.state;
+  const needsStatusResolution = statusValue !== undefined;
+  if (options.lead !== undefined) {
+    input.leadId = options.lead;
+  }
 
-  if (Object.keys(input).length === 0 && !needsStateResolution) {
-    return emitValidationError("project update requires at least one of --name, --description, --state, --target-date.", options);
+  if (Object.keys(input).length === 0 && !needsStatusResolution) {
+    return emitValidationError("project update requires at least one of --name, --description, --status, --state, --lead, --start-date, --target-date.", options);
   }
 
   const ctx = buildContext(options);
 
   try {
-    if (needsStateResolution) {
-      const result = await resolveStatusId(options.state!, ctx);
+    if (options.lead !== undefined && !looksLikeId(options.lead)) {
+      const resolverOpts = await ctx.resolverOptions();
+      input.leadId = await resolveUserId(options.lead, resolverOpts);
+    }
+
+    if (needsStatusResolution) {
+      const result = await resolveStatusId(statusValue!, ctx);
       if ("error" in result) {
         return ctx.emitFailure([{ category: "general", message: result.error }]);
       }

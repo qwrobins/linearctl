@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.3] - 2026-05-16
+
+### Added
+
+- `project list` JSON milestones now include `progress` and `status`, and human output surfaces progress, health, updated time, description, and milestone summaries for portfolio reviews.
+- `project update` now supports `--status <name|type|id>`, `--lead <user-id|email|"me">`, and `--start-date <YYYY-MM-DD>` alongside existing name, description, state alias, and target date updates.
+
 ## [0.6.2] - 2026-05-14
 
 ### Added
