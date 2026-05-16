@@ -143,7 +143,7 @@ async function resolveStatusId(
   }
   if (byType.length > 1) {
     const names = byType.map((s) => `"${s.name}" (${s.id})`).join(", ");
-    return { error: `Multiple statuses match type "${stateValue}": ${names}. Use --state with a status name or ID.` };
+    return { error: `Multiple statuses match type "${stateValue}": ${names}. Use --status (alias: --state) with a status name or ID.` };
   }
 
   const available = statuses.map((s) => `${s.name} [${s.type}]`).join(", ");

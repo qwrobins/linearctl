@@ -70,7 +70,7 @@ linearctl project create --name <name> [--description <text>] [--team <name|key|
 linearctl project create-with-issues --name <name> --team <name|key|id> \
   --issues-json '[{"title":"...","teamId":"..."}]' [--description <text>] --json
 linearctl project update <id> [--name <text>] [--description <text>] \
-  [--status <name|type>|--state <name|type>] [--lead <user-id|email|"me">] \
+  [--status <id|name|type>|--state <name|type>] [--lead <user-id|email|"me">] \
   [--start-date <YYYY-MM-DD>] [--target-date <YYYY-MM-DD>] --json
 linearctl project delete <id> --json              # [destructive]
 ```

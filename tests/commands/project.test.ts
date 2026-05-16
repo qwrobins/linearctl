@@ -933,6 +933,34 @@ describe("handleProjectCommand — project update", () => {
     }
   });
 
+  it("--status wins over --state", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-project-"));
+    const paths = await writeProfileFiles(directory);
+    const statusId = "10000000-0000-0000-0000-000000000001";
+    const fetchImpl = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body ?? "{}")) as { variables?: Record<string, unknown> };
+
+      expect(body.variables?.input).toEqual({ statusId });
+      return new Response(JSON.stringify({
+        data: { projectUpdate: { success: true, project: makeRawProject() } }
+      }), { status: 200 });
+    }) as FetchLike;
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleProjectCommand(["update", "proj-uuid-1"], {
+        ...baseOptions(paths),
+        status: statusId,
+        state: "open",
+        fetchImpl
+      });
+
+      expect(exitCode).toBe(0);
+    } finally {
+      output.restore();
+    }
+  });
+
   it("returns exit code 5 when no update flags provided", async () => {
     const directory = await mkdtemp(join(tmpdir(), "linear-cli-project-"));
     const paths = await writeProfileFiles(directory);
