@@ -61,6 +61,7 @@ export interface ParsedCliArguments {
   assignee?: string;
   label?: string;
   state?: string;
+  status?: string;
   inputJson?: string;
   issuesJson?: string;
   ids?: string;
@@ -69,6 +70,8 @@ export interface ParsedCliArguments {
   id?: string;
   fields?: string;
   name?: string;
+  lead?: string;
+  startDate?: string;
   color?: string;
   position?: string;
   stateType?: string;

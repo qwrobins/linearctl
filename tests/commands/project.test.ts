@@ -66,8 +66,8 @@ function makeRawProject(overrides?: Partial<Record<string, unknown>>) {
         hasNextPage: false,
         endCursor: null
       },
-      nodes: [
-        { id: "milestone-1", name: "Phase 1", targetDate: "2026-05-01" }
+        nodes: [
+        { id: "milestone-1", name: "Phase 1", targetDate: "2026-05-01", progress: 0.5, status: "next" }
       ]
     },
     startDate: "2026-04-01",
@@ -94,6 +94,8 @@ function makeRawProjectDetail(overrides?: Partial<Record<string, unknown>>) {
           name: "Auth infra complete",
           description: "Core auth infra is ready",
           targetDate: "2026-05-01",
+          progress: 0.75,
+          status: "done",
           sortOrder: 0,
           createdAt: "2026-04-01T10:00:00Z",
           updatedAt: "2026-04-02T10:00:00Z"
@@ -137,7 +139,7 @@ describe("normalizeProject", () => {
     expect(normalized.health).toBe("onTrack");
     expect(normalized.currentProgress).toEqual({ percentage: 42 });
     expect(normalized.milestones).toEqual([
-      { id: "milestone-1", name: "Phase 1", targetDate: "2026-05-01" }
+      { id: "milestone-1", name: "Phase 1", targetDate: "2026-05-01", progress: 0.5, status: "next" }
     ]);
     expect(normalized.milestonesPageInfo).toEqual({ hasNextPage: false, endCursor: null });
     expect(normalized.milestonesTruncated).toBe(false);
@@ -155,7 +157,7 @@ describe("normalizeProject", () => {
     const raw = makeRawProject({
       projectMilestones: {
         pageInfo: { hasNextPage: true, endCursor: "cursor-1" },
-        nodes: [{ id: "milestone-1", name: "Phase 1", targetDate: "2026-05-01" }]
+        nodes: [{ id: "milestone-1", name: "Phase 1", targetDate: "2026-05-01", progress: 0.5, status: "next" }]
       }
     });
     const normalized = normalizeProject(raw as Parameters<typeof normalizeProject>[0]);
@@ -179,6 +181,8 @@ describe("normalizeProjectDetail", () => {
         name: "Auth infra complete",
         description: "Core auth infra is ready",
         targetDate: "2026-05-01",
+        progress: 0.75,
+        status: "done",
         sortOrder: 0,
         createdAt: "2026-04-01T10:00:00Z",
         updatedAt: "2026-04-02T10:00:00Z"
@@ -777,6 +781,38 @@ describe("handleProjectCommand — project list", () => {
       output.restore();
     }
   });
+
+  it("prints progress, health, description, updatedAt, and milestones in human output", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-project-"));
+    const paths = await writeProfileFiles(directory);
+    const fetchImpl = makeFetch({
+      data: {
+        projects: {
+          nodes: [makeRawProject()],
+          pageInfo: { hasNextPage: false }
+        }
+      }
+    });
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleProjectCommand(["list"], {
+        ...baseOptions(paths),
+        json: false,
+        fetchImpl
+      });
+
+      expect(exitCode).toBe(0);
+      const human = output.stdout.join("");
+      expect(human).toContain("Progress: 42%");
+      expect(human).toContain("Health: onTrack");
+      expect(human).toContain("Updated: 2026-04-09T11:00:00Z");
+      expect(human).toContain("Description: Harden authentication flows");
+      expect(human).toContain("Phase 1 | target 2026-05-01 | 50% | next");
+    } finally {
+      output.restore();
+    }
+  });
 });
 
 describe("handleProjectCommand — project update", () => {
@@ -799,6 +835,127 @@ describe("handleProjectCommand — project update", () => {
       expect(exitCode).toBe(0);
       const parsed = JSON.parse(output.stdout.join(""));
       expect(parsed.name).toBe("Renamed project");
+    } finally {
+      output.restore();
+    }
+  });
+
+  it("updates status, lead, start date, and target date", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-project-"));
+    const paths = await writeProfileFiles(directory);
+    const updatedProject = makeRawProject({ name: "Updated project" });
+    const calls: Array<{ query: string; variables?: Record<string, unknown> }> = [];
+    const fetchImpl = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body ?? "{}")) as { query: string; variables?: Record<string, unknown> };
+      calls.push(body);
+
+      if (body.query.includes("ResolveUser")) {
+        return new Response(JSON.stringify({
+          data: { users: { nodes: [{ id: "user-2", name: "Ada", email: "ada@example.com" }] } }
+        }), { status: 200 });
+      }
+
+      if (body.query.includes("ProjectStatuses")) {
+        return new Response(JSON.stringify({
+          data: {
+            projectStatuses: {
+              pageInfo: { hasNextPage: false, endCursor: null },
+              nodes: [{ id: "status-1", name: "Paused", type: "paused" }]
+            }
+          }
+        }), { status: 200 });
+      }
+
+      return new Response(JSON.stringify({
+        data: { projectUpdate: { success: true, project: updatedProject } }
+      }), { status: 200 });
+    }) as FetchLike;
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleProjectCommand(["update", "proj-uuid-1"], {
+        ...baseOptions(paths),
+        status: "Paused",
+        lead: "ada@example.com",
+        startDate: "2026-05-01",
+        targetDate: "2026-06-30",
+        fetchImpl
+      });
+
+      expect(exitCode).toBe(0);
+      const updateCall = calls.find((call) => call.query.includes("ProjectUpdate"));
+      expect(updateCall?.variables?.input).toEqual({
+        leadId: "user-2",
+        startDate: "2026-05-01",
+        targetDate: "2026-06-30",
+        statusId: "status-1"
+      });
+      expect(JSON.parse(output.stdout.join("")).name).toBe("Updated project");
+    } finally {
+      output.restore();
+    }
+  });
+
+  it("keeps --state as a project status alias", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-project-"));
+    const paths = await writeProfileFiles(directory);
+    const fetchImpl = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body ?? "{}")) as { query: string; variables?: Record<string, unknown> };
+
+      if (body.query.includes("ProjectStatuses")) {
+        return new Response(JSON.stringify({
+          data: {
+            projectStatuses: {
+              pageInfo: { hasNextPage: false, endCursor: null },
+              nodes: [{ id: "status-completed", name: "Completed", type: "completed" }]
+            }
+          }
+        }), { status: 200 });
+      }
+
+      expect(body.variables?.input).toEqual({ statusId: "status-completed" });
+      return new Response(JSON.stringify({
+        data: { projectUpdate: { success: true, project: makeRawProject() } }
+      }), { status: 200 });
+    }) as FetchLike;
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleProjectCommand(["update", "proj-uuid-1"], {
+        ...baseOptions(paths),
+        state: "completed",
+        fetchImpl
+      });
+
+      expect(exitCode).toBe(0);
+    } finally {
+      output.restore();
+    }
+  });
+
+  it("--status wins over --state", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-project-"));
+    const paths = await writeProfileFiles(directory);
+    const statusId = "10000000-0000-0000-0000-000000000001";
+    const fetchImpl = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body ?? "{}")) as { variables?: Record<string, unknown> };
+
+      expect(body.variables?.input).toEqual({ statusId });
+      return new Response(JSON.stringify({
+        data: { projectUpdate: { success: true, project: makeRawProject() } }
+      }), { status: 200 });
+    }) as FetchLike;
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleProjectCommand(["update", "proj-uuid-1"], {
+        ...baseOptions(paths),
+        status: statusId,
+        state: "open",
+        fetchImpl
+      });
+
+      expect(exitCode).toBe(0);
     } finally {
       output.restore();
     }
