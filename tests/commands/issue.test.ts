@@ -559,6 +559,40 @@ describe("handleIssueCommand — issue list", () => {
     }
   });
 
+  it("passes multiple --state filters as a union", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-issue-"));
+    const paths = await writeProfileFiles(directory);
+    const fetchSpy = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
+      new Response(JSON.stringify({
+        data: {
+          issues: {
+            nodes: [makeRawIssue()],
+            pageInfo: { hasNextPage: false, endCursor: null }
+          }
+        }
+      }), { status: 200 })
+    );
+    const fetchImpl = fetchSpy as unknown as FetchLike;
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleIssueCommand(["list"], {
+        ...baseOptions(paths),
+        states: ["In Progress", "Block/Waiting"],
+        fetchImpl
+      });
+
+      expect(exitCode).toBe(0);
+      const callBody = JSON.parse(String((fetchSpy as ReturnType<typeof vi.fn>).mock.calls[0]?.[1]?.body));
+      expect(callBody.variables.filter.or).toEqual([
+        { state: { name: { eq: "In Progress" } } },
+        { state: { name: { eq: "Block/Waiting" } } }
+      ]);
+    } finally {
+      output.restore();
+    }
+  });
+
   it("resolves --project names with team scope before filtering", async () => {
     const directory = await mkdtemp(join(tmpdir(), "linear-cli-issue-"));
     const paths = await writeProfileFiles(directory);
@@ -572,15 +606,14 @@ describe("handleIssueCommand — issue list", () => {
       }
 
       if (body.query.includes("ResolveProject")) {
-        expect(body.variables?.filter).toEqual({
-          and: [
-            { name: { eq: "GCP Hardening & GitOps" } },
-            { accessibleTeams: { some: { id: { eq: "team-1" } } } }
-          ]
+        expect(body.variables).toMatchObject({
+          first: 100,
+          filter: { teams: { some: { id: { eq: "team-1" } } } }
         });
         return new Response(JSON.stringify({
           data: {
             projects: {
+              pageInfo: { hasNextPage: false, endCursor: null },
               nodes: [{
                 id: "project-special-1",
                 name: "GCP Hardening & GitOps",

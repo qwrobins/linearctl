@@ -11,7 +11,7 @@ Global flags: `--profile <name>`, `--no-retry`, `--max-retries <n>`.
 linearctl issue get <identifier> --json
 
 # List issues with filters
-linearctl issue list [--team <name|key|id>] [--state <name|id>] [--assignee <email|"me"|id>] \
+linearctl issue list [--team <name|key|id>] [--state <name|id> ...] [--assignee <name|displayName|email|"me"|id>] \
   [--label <name|id>] [--priority <0-4>] [--cycle <id>] [--project <name|id>] \
   [--created-after <date>] [--updated-after <date>] [--completed-after <date>] \
   [--all-teams] [--filter-json <json>] [--order-by <field>] \
@@ -64,8 +64,8 @@ Bulk operations report partial success. Check the response for per-item results.
 ## Project
 
 ```bash
-linearctl project get <name|id> --json             # richer detail payload: progress/health/currentProgress, milestones
-linearctl project list [--team <name|key|id>] [--state <status-type>] [--all-teams] --json
+linearctl project get <name|id> --json             # supports exact, unique prefix, or unique substring names
+linearctl project list [--team <name|key|id>] [--state <status-type> ...] [--all-teams] --json
 linearctl project create --name <name> [--description <text>] [--team <name|key|id>] --json
 linearctl project create-with-issues --name <name> --team <name|key|id> \
   --issues-json '[{"title":"...","teamId":"..."}]' [--description <text>] --json
@@ -79,7 +79,9 @@ linearctl project delete <id> --json              # [destructive]
 
 For `project update`, `--status` accepts a status name, status type, or status ID. `--state` remains supported as an alias for compatibility.
 
-For `project list`, `--state` accepts project status types: `backlog`, `planned`, `started`, `paused`, `completed`, or `canceled`.
+For `project list`, `--state` accepts project status types: `backlog`, `planned`, `started`, `paused`, `completed`, or `canceled`. Repeat `--state` to return projects matching any provided type.
+
+For `project get`, name resolution accepts exact names, unique prefixes, or unique substrings. Ambiguous partial matches fail with candidate projects.
 
 ## Cycle
 
@@ -91,6 +93,8 @@ linearctl cycle create --team <name|key|id> [--name <text>] [--starts-at <date>]
 linearctl cycle update <id> [--name <text>] [--starts-at <date>] [--ends-at <date>] --json
 ```
 
+`cycle get` and `cycle current` JSON include sprint reporting fields such as `progress`, derived `scopeCount`, `completedScopeCount`, `inProgressScopeCount`, `startedScopeCount`, issue counts, history arrays, and uncompleted issues captured on close.
+
 ## Team
 
 ```bash
@@ -98,6 +102,8 @@ linearctl team get <id-or-key> --json
 linearctl team list --json
 linearctl team members <id-or-key> [--all] --json
 ```
+
+`team members` includes `id`, `name`, `displayName`, `email`, and `active`.
 
 ## User
 

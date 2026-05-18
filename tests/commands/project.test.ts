@@ -236,10 +236,12 @@ describe("handleProjectCommand — project get", () => {
       const body = JSON.parse(String(init?.body ?? "{}")) as { query: string; variables?: Record<string, unknown> };
 
       if (body.query.includes("ResolveProject")) {
-        expect(body.variables?.filter).toEqual({ name: { eq: "GCP Hardening & GitOps" } });
+        expect(body.variables).toMatchObject({ first: 100 });
+        expect(body.variables?.filter).toBeUndefined();
         return new Response(JSON.stringify({
           data: {
             projects: {
+              pageInfo: { hasNextPage: false, endCursor: null },
               nodes: [{
                 id: "project-special-1",
                 name: "GCP Hardening & GitOps",
@@ -759,6 +761,43 @@ describe("handleProjectCommand — project list", () => {
 
       expect(exitCode).toBe(0);
       expect(fetchImpl).toHaveBeenCalledTimes(1);
+    } finally {
+      output.restore();
+    }
+  });
+
+  it("sends multiple project state filters as a union", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-project-"));
+    const paths = await writeProfileFiles(directory);
+    const fetchImpl = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body ?? "{}")) as { variables?: Record<string, unknown> };
+      expect(body.variables).toMatchObject({
+        filter: {
+          or: [
+            { status: { type: { eq: "started" } } },
+            { status: { type: { eq: "planned" } } }
+          ]
+        }
+      });
+      return new Response(JSON.stringify({
+        data: {
+          projects: {
+            nodes: [makeRawProject()],
+            pageInfo: { hasNextPage: false }
+          }
+        }
+      }), { status: 200 });
+    }) as FetchLike;
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleProjectCommand(["list"], {
+        ...baseOptions(paths),
+        states: ["started", "planned"],
+        fetchImpl
+      });
+
+      expect(exitCode).toBe(0);
     } finally {
       output.restore();
     }

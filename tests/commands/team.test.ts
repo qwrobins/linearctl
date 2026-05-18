@@ -73,6 +73,7 @@ function makeFetch(responseBody: unknown): FetchLike {
 function makeRawTeamMember(overrides?: Partial<Record<string, unknown>>) {
   return {
     id: "user-uuid-1",
+    name: "Quentin Robins",
     displayName: "Quentin Robins",
     email: "quentin@example.com",
     active: true,
@@ -107,6 +108,7 @@ describe("normalizeTeamMember", () => {
     const normalized = normalizeTeamMember(raw as Parameters<typeof normalizeTeamMember>[0]);
     expect(normalized).toEqual({
       id: "user-uuid-1",
+      name: "Quentin Robins",
       displayName: "Quentin Robins",
       email: "quentin@example.com",
       active: true
@@ -199,7 +201,7 @@ describe("handleTeamCommand — team members", () => {
           members: {
             nodes: [
               makeRawTeamMember(),
-              makeRawTeamMember({ id: "user-uuid-2", displayName: "Alice", email: null, active: false })
+              makeRawTeamMember({ id: "user-uuid-2", name: "Quentin Robins II", displayName: "Alice", email: null, active: false })
             ],
             pageInfo: { hasNextPage: false, endCursor: null }
           }
@@ -219,12 +221,14 @@ describe("handleTeamCommand — team members", () => {
       expect(parsed).toEqual([
         {
           id: "user-uuid-1",
+          name: "Quentin Robins",
           displayName: "Quentin Robins",
           email: "quentin@example.com",
           active: true
         },
         {
           id: "user-uuid-2",
+          name: "Quentin Robins II",
           displayName: "Alice",
           email: null,
           active: false

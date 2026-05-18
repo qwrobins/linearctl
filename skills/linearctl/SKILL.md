@@ -34,7 +34,7 @@ Raw GraphQL should not be used merely because it is possible. It is the fallback
 
 ### Issues
 - `linearctl issue get <identifier> --json` — fetch a single issue by identifier (e.g. INF-2975) or UUID
-- `linearctl issue list [--state <name>] [--assignee <id>] [--team <id>] [--label <name|id>] [--priority <0-4>] [--cycle <id>] [--project <name|id>] [--created-after <date>] [--updated-after <date>] [--completed-after <date>] [--order-by <field>] [--all-teams] [--all] [--json]` — list issues with filters
+- `linearctl issue list [--state <name> ...] [--assignee <name|displayName|email|"me"|id>] [--team <id>] [--label <name|id>] [--priority <0-4>] [--cycle <id>] [--project <name|id>] [--created-after <date>] [--updated-after <date>] [--completed-after <date>] [--order-by <field>] [--all-teams] [--all] [--json]` — list issues with filters; repeated `--state` values are unioned
 - `linearctl issue search --query <text> [--all] --json` — full-text search across issues
 - `linearctl issue create --title <title> --team <id> [--description <text>] [--priority <0-4>] [--estimate <n>] [--assignee <id>] [--label <id>] [--state <id>] [--cycle <id>] [--project <name|id>] [--project-milestone <id>|--milestone <id>] --json` — create an issue
 - `linearctl issue update <identifier> [--title <text>] [--description <text>] [--priority <0-4>] [--estimate <n>] [--assignee <id>] [--label <name|id>] [--state <id>] [--cycle <id>] [--project <id>] --json` — update an issue
@@ -49,8 +49,8 @@ Raw GraphQL should not be used merely because it is possible. It is the fallback
 - `linearctl issue bulk-assign --ids <id1,id2,...> --assignee <id> --json`
 
 ### Projects
-- `linearctl project get <name|id> --json` — richer single-project detail payload than `project list` (includes progress/health/currentProgress, and milestones with id, name, description, targetDate, sortOrder, createdAt, updatedAt)
-- `linearctl project list [--team <id>] [--state <status-type>] [--all-teams] --json` — includes portfolio fields (`progress`, `health`, `description`, `updatedAt`, `currentProgress`), normalized `milestones` with `name`, `targetDate`, `progress`, and `status`, and milestone truncation metadata (`milestonesPageInfo`, `milestonesTruncated`) in JSON output; human output shows progress, health, description, updated time, and milestone summaries; `--state` values: backlog, planned, started, paused, completed, canceled
+- `linearctl project get <name|id> --json` — richer single-project detail payload than `project list` (includes progress/health/currentProgress, and milestones with id, name, description, targetDate, sortOrder, createdAt, updatedAt); project names resolve by exact match, unique prefix, or unique substring
+- `linearctl project list [--team <id>] [--state <status-type> ...] [--all-teams] --json` — includes portfolio fields (`progress`, `health`, `description`, `updatedAt`, `currentProgress`), normalized `milestones` with `name`, `targetDate`, `progress`, and `status`, and milestone truncation metadata (`milestonesPageInfo`, `milestonesTruncated`) in JSON output; human output shows progress, health, description, updated time, and milestone summaries; `--state` values: backlog, planned, started, paused, completed, canceled; repeated `--state` values are unioned
 - `linearctl project create --name <name> [--description <text>] [--team <id>] --json`
 - `linearctl project create-with-issues --name <name> --team <id> --issues-json <json> [--description <text>] --json` — create a project then batch-create linked issues (reports partial success if issue creation fails after project was created)
 - `linearctl project update <id> [--name <text>] [--description <text>] [--status <id|name|type>|--state <name|type>] [--lead <user-id|email|"me">] [--start-date <YYYY-MM-DD>] [--target-date <YYYY-MM-DD>] --json` — `--status`/`--state` accepts status names, state types, or status IDs; `--state` remains an alias
@@ -63,16 +63,16 @@ Raw GraphQL should not be used merely because it is possible. It is the fallback
 - `linearctl project-status delete <id> --json` — archives the status
 
 ### Cycles
-- `linearctl cycle get <id> --json`
+- `linearctl cycle get <id> --json` — includes progress/scope fields (`progress`, derived `scopeCount`, `completedScopeCount`, `inProgressScopeCount`, `startedScopeCount`, issue counts, history arrays, and uncompleted issues captured on close)
 - `linearctl cycle list [--team <id>] [--all-teams] --json`
-- `linearctl cycle current [--team <id>] --json` — get the currently active cycle for a team
+- `linearctl cycle current [--team <id>] --json` — get the currently active cycle for a team; includes progress/scope fields
 - `linearctl cycle create --team <id> [--name <text>] [--starts-at <date>] [--ends-at <date>] --json`
 - `linearctl cycle update <id> [--name <text>] [--starts-at <date>] [--ends-at <date>] --json`
 
 ### Teams
 - `linearctl team get <id-or-key> [--set-default] --json` — fetch team; --set-default saves as profile default
 - `linearctl team list --json`
-- `linearctl team members <id-or-key> [--all] --json` — list team members with `id`, `displayName`, `email`, and `active`
+- `linearctl team members <id-or-key> [--all] --json` — list team members with `id`, `name`, `displayName`, `email`, and `active`
 
 ### Users
 - `linearctl user get <id> --json`
@@ -157,9 +157,11 @@ Each profile can have a default team. When set, list commands (issue, project, c
 Curated commands resolve friendly names to IDs automatically:
 - `--team "Infrastructure"` or `--team INF` resolves to the team's UUID
 - `--assignee "me"` resolves to the current user's ID
+- `--assignee "aborges"` resolves by Linear displayName
 - `--assignee "quentin@example.com"` resolves by email
 - `--state "In Progress"` resolves to the workflow state ID (team-scoped)
 - `--label "bug"` resolves to the label ID (team-scoped when possible)
+- `--project "Terraform Tech Debt"` resolves by exact project name, unique prefix, or unique substring
 
 If a value looks like a UUID, it's passed through directly. On ambiguous matches, the CLI errors with candidates.
 
