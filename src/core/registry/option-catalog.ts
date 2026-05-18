@@ -41,7 +41,7 @@ export const OPTION_CATALOG: Record<string, OptionSpec> = {
   estimate: { type: "string" },
   assignee: { type: "string" },
   label: { type: "string" },
-  state: { type: "string" },
+  state: { type: "string", multiple: true },
   status: { type: "string" },
   "input-json": { type: "string" },
   "input-file": { type: "string" },

@@ -37,33 +37,54 @@ export interface CycleCommandOptions {
   maxRetries?: number;
 }
 
-const CURATED_CYCLE_FRAGMENT = `
-fragment CuratedCycle on Cycle {
+const CURATED_CYCLE_BASE_FRAGMENT = `
+fragment CuratedCycleBase on Cycle {
   id
   number
   name
   description
   startsAt
   endsAt
+  progress
+  issueCountHistory
+  completedIssueCountHistory
+  scopeHistory
+  completedScopeHistory
+  inProgressScopeHistory
+  currentProgress
+  uncompletedIssuesUponClose(first: 100) {
+    nodes { id identifier title }
+    pageInfo { hasNextPage endCursor }
+  }
   team { id key name }
   completedAt
   createdAt
   updatedAt
 }`;
 
+const CURATED_CYCLE_DETAIL_FRAGMENT = `
+fragment CuratedCycleDetail on Cycle {
+  ...CuratedCycleBase
+  uncompletedIssuesUponClose(first: 100) {
+    nodes { id identifier title }
+    pageInfo { hasNextPage endCursor }
+  }
+}
+${CURATED_CYCLE_BASE_FRAGMENT}`;
+
 const CYCLE_GET_QUERY = `
 query CycleGet($id: String!) {
   cycle(id: $id) {
-    ...CuratedCycle
+    ...CuratedCycleDetail
   }
 }
-${CURATED_CYCLE_FRAGMENT}`;
+${CURATED_CYCLE_DETAIL_FRAGMENT}`;
 
 const CYCLE_LIST_QUERY = `
 query CycleList($first: Int!, $after: String, $filter: CycleFilter) {
   cycles(first: $first, after: $after, filter: $filter) {
     nodes {
-      ...CuratedCycle
+      ...CuratedCycleBase
     }
     pageInfo {
       hasNextPage
@@ -71,39 +92,39 @@ query CycleList($first: Int!, $after: String, $filter: CycleFilter) {
     }
   }
 }
-${CURATED_CYCLE_FRAGMENT}`;
+${CURATED_CYCLE_BASE_FRAGMENT}`;
 
 const CYCLE_CURRENT_QUERY = `
 query CyclesCurrent($filter: CycleFilter!) {
   cycles(first: 1, filter: $filter) {
     nodes {
-      ...CuratedCycle
+      ...CuratedCycleDetail
     }
   }
 }
-${CURATED_CYCLE_FRAGMENT}`;
+${CURATED_CYCLE_DETAIL_FRAGMENT}`;
 
 const CYCLE_CREATE_MUTATION = `
 mutation CycleCreate($input: CycleCreateInput!) {
   cycleCreate(input: $input) {
     success
     cycle {
-      ...CuratedCycle
+      ...CuratedCycleBase
     }
   }
 }
-${CURATED_CYCLE_FRAGMENT}`;
+${CURATED_CYCLE_BASE_FRAGMENT}`;
 
 const CYCLE_UPDATE_MUTATION = `
 mutation CycleUpdate($id: String!, $input: CycleUpdateInput!) {
   cycleUpdate(id: $id, input: $input) {
     success
     cycle {
-      ...CuratedCycle
+      ...CuratedCycleBase
     }
   }
 }
-${CURATED_CYCLE_FRAGMENT}`;
+${CURATED_CYCLE_BASE_FRAGMENT}`;
 
 interface RawCycle {
   id: string;
@@ -112,6 +133,17 @@ interface RawCycle {
   description: string | null;
   startsAt: string | null;
   endsAt: string | null;
+  progress: number;
+  issueCountHistory: number[];
+  completedIssueCountHistory: number[];
+  scopeHistory: number[];
+  completedScopeHistory: number[];
+  inProgressScopeHistory: number[];
+  currentProgress: unknown;
+  uncompletedIssuesUponClose?: {
+    nodes: Array<{ id: string; identifier: string; title: string }>;
+    pageInfo: { hasNextPage: boolean; endCursor: string | null };
+  };
   team: { id: string; key: string; name: string };
   completedAt: string | null;
   createdAt: string;
@@ -125,6 +157,23 @@ export interface NormalizedCycle {
   description: string | null;
   startsAt: string | null;
   endsAt: string | null;
+  progress: number;
+  scopeCount: number | null;
+  issueCount: number | null;
+  completedIssueCount: number | null;
+  completedScopeCount: number | null;
+  inProgressScopeCount: number | null;
+  startedScopeCount: number | null;
+  issueCountHistory: number[];
+  completedIssueCountHistory: number[];
+  scopeHistory: number[];
+  completedScopeHistory: number[];
+  inProgressScopeHistory: number[];
+  currentProgress: unknown;
+  uncompletedIssuesUponClose: {
+    nodes: Array<{ id: string; identifier: string; title: string }>;
+    pageInfo: { hasNextPage: boolean; endCursor: string | null };
+  };
   team: { id: string; key: string; name: string };
   completedAt: string | null;
   createdAt: string;
@@ -132,6 +181,10 @@ export interface NormalizedCycle {
 }
 
 export function normalizeCycle(raw: RawCycle): NormalizedCycle {
+  const scopeCount = lastNumber(raw.scopeHistory);
+  const completedScopeCount = lastNumber(raw.completedScopeHistory);
+  const inProgressScopeCount = lastNumber(raw.inProgressScopeHistory);
+
   return {
     id: raw.id,
     number: raw.number,
@@ -139,11 +192,35 @@ export function normalizeCycle(raw: RawCycle): NormalizedCycle {
     description: raw.description,
     startsAt: raw.startsAt,
     endsAt: raw.endsAt,
+    progress: raw.progress,
+    scopeCount,
+    issueCount: lastNumber(raw.issueCountHistory),
+    completedIssueCount: lastNumber(raw.completedIssueCountHistory),
+    completedScopeCount,
+    inProgressScopeCount,
+    startedScopeCount:
+      completedScopeCount === null && inProgressScopeCount === null
+        ? null
+        : (completedScopeCount ?? 0) + (inProgressScopeCount ?? 0),
+    issueCountHistory: raw.issueCountHistory,
+    completedIssueCountHistory: raw.completedIssueCountHistory,
+    scopeHistory: raw.scopeHistory,
+    completedScopeHistory: raw.completedScopeHistory,
+    inProgressScopeHistory: raw.inProgressScopeHistory,
+    currentProgress: raw.currentProgress,
+    uncompletedIssuesUponClose: raw.uncompletedIssuesUponClose ?? {
+      nodes: [],
+      pageInfo: { hasNextPage: false, endCursor: null }
+    },
     team: raw.team,
     completedAt: raw.completedAt,
     createdAt: raw.createdAt,
     updatedAt: raw.updatedAt
   };
+}
+
+function lastNumber(values: number[]): number | null {
+  return values.length > 0 ? values[values.length - 1]! : null;
 }
 
 function printHumanCycle(cycle: NormalizedCycle): void {

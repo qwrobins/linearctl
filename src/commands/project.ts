@@ -32,6 +32,7 @@ export interface ProjectCommandOptions {
   issuesJson?: string;
   allTeams?: boolean;
   state?: string;
+  states?: string[];
   status?: string;
   lead?: string;
   startDate?: string;
@@ -567,14 +568,26 @@ async function handleProjectList(options: ProjectCommandOptions): Promise<number
       const teamId = looksLikeId(effectiveTeam) ? effectiveTeam : await resolveTeamId(effectiveTeam, resolverOpts);
       filter = { accessibleTeams: { some: { id: { eq: teamId } } } };
     }
-    if (options.state !== undefined) {
-      if (!isProjectStateType(options.state)) {
+    const stateValues = options.states ?? (options.state === undefined ? [] : [options.state]);
+    if (stateValues.length === 1) {
+      const state = stateValues[0]!;
+      if (!isProjectStateType(state)) {
         return emitValidationError(
-          `--state must be one of: ${VALID_PROJECT_STATE_TYPES.join(", ")}. Got "${options.state}".`,
+          `--state must be one of: ${VALID_PROJECT_STATE_TYPES.join(", ")}. Got "${state}".`,
           options
         );
       }
-      filter = { ...filter, status: { type: { eq: options.state } } };
+      filter = { ...filter, status: { type: { eq: state } } };
+    } else if (stateValues.length > 1) {
+      const invalid = stateValues.find((state) => !isProjectStateType(state));
+      if (invalid !== undefined) {
+        return emitValidationError(
+          `--state must be one of: ${VALID_PROJECT_STATE_TYPES.join(", ")}. Got "${invalid}".`,
+          options
+        );
+      }
+      const stateFilter = { or: stateValues.map((state) => ({ status: { type: { eq: state } } })) };
+      filter = filter === undefined ? stateFilter : { and: [filter, stateFilter] };
     }
 
     const commonPaginateInput = {

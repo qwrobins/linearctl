@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.4] - 2026-05-18
+
+### Added
+
+- `cycle get` and `cycle current` JSON now include progress and scope metrics from Linear, including `progress`, derived `scopeCount`, `completedScopeCount`, `inProgressScopeCount`, `startedScopeCount`, issue counts, history arrays, and uncompleted issues captured on close.
+- `team members <id-or-key>` now includes the member `name` field alongside `displayName`, `email`, and `active`.
+
+### Fixed
+
+- `issue list --assignee <value>` now resolves Linear `displayName` values in addition to `name`, `email`, UUID, and `me`.
+- `issue list --state` and `project list --state` now support repeated flags as union filters instead of silently using only the last value.
+- `project get <name>` and `issue list --project <name>` now resolve unique prefix or substring project-name matches, with ambiguity errors when multiple projects match.
+
 ## [0.6.3] - 2026-05-16
 
 ### Added

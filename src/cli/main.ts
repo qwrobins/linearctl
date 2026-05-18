@@ -132,6 +132,17 @@ function mergeStringArrays(left: unknown, right: unknown): string[] | undefined 
   return merged.length > 0 ? merged : undefined;
 }
 
+function stringArrayValue(value: unknown): string[] | undefined {
+  if (typeof value === "string") {
+    return [value];
+  }
+  if (Array.isArray(value)) {
+    const strings = value.filter((item): item is string => typeof item === "string");
+    return strings.length > 0 ? strings : undefined;
+  }
+  return undefined;
+}
+
 function parsePositiveInt(value: string, flagName: string): number {
   if (!/^[1-9]\d*$/.test(value)) {
     throw new Error(`--${flagName} must be a positive integer`);
@@ -164,6 +175,7 @@ function toParsedCliArguments(values: Record<string, unknown>, positionals: stri
 
   const jsonl = values.jsonl === true;
   const jsonEnvelope = values["json-envelope"] === true;
+  const states = stringArrayValue(values.state);
 
   if (jsonl && jsonEnvelope) {
     throw new Error("--jsonl and --json-envelope are mutually exclusive");
@@ -202,7 +214,7 @@ function toParsedCliArguments(values: Record<string, unknown>, positionals: stri
     ...(typeof values.assignee === "string" ? { assignee: values.assignee } : {}),
     ...(typeof values.ids === "string" ? { ids: values.ids } : {}),
     ...(typeof values.label === "string" ? { label: values.label } : {}),
-    ...(typeof values.state === "string" ? { state: values.state } : {}),
+    ...(states !== undefined ? { state: states[states.length - 1], states } : {}),
     ...(typeof values.status === "string" ? { status: values.status } : {}),
     ...(typeof values["input-json"] === "string" ? { inputJson: values["input-json"] } : {}),
     ...(typeof values["issues-json"] === "string" ? { issuesJson: values["issues-json"] } : {}),

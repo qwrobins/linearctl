@@ -83,14 +83,15 @@ const VIEWER_QUERY = `query ResolveViewer { viewer { id } }`;
 
 const USER_RESOLVE_QUERY = `
 query ResolveUser($value: String!) {
-  users(filter: { or: [{ email: { eq: $value } }, { name: { eq: $value } }] }) {
-    nodes { id name email }
+  users(filter: { or: [{ email: { eq: $value } }, { name: { eq: $value } }, { displayName: { eq: $value } }] }) {
+    nodes { id name displayName email }
   }
 }`;
 
 interface UserNode {
   id: string;
   name: string;
+  displayName: string;
   email: string;
 }
 
@@ -130,9 +131,9 @@ export async function resolveUserId(
   }
 
   throw new ResolutionError(
-    `Ambiguous user "${nameOrEmail}" — matches: ${nodes.map((u) => `${u.name} (${u.email}, ${u.id})`).join(", ")}. Use a direct user ID instead.`,
+    `Ambiguous user "${nameOrEmail}" — matches: ${nodes.map((u) => `${u.name} (${u.displayName}, ${u.email}, ${u.id})`).join(", ")}. Use a direct user ID instead.`,
     "ambiguous",
-    nodes.map((u) => ({ id: u.id, display: `${u.name} (${u.email})` }))
+    nodes.map((u) => ({ id: u.id, display: `${u.name} (${u.displayName}, ${u.email})` }))
   );
 }
 
@@ -262,8 +263,12 @@ export async function resolveStateId(
 // ---------------------------------------------------------------------------
 
 const PROJECT_RESOLVE_QUERY = `
-query ResolveProject($filter: ProjectFilter!) {
-  projects(filter: $filter) {
+query ResolveProject($filter: ProjectFilter, $first: Int!, $after: String) {
+  projects(filter: $filter, first: $first, after: $after) {
+    pageInfo {
+      hasNextPage
+      endCursor
+    }
     nodes {
       id
       name
@@ -278,33 +283,56 @@ interface ProjectNode {
   teams: { nodes: Array<{ id: string; key: string; name: string }> };
 }
 
+interface ProjectConnection {
+  pageInfo: { hasNextPage: boolean; endCursor: string | null };
+  nodes: ProjectNode[];
+}
+
 export async function resolveProjectId(
   name: string,
   teamId: string | undefined,
   options: ResolverOptions
 ): Promise<string> {
-  const nameFilter: Record<string, unknown> = { name: { eq: name } };
   const filter =
     teamId !== undefined
-      ? { and: [nameFilter, { accessibleTeams: { some: { id: { eq: teamId } } } }] }
-      : nameFilter;
+      ? { teams: { some: { id: { eq: teamId } } } }
+      : undefined;
 
-  const data = await requestGraphQL<{ projects: { nodes: ProjectNode[] } }>({
-    query: PROJECT_RESOLVE_QUERY,
-    variables: { filter },
-    credentials: options.credentials,
-    ...(options.apiUrl === undefined ? {} : { apiUrl: options.apiUrl }),
-    ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl })
-  });
+  const nodes: ProjectNode[] = [];
+  let after: string | undefined;
 
-  const nodes = data.projects.nodes;
+  for (;;) {
+    const data = await requestGraphQL<{ projects: ProjectConnection }>({
+      query: PROJECT_RESOLVE_QUERY,
+      variables: {
+        ...(filter === undefined ? {} : { filter }),
+        first: 100,
+        ...(after === undefined ? {} : { after })
+      },
+      credentials: options.credentials,
+      ...(options.apiUrl === undefined ? {} : { apiUrl: options.apiUrl }),
+      ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl })
+    });
 
-  if (nodes.length === 1) {
-    return nodes[0]!.id;
+    nodes.push(...data.projects.nodes);
+    if (!data.projects.pageInfo.hasNextPage || data.projects.pageInfo.endCursor === null) {
+      break;
+    }
+    after = data.projects.pageInfo.endCursor;
+  }
+
+  const needle = name.toLowerCase();
+  const exactMatches = nodes.filter((p) => p.name.toLowerCase() === needle);
+  const prefixMatches = nodes.filter((p) => p.name.toLowerCase().startsWith(needle));
+  const substringMatches = nodes.filter((p) => p.name.toLowerCase().includes(needle));
+  const matches = exactMatches.length > 0 ? exactMatches : prefixMatches.length > 0 ? prefixMatches : substringMatches;
+
+  if (matches.length === 1) {
+    return matches[0]!.id;
   }
 
   const scope = teamId !== undefined ? ` in team ${teamId}` : "";
-  if (nodes.length === 0) {
+  if (matches.length === 0) {
     throw new ResolutionError(
       `No project found matching "${name}"${scope}. Use a direct project ID instead.`,
       "not-found"
@@ -312,9 +340,9 @@ export async function resolveProjectId(
   }
 
   throw new ResolutionError(
-    `Ambiguous project "${name}"${scope} — matches: ${nodes.map((p) => `${p.name} (${p.id})`).join(", ")}. Use a direct project ID instead.`,
+    `Ambiguous project "${name}"${scope} — matches: ${matches.map((p) => `${p.name} (${p.id})`).join(", ")}. Use a direct project ID instead.`,
     "ambiguous",
-    nodes.map((p) => ({
+    matches.map((p) => ({
       id: p.id,
       display: `${p.name}${p.teams.nodes.length > 0 ? ` (${p.teams.nodes.map((t) => t.key).join(", ")})` : ""}`
     }))

@@ -60,6 +60,17 @@ function makeRawCycle(overrides?: Partial<Record<string, unknown>>) {
     description: "The answer to everything",
     startsAt: "2026-04-07T00:00:00Z",
     endsAt: "2026-04-21T00:00:00Z",
+    progress: 0.5,
+    issueCountHistory: [1, 4, 10],
+    completedIssueCountHistory: [0, 2, 5],
+    scopeHistory: [2, 8, 10],
+    completedScopeHistory: [0, 3, 5],
+    inProgressScopeHistory: [0, 2, 3],
+    currentProgress: { completed: 5, inProgress: 3 },
+    uncompletedIssuesUponClose: {
+      nodes: [],
+      pageInfo: { hasNextPage: false, endCursor: null }
+    },
     team: { id: "team-1", key: "INF", name: "Infrastructure" },
     completedAt: null,
     createdAt: "2026-04-01T10:00:00Z",
@@ -90,7 +101,25 @@ describe("normalizeCycle", () => {
     const normalized = normalizeCycle(raw as Parameters<typeof normalizeCycle>[0]);
     expect(normalized.id).toBe("cycle-uuid-1");
     expect(normalized.number).toBe(42);
+    expect(normalized.progress).toBe(0.5);
+    expect(normalized.scopeCount).toBe(10);
+    expect(normalized.completedScopeCount).toBe(5);
+    expect(normalized.inProgressScopeCount).toBe(3);
+    expect(normalized.startedScopeCount).toBe(8);
     expect(normalized.team).toEqual({ id: "team-1", key: "INF", name: "Infrastructure" });
+  });
+
+  it("returns null for derived counts when histories are empty", () => {
+    const raw = makeRawCycle({
+      scopeHistory: [],
+      completedScopeHistory: [],
+      inProgressScopeHistory: []
+    });
+    const normalized = normalizeCycle(raw as Parameters<typeof normalizeCycle>[0]);
+
+    expect(normalized.scopeCount).toBeNull();
+    expect(normalized.completedScopeCount).toBeNull();
+    expect(normalized.inProgressScopeCount).toBeNull();
   });
 });
 
@@ -112,6 +141,8 @@ describe("handleCycleCommand — cycle get", () => {
       expect(parsed.id).toBe("cycle-uuid-1");
       expect(parsed.number).toBe(42);
       expect(parsed.name).toBe("Sprint 42");
+      expect(parsed.progress).toBe(0.5);
+      expect(parsed.completedScopeCount).toBe(5);
     } finally {
       output.restore();
     }

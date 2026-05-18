@@ -149,6 +149,19 @@ describe("resolveUserId", () => {
     expect(result).toBe("user-uuid-1");
   });
 
+  it("resolves by displayName", async () => {
+    const fetchImpl = makeFetch({
+      data: { users: { nodes: [{ id: "user-uuid-1", name: "Alice Example", displayName: "alice", email: "alice@example.com" }] } }
+    });
+
+    const result = await resolveUserId("alice", makeOptions(fetchImpl));
+    expect(result).toBe("user-uuid-1");
+
+    const call = (fetchImpl as ReturnType<typeof vi.fn>).mock.calls[0] as [string, RequestInit];
+    const body = JSON.parse(call[1].body as string) as { query: string };
+    expect(body.query).toContain("{ displayName: { eq: $value } }");
+  });
+
   it("throws on not-found", async () => {
     const fetchImpl = makeFetch({
       data: { users: { nodes: [] } }

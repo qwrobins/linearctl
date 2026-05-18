@@ -49,8 +49,8 @@ Issue list supports these filter flags:
 | Flag | Description | Accepts |
 |---|---|---|
 | `--team <value>` | Filter by team | Name, key (e.g. `INF`), or UUID |
-| `--state <value>` | Filter by workflow state | Name (e.g. `"In Progress"`) or UUID |
-| `--assignee <value>` | Filter by assignee | `"me"`, email, or UUID |
+| `--state <value>` | Filter by workflow state; repeat for a union filter | Name (e.g. `"In Progress"`) or UUID |
+| `--assignee <value>` | Filter by assignee | `"me"`, name, displayName, email, or UUID |
 | `--label <value>` | Filter by label | Name or UUID |
 | `--priority <n>` | Filter by priority | Integer 0-4 (0 = no priority, 1 = urgent, 4 = low) |
 | `--cycle <value>` | Filter by cycle | UUID |
@@ -66,6 +66,9 @@ Issue list supports these filter flags:
 ```bash
 # Issues assigned to me in a specific state
 linearctl issue list --assignee me --state "In Progress" --json
+
+# Issues in either of two states
+linearctl issue list --state "In Progress" --state "Block/Waiting" --json
 
 # High-priority issues on a team
 linearctl issue list --team INF --priority 1 --json
@@ -92,7 +95,7 @@ Project list supports:
 | Flag | Description | Accepts |
 |---|---|---|
 | `--team <value>` | Filter by team | Name, key (e.g. `INF`), or UUID |
-| `--state <value>` | Filter by project status type | `backlog`, `planned`, `started`, `paused`, `completed`, `canceled` |
+| `--state <value>` | Filter by project status type; repeat for a union filter | `backlog`, `planned`, `started`, `paused`, `completed`, `canceled` |
 | `--all-teams` | Disable default-team team filtering | boolean |
 
 ## Name resolution
@@ -104,9 +107,11 @@ Curated commands automatically resolve friendly names to Linear UUIDs:
 | `--team "Infrastructure"` | Resolved by team name |
 | `--team INF` | Resolved by team key |
 | `--assignee "me"` | Resolved to the current user's ID |
+| `--assignee "alice"` | Resolved by Linear displayName |
 | `--assignee "alice@example.com"` | Resolved by email |
 | `--state "In Progress"` | Resolved to the workflow state ID (team-scoped) |
 | `--label "bug"` | Resolved to the label ID (team-scoped when possible) |
+| `--project "Terraform Tech Debt"` | Resolved by exact name, unique prefix, or unique substring |
 
 If a value looks like a UUID, it is passed through directly. On ambiguous matches, the CLI errors and lists candidates.
 

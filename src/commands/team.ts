@@ -42,6 +42,7 @@ interface RawTeam {
 
 interface RawTeamMember {
   id: string;
+  name: string;
   displayName: string;
   email: string | null;
   active: boolean;
@@ -58,6 +59,7 @@ export interface NormalizedTeam {
 
 export interface NormalizedTeamMember {
   id: string;
+  name: string;
   displayName: string;
   email: string | null;
   active: boolean;
@@ -108,6 +110,7 @@ query TeamMembers($id: String!, $first: Int!, $after: String) {
     members(first: $first, after: $after) {
       nodes {
         id
+        name
         displayName
         email
         active
@@ -134,6 +137,7 @@ export function normalizeTeam(raw: RawTeam): NormalizedTeam {
 export function normalizeTeamMember(raw: RawTeamMember): NormalizedTeamMember {
   return {
     id: raw.id,
+    name: raw.name,
     displayName: raw.displayName,
     email: raw.email,
     active: raw.active
@@ -150,7 +154,7 @@ function printHumanTeam(team: NormalizedTeam): void {
 function printHumanTeamMember(member: NormalizedTeamMember): void {
   const email = member.email ?? "";
   const status = member.active ? "active" : "inactive";
-  process.stdout.write(`${member.displayName}\t${email}\t${status}\n`);
+  process.stdout.write(`${member.name}\t${member.displayName}\t${email}\t${status}\n`);
 }
 
 /** Build a CommandContext from team handler options */

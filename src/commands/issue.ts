@@ -39,6 +39,7 @@ export interface IssueCommandOptions {
   assignee?: string;
   label?: string;
   state?: string;
+  states?: string[];
   milestone?: string;
   projectMilestone?: string;
   inputJson?: string;
@@ -543,12 +544,14 @@ async function handleIssueList(options: IssueCommandOptions): Promise<number> {
         resolvedTeamId = looksLikeId(effectiveTeam) ? effectiveTeam : await resolveTeamId(effectiveTeam, resolverOpts);
         buildFilter.team = { id: { eq: resolvedTeamId } };
       }
-      if (options.state !== undefined) {
-        if (looksLikeId(options.state)) {
-          buildFilter.state = { id: { eq: options.state } };
-        } else {
-          buildFilter.state = { name: { eq: options.state } };
-        }
+      const stateValues = options.states ?? (options.state === undefined ? [] : [options.state]);
+      if (stateValues.length === 1) {
+        const state = stateValues[0]!;
+        buildFilter.state = looksLikeId(state) ? { id: { eq: state } } : { name: { eq: state } };
+      } else if (stateValues.length > 1) {
+        buildFilter.or = stateValues.map((state) => ({
+          state: looksLikeId(state) ? { id: { eq: state } } : { name: { eq: state } }
+        }));
       }
       if (options.assignee !== undefined) {
         const assigneeId = looksLikeId(options.assignee) ? options.assignee : await resolveUserId(options.assignee, resolverOpts);
