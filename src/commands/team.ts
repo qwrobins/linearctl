@@ -324,7 +324,8 @@ async function handleTeamMembers(
 
   try {
     const profile = await ctx.resolveProfile();
-    let teamId = identifier;
+    const resolverOpts = await ctx.resolverOptions();
+    const teamId = looksLikeId(identifier) ? identifier : await resolveTeamId(identifier, resolverOpts);
 
     const commonPaginateInput = {
       query: TEAM_MEMBERS_QUERY,
@@ -376,21 +377,10 @@ async function handleTeamMembers(
 
     return ExitCode.Success;
   } catch (error) {
+    if (error instanceof ResolutionError && error.kind === "not-found") {
+      return ctx.emitNotFound("Team not found");
+    }
     if (error instanceof TeamNotFoundError) {
-      if (!looksLikeId(identifier)) {
-        try {
-          const resolverOpts = await ctx.resolverOptions();
-          const resolvedTeamId = await resolveTeamId(identifier, resolverOpts);
-          if (resolvedTeamId !== identifier) {
-            return handleTeamMembers(resolvedTeamId, options);
-          }
-        } catch (resolutionError) {
-          if (resolutionError instanceof ResolutionError && resolutionError.kind === "ambiguous") {
-            return ctx.emitCaughtError(resolutionError);
-          }
-          return ctx.emitNotFound("Team not found");
-        }
-      }
       return ctx.emitNotFound("Team not found");
     }
     return ctx.emitCaughtError(error);

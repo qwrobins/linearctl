@@ -94,7 +94,7 @@ describe("handleFileCommand — file upload", () => {
         );
       }
 
-      // PUT to uploadUrl
+      expect(urlStr).toBe("https://storage.example.com/put-here");
       return new Response("", { status: 200 });
     }) as FetchLike;
 
@@ -113,6 +113,8 @@ describe("handleFileCommand — file upload", () => {
       expect(parsed.fileName).toBe("screenshot.png");
       expect(parsed.size).toBe(14); // "fake-png-bytes".length
       expect(parsed.attachment).toBeUndefined();
+      const putHeaders = (fetchImpl as ReturnType<typeof vi.fn>).mock.calls[1]![1]!.headers as Record<string, string>;
+      expect(putHeaders["Content-Type"]).toBe("image/png");
     } finally {
       output.restore();
     }
