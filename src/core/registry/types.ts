@@ -103,6 +103,8 @@ export interface ParsedCliArguments {
   after?: string;
   sync: boolean;
   dryRun: boolean;
+  yes: boolean;
+  confirm: boolean;
   quiet: boolean;
   allTeams: boolean;
   scope?: string;

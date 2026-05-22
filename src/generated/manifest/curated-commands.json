@@ -112,6 +112,18 @@
     "supportedOutputModes": ["human", "json", "json-envelope"]
   },
   {
+    "commandPath": "linearctl issue delete",
+    "layer": "curated",
+    "resource": "issue",
+    "operation": "delete",
+    "stability": "stable",
+    "preferredForAgents": true,
+    "safety": "destructive",
+    "inputMode": "id",
+    "outputShape": "object",
+    "supportedOutputModes": ["human", "json", "json-envelope"]
+  },
+  {
     "commandPath": "linearctl issue assign",
     "layer": "curated",
     "resource": "issue",

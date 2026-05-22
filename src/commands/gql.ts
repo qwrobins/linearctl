@@ -68,10 +68,11 @@ export async function handleGqlCommand(
   }
 
   try {
-    const document = await resolveGraphQLDocument(subcommand, rest, options);
-    if (document === undefined) {
+    const resolvedDocument = await resolveGraphQLDocument(subcommand, rest, options);
+    if (resolvedDocument === undefined) {
       return 5;
     }
+    const document = normalizeGraphQLDocument(subcommand, resolvedDocument);
 
     const variables = await resolveVariables(options);
     if (subcommand === "introspect" && (Object.keys(variables).length > 0 || options.varsFile !== undefined)) {
@@ -148,6 +149,40 @@ export async function handleGqlCommand(
     }
 
     return failure.exitCode;
+  }
+}
+
+function normalizeGraphQLDocument(subcommand: string, document: string): string {
+  if (subcommand !== "mutation") {
+    return document;
+  }
+
+  const operationStart = findGraphQLOperationStart(document);
+  const operationSlice = document.slice(operationStart);
+  if (/^mutation\b/.test(operationSlice)) {
+    return document;
+  }
+
+  return `${document.slice(0, operationStart)}mutation ${operationSlice}`;
+}
+
+function findGraphQLOperationStart(document: string): number {
+  let index = 0;
+
+  for (;;) {
+    while (index < document.length && /\s/.test(document[index]!)) {
+      index += 1;
+    }
+
+    if (document[index] !== "#") {
+      return index;
+    }
+
+    const nextLine = document.indexOf("\n", index);
+    if (nextLine === -1) {
+      return document.length;
+    }
+    index = nextLine + 1;
   }
 }
 

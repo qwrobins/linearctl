@@ -86,6 +86,8 @@ export const OPTION_CATALOG: Record<string, OptionSpec> = {
   query: { type: "string" },
   quiet: { type: "boolean", short: "q" },
   "dry-run": { type: "boolean" },
+  yes: { type: "boolean" },
+  confirm: { type: "boolean" },
   sync: { type: "boolean" },
   "issues-json": { type: "string" },
   "state-type": { type: "string" },
@@ -102,6 +104,7 @@ export const OPTION_GROUPS = {
   pagination: ["all", "max", "limit", "page-size", "after"] as const,
   streaming: ["jsonl", "quiet"] as const,
   dryRun: ["dry-run"] as const,
+  confirmation: ["yes", "confirm"] as const,
   allTeams: ["all-teams"] as const,
 } as const;
 

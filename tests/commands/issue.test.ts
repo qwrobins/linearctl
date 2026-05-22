@@ -1007,6 +1007,94 @@ describe("handleIssueCommand — issue close", () => {
       output.restore();
     }
   });
+
+  it("accepts canceled states as terminal close states", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-issue-"));
+    const paths = await writeProfileFiles(directory);
+    let callCount = 0;
+    const fetchImpl = vi.fn(async () => {
+      callCount++;
+      if (callCount === 1) {
+        return new Response(JSON.stringify({
+          data: { issue: { team: { id: "team-1" } } }
+        }), { status: 200 });
+      }
+      if (callCount === 2) {
+        return new Response(JSON.stringify({
+          data: {
+            team: {
+              states: {
+                nodes: [{ id: "state-canceled", name: "Canceled", type: "canceled" }]
+              }
+            }
+          }
+        }), { status: 200 });
+      }
+      if (callCount === 3) {
+        return new Response(JSON.stringify({
+          data: { workflowState: { id: "state-canceled", name: "Canceled", type: "canceled" } }
+        }), { status: 200 });
+      }
+      return new Response(JSON.stringify({
+        data: { issueUpdate: { success: true, issue: makeRawIssue({ state: { id: "state-canceled", name: "Canceled", type: "canceled" } }) } }
+      }), { status: 200 });
+    }) as FetchLike;
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleIssueCommand(["close", "INF-2975"], {
+        ...baseOptions(paths),
+        state: "Canceled",
+        fetchImpl
+      });
+
+      expect(exitCode).toBe(0);
+      const parsed = JSON.parse(output.stdout.join(""));
+      expect(parsed.closed).toBe(true);
+      expect(parsed.state).toBe("Canceled");
+      expect(fetchImpl).toHaveBeenCalledTimes(4);
+    } finally {
+      output.restore();
+    }
+  });
+});
+
+describe("handleIssueCommand — issue delete", () => {
+  it("deletes an issue after resolving an identifier", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-issue-"));
+    const paths = await writeProfileFiles(directory);
+    let callCount = 0;
+    const fetchImpl = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      callCount++;
+      const body = JSON.parse(String(init?.body ?? "{}")) as { query: string; variables: Record<string, unknown> };
+      if (callCount === 1) {
+        expect(body.query).toContain("IssueDeleteResolve");
+        expect(body.variables.id).toBe("INF-2975");
+        return new Response(JSON.stringify({
+          data: { issue: { id: "issue-uuid-1", identifier: "INF-2975" } }
+        }), { status: 200 });
+      }
+      expect(body.query).toContain("issueDelete");
+      expect(body.variables.id).toBe("issue-uuid-1");
+      return new Response(JSON.stringify({
+        data: { issueDelete: { success: true } }
+      }), { status: 200 });
+    }) as FetchLike;
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleIssueCommand(["delete", "INF-2975"], {
+        ...baseOptions(paths),
+        fetchImpl
+      });
+
+      expect(exitCode).toBe(0);
+      const parsed = JSON.parse(output.stdout.join(""));
+      expect(parsed).toEqual({ id: "issue-uuid-1", identifier: "INF-2975", deleted: true });
+    } finally {
+      output.restore();
+    }
+  });
 });
 
 describe("handleIssueCommand — issue assign", () => {
@@ -1233,6 +1321,98 @@ describe("handleIssueCommand — issue bulk-close", () => {
       expect(parsed.succeeded).toHaveLength(2);
       expect(parsed.succeeded[0].archived).toBe(true);
       expect(parsed.succeeded[1].archived).toBe(true);
+    } finally {
+      output.restore();
+    }
+  });
+});
+
+describe("handleIssueCommand — issue bulk-delete", () => {
+  it("requires confirmation", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-issue-"));
+    const paths = await writeProfileFiles(directory);
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleIssueCommand(["bulk-delete"], {
+        ...baseOptions(paths),
+        ids: "INF-2975"
+      });
+
+      expect(exitCode).toBe(5);
+      expect(output.stderr.join("")).toContain("--yes or --confirm");
+    } finally {
+      output.restore();
+    }
+  });
+
+  it("deletes multiple issues when confirmed", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-issue-"));
+    const paths = await writeProfileFiles(directory);
+    const fetchImpl = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body ?? "{}")) as { query: string; variables: Record<string, unknown> };
+      if (body.query.includes("IssueDeleteResolve")) {
+        const identifier = String(body.variables.id);
+        return new Response(JSON.stringify({
+          data: { issue: { id: `${identifier}-uuid`, identifier } }
+        }), { status: 200 });
+      }
+      return new Response(JSON.stringify({
+        data: { issueDelete: { success: true } }
+      }), { status: 200 });
+    }) as FetchLike;
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleIssueCommand(["bulk-delete"], {
+        ...baseOptions(paths),
+        ids: "INF-2975,INF-2976",
+        yes: true,
+        fetchImpl
+      });
+
+      expect(exitCode).toBe(0);
+      const parsed = JSON.parse(output.stdout.join(""));
+      expect(parsed.succeeded).toHaveLength(2);
+      expect(parsed.succeeded[0]).toMatchObject({ identifier: "INF-2975", deleted: true });
+      expect(parsed.succeeded[1]).toMatchObject({ identifier: "INF-2976", deleted: true });
+      expect(parsed.failed).toEqual([]);
+    } finally {
+      output.restore();
+    }
+  });
+
+  it("deletes multiple issues when confirmed with --confirm", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-issue-"));
+    const paths = await writeProfileFiles(directory);
+    const fetchImpl = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body ?? "{}")) as { query: string; variables: Record<string, unknown> };
+      if (body.query.includes("IssueDeleteResolve")) {
+        const identifier = String(body.variables.id);
+        return new Response(JSON.stringify({
+          data: { issue: { id: `${identifier}-uuid`, identifier } }
+        }), { status: 200 });
+      }
+      return new Response(JSON.stringify({
+        data: { issueDelete: { success: true } }
+      }), { status: 200 });
+    }) as FetchLike;
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleIssueCommand(["bulk-delete"], {
+        ...baseOptions(paths),
+        ids: "INF-2975,INF-2976",
+        confirm: true,
+        fetchImpl
+      });
+
+      expect(exitCode).toBe(0);
+      const parsed = JSON.parse(output.stdout.join(""));
+      expect(parsed.succeeded).toHaveLength(2);
+      expect(parsed.succeeded[0]).toMatchObject({ identifier: "INF-2975", deleted: true });
+      expect(parsed.succeeded[1]).toMatchObject({ identifier: "INF-2976", deleted: true });
+      expect(parsed.failed).toEqual([]);
     } finally {
       output.restore();
     }

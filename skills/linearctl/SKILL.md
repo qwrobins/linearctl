@@ -38,7 +38,8 @@ Raw GraphQL should not be used merely because it is possible. It is the fallback
 - `linearctl issue search [<text>|--query <text>] [--all] --json` — full-text search across issues
 - `linearctl issue create --title <title> --team <id> [--description <text>] [--priority <0-4>] [--estimate <n>] [--assignee <id>] [--label <id>] [--state <id>] [--cycle <id>] [--project <name|id>] [--project-milestone <id>|--milestone <id>] --json` — create an issue
 - `linearctl issue update <identifier> [--title <text>] [--description <text>] [--priority <0-4>] [--estimate <n>] [--assignee <id>] [--label <name|id>] [--state <id>] [--cycle <id>] [--project <id>] --json` — update an issue
-- `linearctl issue close <identifier> [--state <name>] --json` — close an issue (transitions to completed workflow state; defaults to "Done", use --state to pick another)
+- `linearctl issue close <identifier> [--state <name>] --json` — close an issue (transitions to a terminal completed/canceled workflow state; defaults to "Done", use --state to pick another)
+- `linearctl issue delete <identifier> --json` — delete/trash an issue by identifier or UUID
 - `linearctl issue assign <identifier> <assignee-id> --json` — assign an issue
 - `linearctl issue attach-slack <identifier> --url <slack-url> [--sync] [--title <text>] --json` — link a Slack thread to an issue (--sync enables bidirectional comment sync)
 - `linearctl issue comment <identifier> --body <text> --json` — add a comment to an issue
@@ -46,6 +47,7 @@ Raw GraphQL should not be used merely because it is possible. It is the fallback
 ### Bulk operations
 - `linearctl issue bulk-update --ids <id1,id2,...> [--state <id>] [--assignee <id>] [--priority <0-4>] [--estimate <n>] [--label <id>] [--cycle <id>] --json`
 - `linearctl issue bulk-close --ids <id1,id2,...> --json`
+- `linearctl issue bulk-delete --ids <id1,id2,...> --yes|--confirm --json` — delete/trash multiple issues; `--confirm` is accepted as an alias for `--yes`
 - `linearctl issue bulk-assign --ids <id1,id2,...> --assignee <id> --json`
 
 ### Projects

@@ -29,6 +29,8 @@ export interface IssueCommandOptions {
   env: Record<string, string | undefined>;
   fetchImpl?: FetchLike;
   dryRun?: boolean;
+  yes?: boolean;
+  confirm?: boolean;
   // issue create/update flags
   title?: string;
   team?: string;
@@ -197,6 +199,13 @@ ${CURATED_ISSUE_FRAGMENT}`;
 const ISSUE_ARCHIVE_MUTATION = `
 mutation IssueArchive($id: String!) {
   issueArchive(id: $id) {
+    success
+  }
+}`;
+
+const ISSUE_DELETE_MUTATION = `
+mutation IssueDelete($id: String!) {
+  issueDelete(id: $id) {
     success
   }
 }`;
@@ -928,13 +937,13 @@ async function handleIssueClose(
     let targetStateName: string;
 
     if (options.state !== undefined) {
-      // User specified a state — resolve and validate it is a completed type
+      // User specified a state — resolve and validate it is terminal.
       targetStateId = looksLikeId(options.state)
         ? options.state
         : await resolveStateId(options.state, teamId, resolverOpts);
       targetStateName = options.state;
 
-      // Verify the state is a completed type
+      // Verify the state is a terminal type.
       const stateCheck = await ctx.graphql<{
         workflowState: { id: string; name: string; type: string } | null
       }>(
@@ -942,9 +951,9 @@ async function handleIssueClose(
         { id: targetStateId }
       );
       const stateType = stateCheck.body.data?.workflowState?.type;
-      if (stateType !== "completed") {
+      if (stateType !== "completed" && stateType !== "canceled") {
         return emitError(
-          `State "${stateCheck.body.data?.workflowState?.name ?? options.state}" is type "${stateType ?? "unknown"}", not "completed". Use a completed-type state for issue close.`,
+          `State "${stateCheck.body.data?.workflowState?.name ?? options.state}" is type "${stateType ?? "unknown"}", not "completed" or "canceled". Use a terminal state for issue close.`,
           options, (await ctx.resolveProfile()).name
         );
       }
@@ -1009,6 +1018,52 @@ async function handleIssueClose(
       process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     } else {
       process.stdout.write(`Closed ${identifier} → ${resolvedStateName}\n`);
+    }
+
+    return ExitCode.Success;
+  } catch (error) {
+    return ctx.emitCaughtError(error);
+  }
+}
+
+async function handleIssueDelete(
+  identifier: string,
+  options: IssueCommandOptions
+): Promise<number> {
+  if (options.dryRun === true) {
+    return emitDryRunResult("delete", "issue", { id: identifier }, options);
+  }
+
+  const ctx = buildContext(options);
+
+  try {
+    const issue = await resolveIssueForDelete(identifier, ctx);
+    if (issue === undefined) {
+      return ctx.emitNotFound("Issue not found");
+    }
+
+    const response = await ctx.graphql<{
+      issueDelete: { success: boolean };
+    }>(ISSUE_DELETE_MUTATION, { id: issue.id });
+
+    if (
+      ctx.hasErrors(response.body.errors) ||
+      response.body.data?.issueDelete?.success !== true
+    ) {
+      const errors = ctx.mapGraphQLErrors(response.body.errors);
+      return ctx.emitFailure(
+        errors.length > 0 ? errors : [{ category: "general", message: "Issue delete failed" }]
+      );
+    }
+
+    const result = { id: issue.id, identifier: issue.identifier, deleted: true };
+
+    if (options.jsonEnvelope) {
+      return ctx.emitSuccess(result);
+    } else if (options.json) {
+      process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+    } else {
+      process.stdout.write(`Deleted ${issue.identifier}\n`);
     }
 
     return ExitCode.Success;
@@ -1159,6 +1214,26 @@ async function handleIssueComment(
 interface BulkResult {
   succeeded: Array<{ identifier: string; [key: string]: unknown }>;
   failed: Array<{ identifier: string; error: string }>;
+}
+
+async function resolveIssueForDelete(
+  identifier: string,
+  ctx: CommandContext
+): Promise<{ id: string; identifier: string } | undefined> {
+  if (looksLikeId(identifier)) {
+    return { id: identifier, identifier };
+  }
+
+  const response = await ctx.graphql<{ issue: { id: string; identifier: string } | null }>(
+    `query IssueDeleteResolve($id: String!) { issue(id: $id) { id identifier } }`,
+    { id: identifier }
+  );
+
+  if (ctx.hasErrors(response.body.errors)) {
+    throw new Error(response.body.errors?.[0]?.message ?? "Issue lookup failed");
+  }
+
+  return response.body.data?.issue ?? undefined;
 }
 
 function parseIds(options: IssueCommandOptions): string[] | undefined {
@@ -1321,6 +1396,51 @@ async function handleBulkClose(options: IssueCommandOptions): Promise<number> {
         }
 
         return { identifier: id, archived: true };
+      },
+      options
+    );
+  } catch (error) {
+    return ctx.emitCaughtError(error);
+  }
+}
+
+async function handleBulkDelete(options: IssueCommandOptions): Promise<number> {
+  const identifiers = parseIds(options);
+  if (identifiers === undefined || identifiers.length === 0) {
+    return emitValidationError("--ids is required for issue bulk-delete.", options);
+  }
+
+  if (options.dryRun) {
+    return emitDryRunResult("bulk-delete", "issue", { ids: identifiers }, options);
+  }
+
+  if (options.yes !== true && options.confirm !== true) {
+    return emitValidationError("issue bulk-delete is destructive; pass --yes or --confirm to proceed.", options);
+  }
+
+  const ctx = buildContext(options);
+
+  try {
+    return await executeBulk(
+      identifiers,
+      async (id) => {
+        const issue = await resolveIssueForDelete(id, ctx);
+        if (issue === undefined) {
+          throw new Error("Issue not found");
+        }
+
+        const response = await ctx.graphql<{
+          issueDelete: { success: boolean };
+        }>(ISSUE_DELETE_MUTATION, { id: issue.id });
+
+        if (
+          ctx.hasErrors(response.body.errors) ||
+          response.body.data?.issueDelete?.success !== true
+        ) {
+          throw new Error(response.body.errors?.[0]?.message ?? "Issue delete failed");
+        }
+
+        return { identifier: issue.identifier, id: issue.id, deleted: true };
       },
       options
     );
@@ -1534,6 +1654,17 @@ export async function handleIssueCommand(
     return handleIssueClose(identifier, options);
   }
 
+  if (subcommand === "delete") {
+    const identifier = rest[0];
+    if (identifier === undefined || identifier === "") {
+      return emitValidationError("usage: linearctl issue delete <identifier>", options);
+    }
+    if (rest.length > 1) {
+      return emitValidationError("issue delete accepts exactly one identifier.", options);
+    }
+    return handleIssueDelete(identifier, options);
+  }
+
   if (subcommand === "assign") {
     const identifier = rest[0];
     const assigneeId = rest[1];
@@ -1582,6 +1713,13 @@ export async function handleIssueCommand(
     return handleBulkClose(options);
   }
 
+  if (subcommand === "bulk-delete") {
+    if (rest.length > 0) {
+      return emitValidationError("issue bulk-delete does not accept positional arguments. Use --ids.", options);
+    }
+    return handleBulkDelete(options);
+  }
+
   if (subcommand === "bulk-assign") {
     if (rest.length > 0) {
       return emitValidationError("issue bulk-assign does not accept positional arguments. Use --ids.", options);
@@ -1589,5 +1727,5 @@ export async function handleIssueCommand(
     return handleBulkAssign(options);
   }
 
-  return emitValidationError("unsupported issue command. Try: get, view, create, list, search, update, close, assign, comment, attach-slack, bulk-update, bulk-close, bulk-assign.", options);
+  return emitValidationError("unsupported issue command. Try: get, view, create, list, search, update, close, delete, assign, comment, attach-slack, bulk-update, bulk-close, bulk-delete, bulk-assign.", options);
 }
