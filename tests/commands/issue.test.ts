@@ -834,6 +834,27 @@ describe("handleIssueCommand — issue search", () => {
       output.restore();
     }
   });
+
+  it("rejects mixed positional and flag-based search terms", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-issue-"));
+    const paths = await writeProfileFiles(directory);
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleIssueCommand(["search", "positional"], {
+        ...baseOptions(paths),
+        query: "flag"
+      });
+
+      expect(exitCode).toBe(5);
+      expect(output.stderr.join("")).toContain(
+        "mixed positional and flag-based search terms are not allowed"
+      );
+      expect(output.stdout.join("")).toBe("");
+    } finally {
+      output.restore();
+    }
+  });
 });
 
 describe("handleIssueCommand — issue update", () => {

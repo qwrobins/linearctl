@@ -1503,6 +1503,12 @@ export async function handleIssueCommand(
     if (rest.length > 1) {
       return emitValidationError("issue search accepts at most one query argument.", options);
     }
+    if (rest[0] !== undefined && (options.query !== undefined || options.search !== undefined)) {
+      return emitValidationError(
+        "mixed positional and flag-based search terms are not allowed; provide either a positional query or --query/--search, not both.",
+        options
+      );
+    }
     return handleIssueSearch(rest[0] === undefined ? options : { ...options, query: options.query ?? options.search ?? rest[0] });
   }
 
