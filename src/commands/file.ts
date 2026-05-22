@@ -206,6 +206,9 @@ async function handleFileUpload(
     for (const header of headers) {
       putHeaders[header.key] = header.value;
     }
+    if (!Object.keys(putHeaders).some((key) => key.toLowerCase() === "content-type")) {
+      putHeaders["Content-Type"] = contentType;
+    }
 
     const putResponse = await fetchImpl(uploadUrl, {
       method: "PUT",

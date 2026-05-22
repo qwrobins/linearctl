@@ -65,6 +65,7 @@ function makeRawIssue(overrides?: Partial<Record<string, unknown>>) {
     creator: { id: "user-2", name: "Alice", email: "alice@example.com" },
     cycle: { id: "cycle-1", number: 42, name: "Cycle 42" },
     project: { id: "proj-1", name: "Auth hardening" },
+    parent: null,
     labels: { nodes: [{ id: "label-1", name: "bug" }, { id: "label-2", name: "mobile" }] },
     url: "https://linear.app/team/issue/INF-2975",
     createdAt: "2026-04-09T10:00:00Z",
@@ -99,6 +100,14 @@ describe("normalizeIssue", () => {
     ]);
     expect(normalized).not.toHaveProperty("labels.nodes");
   });
+
+  it("preserves parent issue details", () => {
+    const raw = makeRawIssue({
+      parent: { id: "parent-1", identifier: "INF-1", title: "Parent issue" }
+    });
+    const normalized = normalizeIssue(raw as Parameters<typeof normalizeIssue>[0]);
+    expect(normalized.parent).toEqual({ id: "parent-1", identifier: "INF-1", title: "Parent issue" });
+  });
 });
 
 describe("handleIssueCommand — issue get", () => {
@@ -124,6 +133,7 @@ describe("handleIssueCommand — issue get", () => {
       ]);
       expect(parsed.state).toEqual({ id: "state-1", name: "In Progress", type: "started" });
       expect(parsed.team).toEqual({ id: "team-1", key: "INF", name: "Infrastructure" });
+      expect(parsed.parent).toBeNull();
     } finally {
       output.restore();
     }

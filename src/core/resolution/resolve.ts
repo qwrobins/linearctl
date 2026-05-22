@@ -333,6 +333,9 @@ export async function resolveProjectId(
 
   const scope = teamId !== undefined ? ` in team ${teamId}` : "";
   if (matches.length === 0) {
+    if (teamId !== undefined) {
+      return resolveProjectId(name, undefined, options);
+    }
     throw new ResolutionError(
       `No project found matching "${name}"${scope}. Use a direct project ID instead.`,
       "not-found"

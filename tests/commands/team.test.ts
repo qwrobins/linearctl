@@ -195,19 +195,28 @@ describe("handleTeamCommand — team members", () => {
   it("returns team members with useful user fields", async () => {
     const directory = await mkdtemp(join(tmpdir(), "linear-cli-team-"));
     const paths = await writeProfileFiles(directory);
-    const fetchImpl = makeFetch({
-      data: {
-        team: {
-          members: {
-            nodes: [
-              makeRawTeamMember(),
-              makeRawTeamMember({ id: "user-uuid-2", name: "Quentin Robins II", displayName: "Alice", email: null, active: false })
-            ],
-            pageInfo: { hasNextPage: false, endCursor: null }
+    let callCount = 0;
+    const fetchImpl = vi.fn(async () => {
+      callCount++;
+      if (callCount === 1) {
+        return new Response(JSON.stringify({
+          data: { teams: { nodes: [{ id: "team-uuid-1", key: "INF", name: "Infrastructure" }] } }
+        }), { status: 200 });
+      }
+      return new Response(JSON.stringify({
+        data: {
+          team: {
+            members: {
+              nodes: [
+                makeRawTeamMember(),
+                makeRawTeamMember({ id: "user-uuid-2", name: "Quentin Robins II", displayName: "Alice", email: null, active: false })
+              ],
+              pageInfo: { hasNextPage: false, endCursor: null }
+            }
           }
         }
-      }
-    });
+      }), { status: 200 });
+    }) as FetchLike;
     const output = captureOutput();
 
     try {
@@ -235,10 +244,10 @@ describe("handleTeamCommand — team members", () => {
         }
       ]);
 
-      const callBody = JSON.parse(String((fetchImpl as ReturnType<typeof vi.fn>).mock.calls[0]?.[1]?.body));
+      const callBody = JSON.parse(String((fetchImpl as ReturnType<typeof vi.fn>).mock.calls[1]?.[1]?.body));
       expect(callBody.query).toContain("team(id: $id)");
       expect(callBody.query).toContain("members(first: $first, after: $after)");
-      expect(callBody.variables).toEqual({ id: "INF", first: 50 });
+      expect(callBody.variables).toEqual({ id: "team-uuid-1", first: 50 });
     } finally {
       output.restore();
     }
@@ -247,7 +256,7 @@ describe("handleTeamCommand — team members", () => {
   it("returns exit code 4 when the team is not found", async () => {
     const directory = await mkdtemp(join(tmpdir(), "linear-cli-team-"));
     const paths = await writeProfileFiles(directory);
-    const fetchImpl = makeFetch({ data: { team: null } });
+    const fetchImpl = makeFetch({ data: { teams: { nodes: [] } } });
     const output = captureOutput();
 
     try {

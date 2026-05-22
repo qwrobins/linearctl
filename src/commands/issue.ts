@@ -114,6 +114,7 @@ fragment CuratedIssue on Issue {
   creator { id name email }
   cycle { id number name }
   project { id name }
+  parent { id identifier title }
   labels { nodes { id name } }
   url
   createdAt
@@ -134,6 +135,7 @@ fragment CuratedIssueSearchResult on IssueSearchResult {
   creator { id name email }
   cycle { id number name }
   project { id name }
+  parent { id identifier title }
   labels { nodes { id name } }
   url
   createdAt
@@ -262,6 +264,7 @@ interface RawIssue {
   creator: { id: string; name: string; email: string } | null;
   cycle: { id: string; number: number; name: string | null } | null;
   project: { id: string; name: string } | null;
+  parent: { id: string; identifier: string; title: string } | null;
   labels: { nodes: Array<{ id: string; name: string }> };
   url: string;
   createdAt: string;
@@ -281,6 +284,7 @@ export interface NormalizedIssue {
   creator: { id: string; name: string; email: string } | null;
   cycle: { id: string; number: number; name: string | null } | null;
   project: { id: string; name: string } | null;
+  parent: { id: string; identifier: string; title: string } | null;
   labels: Array<{ id: string; name: string }>;
   url: string;
   createdAt: string;
@@ -301,6 +305,7 @@ export function normalizeIssue(raw: RawIssue): NormalizedIssue {
     creator: raw.creator,
     cycle: raw.cycle,
     project: raw.project,
+    parent: raw.parent,
     labels: raw.labels.nodes,
     url: raw.url,
     createdAt: raw.createdAt,
