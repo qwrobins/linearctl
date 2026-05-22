@@ -60,7 +60,7 @@ linearctl issue bulk-update --ids <id1,id2,...> [--state <id>] [--assignee <id>]
 linearctl issue bulk-close --ids <id1,id2,...> --json
 
 # Bulk delete multiple issues
-linearctl issue bulk-delete --ids <id1,id2,...> --yes --json
+linearctl issue bulk-delete --ids <id1,id2,...> --yes|--confirm --json
 
 # Bulk assign multiple issues
 linearctl issue bulk-assign --ids <id1,id2,...> --assignee <id> --json

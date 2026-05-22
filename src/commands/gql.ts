@@ -153,11 +153,37 @@ export async function handleGqlCommand(
 }
 
 function normalizeGraphQLDocument(subcommand: string, document: string): string {
-  const trimmed = document.trimStart();
-  if (subcommand !== "mutation" || /^mutation\b/.test(trimmed)) {
+  if (subcommand !== "mutation") {
     return document;
   }
-  return `mutation ${trimmed}`;
+
+  const operationStart = findGraphQLOperationStart(document);
+  const operationSlice = document.slice(operationStart);
+  if (/^mutation\b/.test(operationSlice)) {
+    return document;
+  }
+
+  return `${document.slice(0, operationStart)}mutation ${operationSlice}`;
+}
+
+function findGraphQLOperationStart(document: string): number {
+  let index = 0;
+
+  for (;;) {
+    while (index < document.length && /\s/.test(document[index]!)) {
+      index += 1;
+    }
+
+    if (document[index] !== "#") {
+      return index;
+    }
+
+    const nextLine = document.indexOf("\n", index);
+    if (nextLine === -1) {
+      return document.length;
+    }
+    index = nextLine + 1;
+  }
 }
 
 async function resolveGraphQLDocument(

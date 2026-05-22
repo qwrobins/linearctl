@@ -47,7 +47,7 @@ Raw GraphQL should not be used merely because it is possible. It is the fallback
 ### Bulk operations
 - `linearctl issue bulk-update --ids <id1,id2,...> [--state <id>] [--assignee <id>] [--priority <0-4>] [--estimate <n>] [--label <id>] [--cycle <id>] --json`
 - `linearctl issue bulk-close --ids <id1,id2,...> --json`
-- `linearctl issue bulk-delete --ids <id1,id2,...> --yes --json` — delete/trash multiple issues; `--confirm` is also accepted
+- `linearctl issue bulk-delete --ids <id1,id2,...> --yes|--confirm --json` — delete/trash multiple issues; `--confirm` is accepted as an alias for `--yes`
 - `linearctl issue bulk-assign --ids <id1,id2,...> --assignee <id> --json`
 
 ### Projects

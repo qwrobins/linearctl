@@ -1381,6 +1381,42 @@ describe("handleIssueCommand — issue bulk-delete", () => {
       output.restore();
     }
   });
+
+  it("deletes multiple issues when confirmed with --confirm", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-issue-"));
+    const paths = await writeProfileFiles(directory);
+    const fetchImpl = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body ?? "{}")) as { query: string; variables: Record<string, unknown> };
+      if (body.query.includes("IssueDeleteResolve")) {
+        const identifier = String(body.variables.id);
+        return new Response(JSON.stringify({
+          data: { issue: { id: `${identifier}-uuid`, identifier } }
+        }), { status: 200 });
+      }
+      return new Response(JSON.stringify({
+        data: { issueDelete: { success: true } }
+      }), { status: 200 });
+    }) as FetchLike;
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleIssueCommand(["bulk-delete"], {
+        ...baseOptions(paths),
+        ids: "INF-2975,INF-2976",
+        confirm: true,
+        fetchImpl
+      });
+
+      expect(exitCode).toBe(0);
+      const parsed = JSON.parse(output.stdout.join(""));
+      expect(parsed.succeeded).toHaveLength(2);
+      expect(parsed.succeeded[0]).toMatchObject({ identifier: "INF-2975", deleted: true });
+      expect(parsed.succeeded[1]).toMatchObject({ identifier: "INF-2976", deleted: true });
+      expect(parsed.failed).toEqual([]);
+    } finally {
+      output.restore();
+    }
+  });
 });
 
 describe("handleIssueCommand — issue bulk-assign", () => {

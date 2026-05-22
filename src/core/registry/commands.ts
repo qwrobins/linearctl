@@ -60,7 +60,7 @@ export const COMMAND_REGISTRY: readonly CommandRegistration[] = [
       "attach-slack": { usage: "linearctl issue attach-slack <identifier> --url <slack-url> [--sync] [--title <text>] [--json]" },
       "bulk-update":  { usage: "linearctl issue bulk-update --ids <id1,id2,...> [--state <id>] [--assignee <id>] [--priority <0-4>] [--estimate <n>] [--label <id>] [--cycle <id>] [--json]" },
       "bulk-close":   { usage: "linearctl issue bulk-close --ids <id1,id2,...> [--json]" },
-      "bulk-delete":  { usage: "linearctl issue bulk-delete --ids <id1,id2,...> --yes [--json]" },
+      "bulk-delete":  { usage: "linearctl issue bulk-delete --ids <id1,id2,...> (--yes|--confirm) [--json]" },
       "bulk-assign":  { usage: "linearctl issue bulk-assign --ids <id1,id2,...> --assignee <id> [--json]" },
     },
     handler: handleIssueCommand,

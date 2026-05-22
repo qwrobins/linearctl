@@ -348,6 +348,39 @@ describe("handleGqlCommand", () => {
     }
   });
 
+  it("preserves leading comments when wrapping bare mutation bodies", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-gql-"));
+    const { configFile, credentialsFile } = await writeProfileFiles(directory);
+    const fetchSpy = vi.fn(async (_input, init) =>
+      new Response(JSON.stringify({ data: { issueDelete: { success: true } } }), { status: 200 })
+    );
+    const fetchImpl = fetchSpy as unknown as FetchLike;
+    const output = captureOutput();
+
+    try {
+      await expect(
+        handleGqlCommand(["mutation", "# cleanup\n{ issueDelete(id: \"issue-1\") { success } }"], {
+          json: true,
+          jsonEnvelope: false,
+          raw: false,
+          stdin: false,
+          vars: [],
+          configFile,
+          credentialsFile,
+          env: {},
+          stdinStream: Readable.from([]),
+          fetchImpl
+        })
+      ).resolves.toBe(0);
+
+      expect(JSON.parse(output.stdout.join(""))).toEqual({ issueDelete: { success: true } });
+      const fetchBody = JSON.parse(String(fetchSpy.mock.calls[0]?.[1]?.body));
+      expect(fetchBody.query).toBe('# cleanup\nmutation { issueDelete(id: "issue-1") { success } }');
+    } finally {
+      output.restore();
+    }
+  });
+
   it("returns the exact GraphQL body in raw mode", async () => {
     const directory = await mkdtemp(join(tmpdir(), "linear-cli-gql-"));
     const { configFile, credentialsFile } = await writeProfileFiles(directory);
