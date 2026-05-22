@@ -803,6 +803,40 @@ describe("handleProjectCommand — project list", () => {
     }
   });
 
+  it("sends project name search filters from --query", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-project-"));
+    const paths = await writeProfileFiles(directory);
+    const fetchImpl = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body ?? "{}")) as { variables?: Record<string, unknown> };
+      expect(body.variables).toMatchObject({
+        filter: {
+          name: { containsIgnoreCase: "sidecar" }
+        }
+      });
+      return new Response(JSON.stringify({
+        data: {
+          projects: {
+            nodes: [makeRawProject({ name: "A2A Runner Staging Database Sidecar" })],
+            pageInfo: { hasNextPage: false }
+          }
+        }
+      }), { status: 200 });
+    }) as FetchLike;
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleProjectCommand(["list"], {
+        ...baseOptions(paths),
+        query: "sidecar",
+        fetchImpl
+      });
+
+      expect(exitCode).toBe(0);
+    } finally {
+      output.restore();
+    }
+  });
+
   it("returns validation error for invalid project state type", async () => {
     const directory = await mkdtemp(join(tmpdir(), "linear-cli-project-"));
     const paths = await writeProfileFiles(directory);

@@ -33,9 +33,9 @@ Raw GraphQL should not be used merely because it is possible. It is the fallback
 ## Available curated commands
 
 ### Issues
-- `linearctl issue get <identifier> --json` — fetch a single issue by identifier (e.g. INF-2975) or UUID
-- `linearctl issue list [--state <name> ...] [--assignee <name|displayName|email|"me"|id>] [--team <id>] [--label <name|id>] [--priority <0-4>] [--cycle <id>] [--project <name|id>] [--created-after <date>] [--updated-after <date>] [--completed-after <date>] [--order-by <field>] [--all-teams] [--all] [--json]` — list issues with filters; repeated `--state` values are unioned
-- `linearctl issue search --query <text> [--all] --json` — full-text search across issues
+- `linearctl issue get <identifier> --json` / `linearctl issue view <identifier> --json` — fetch a single issue by identifier (e.g. INF-2975) or UUID
+- `linearctl issue list [--search <text>|--query <text>] [--state <name> ...] [--status <name>] [--assignee <name|displayName|email|"me"|id>] [--team <id>] [--label <name|id>] [--priority <0-4>] [--cycle <id>] [--project <name|id>] [--created-after <date>] [--updated-after <date>] [--completed-after <date>] [--order-by <field>] [--all-teams] [--all] [--max <n>|--limit <n>] [--json]` — list issues with filters; repeated `--state` values are unioned; `--status` aliases `--state`; `--search`/`--query` routes to full-text search
+- `linearctl issue search [<text>|--query <text>] [--all] --json` — full-text search across issues
 - `linearctl issue create --title <title> --team <id> [--description <text>] [--priority <0-4>] [--estimate <n>] [--assignee <id>] [--label <id>] [--state <id>] [--cycle <id>] [--project <name|id>] [--project-milestone <id>|--milestone <id>] --json` — create an issue
 - `linearctl issue update <identifier> [--title <text>] [--description <text>] [--priority <0-4>] [--estimate <n>] [--assignee <id>] [--label <name|id>] [--state <id>] [--cycle <id>] [--project <id>] --json` — update an issue
 - `linearctl issue close <identifier> [--state <name>] --json` — close an issue (transitions to completed workflow state; defaults to "Done", use --state to pick another)
@@ -50,7 +50,7 @@ Raw GraphQL should not be used merely because it is possible. It is the fallback
 
 ### Projects
 - `linearctl project get <name|id> --json` — richer single-project detail payload than `project list` (includes progress/health/currentProgress, and milestones with id, name, description, targetDate, sortOrder, createdAt, updatedAt); project names resolve by exact match, unique prefix, or unique substring
-- `linearctl project list [--team <id>] [--state <status-type> ...] [--all-teams] --json` — includes portfolio fields (`progress`, `health`, `description`, `updatedAt`, `currentProgress`), normalized `milestones` with `name`, `targetDate`, `progress`, and `status`, and milestone truncation metadata (`milestonesPageInfo`, `milestonesTruncated`) in JSON output; human output shows progress, health, description, updated time, and milestone summaries; `--state` values: backlog, planned, started, paused, completed, canceled; repeated `--state` values are unioned
+- `linearctl project list [--query <text>|--search <text>|--name <text>] [--team <id>] [--state <status-type> ...] [--all-teams] --json` — includes portfolio fields (`progress`, `health`, `description`, `updatedAt`, `currentProgress`), normalized `milestones` with `name`, `targetDate`, `progress`, and `status`, and milestone truncation metadata (`milestonesPageInfo`, `milestonesTruncated`) in JSON output; human output shows progress, health, description, updated time, and milestone summaries; `--state` values: backlog, planned, started, paused, completed, canceled; repeated `--state` values are unioned; text flags filter project names
 - `linearctl project create --name <name> [--description <text>] [--team <id>] --json`
 - `linearctl project create-with-issues --name <name> --team <id> --issues-json <json> [--description <text>] --json` — create a project then batch-create linked issues (reports partial success if issue creation fails after project was created)
 - `linearctl project update <id> [--name <text>] [--description <text>] [--status <id|name|type>|--state <name|type>] [--lead <user-id|email|"me">] [--start-date <YYYY-MM-DD>] [--target-date <YYYY-MM-DD>] --json` — `--status`/`--state` accepts status names, state types, or status IDs; `--state` remains an alias
@@ -176,8 +176,8 @@ Use `--dry-run` on any mutating command to preview what would happen without exe
 
 - Default list behavior returns the first page only (up to 50 items)
 - **When results are truncated, a warning is emitted to stderr** — check stderr to know if you have incomplete data
-- Use `--all` to fetch all results (with `--max` to limit)
-- Use `--max <n>` to cap total results
+- Use `--all` to fetch all results (with `--max` or `--limit` to limit)
+- Use `--max <n>` or `--limit <n>` to cap total results
 - Use `--quiet` / `-q` to suppress the truncation warning (useful when piping JSON)
 - Add filters before broad pagination whenever possible
 - Prefer `--jsonl` for large result sets — it streams and auto-paginates

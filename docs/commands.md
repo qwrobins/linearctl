@@ -9,16 +9,17 @@ Global flags: `--profile <name>`, `--no-retry`, `--max-retries <n>`.
 ```bash
 # Get a single issue by identifier or UUID
 linearctl issue get <identifier> --json
+linearctl issue view <identifier> --json
 
 # List issues with filters
-linearctl issue list [--team <name|key|id>] [--state <name|id> ...] [--assignee <name|displayName|email|"me"|id>] \
+linearctl issue list [--search <text>|--query <text>] [--team <name|key|id>] [--state <name|id> ...] [--status <name|id>] [--assignee <name|displayName|email|"me"|id>] \
   [--label <name|id>] [--priority <0-4>] [--cycle <id>] [--project <name|id>] \
   [--created-after <date>] [--updated-after <date>] [--completed-after <date>] \
   [--all-teams] [--filter-json <json>] [--order-by <field>] \
-  [--all] [--max <n>] [--page-size <n>] [--after <cursor>] --json
+  [--all] [--max <n>|--limit <n>] [--page-size <n>] [--after <cursor>] --json
 
 # Search issues by text
-linearctl issue search --query <text> [--all] --json
+linearctl issue search [<text>|--query <text>] [--all] --json
 
 # Create an issue
 linearctl issue create --title <title> --team <name|key|id> \
@@ -65,7 +66,7 @@ Bulk operations report partial success. Check the response for per-item results.
 
 ```bash
 linearctl project get <name|id> --json             # supports exact, unique prefix, or unique substring names
-linearctl project list [--team <name|key|id>] [--state <status-type> ...] [--all-teams] --json
+linearctl project list [--query <text>|--search <text>|--name <text>] [--team <name|key|id>] [--state <status-type> ...] [--all-teams] --json
 linearctl project create --name <name> [--description <text>] [--team <name|key|id>] --json
 linearctl project create-with-issues --name <name> --team <name|key|id> \
   --issues-json '[{"title":"...","teamId":"..."}]' [--description <text>] --json
@@ -79,7 +80,7 @@ linearctl project delete <id> --json              # [destructive]
 
 For `project update`, `--status` accepts a status name, status type, or status ID. `--state` remains supported as an alias for compatibility.
 
-For `project list`, `--state` accepts project status types: `backlog`, `planned`, `started`, `paused`, `completed`, or `canceled`. Repeat `--state` to return projects matching any provided type.
+For `project list`, `--state` accepts project status types: `backlog`, `planned`, `started`, `paused`, `completed`, or `canceled`. Repeat `--state` to return projects matching any provided type. Use `--query`, `--search`, or `--name` to filter by project name.
 
 For `project get`, name resolution accepts exact names, unique prefixes, or unique substrings. Ambiguous partial matches fail with candidate projects.
 

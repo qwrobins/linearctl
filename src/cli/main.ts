@@ -176,6 +176,7 @@ function toParsedCliArguments(values: Record<string, unknown>, positionals: stri
   const jsonl = values.jsonl === true;
   const jsonEnvelope = values["json-envelope"] === true;
   const states = stringArrayValue(values.state);
+  const maxValue = typeof values.max === "string" ? values.max : typeof values.limit === "string" ? values.limit : undefined;
 
   if (jsonl && jsonEnvelope) {
     throw new Error("--jsonl and --json-envelope are mutually exclusive");
@@ -238,6 +239,7 @@ function toParsedCliArguments(values: Record<string, unknown>, positionals: stri
     ...(typeof values.output === "string" ? { output: values.output } : {}),
     ...(typeof values["expires-in"] === "string" ? { expiresIn: values["expires-in"] } : {}),
     ...(typeof values.query === "string" ? { query: values.query } : {}),
+    ...(typeof values.search === "string" ? { search: values.search, ...(typeof values.query === "string" ? {} : { query: values.search }) } : {}),
     ...(typeof values["filter-json"] === "string" ? { filterJson: values["filter-json"] } : {}),
     ...(typeof values["created-after"] === "string" ? { createdAfter: values["created-after"] } : {}),
     ...(typeof values["updated-after"] === "string" ? { updatedAfter: values["updated-after"] } : {}),
@@ -249,7 +251,7 @@ function toParsedCliArguments(values: Record<string, unknown>, positionals: stri
     ...(typeof values["order-by"] === "string" ? { orderBy: values["order-by"] } : {}),
     ...(typeof values["order-dir"] === "string" ? { orderDir: values["order-dir"] } : {}),
     all: values.all === true,
-    ...(typeof values.max === "string" ? { max: parsePositiveInt(values.max, "max") } : {}),
+    ...(maxValue === undefined ? {} : { max: parsePositiveInt(maxValue, typeof values.max === "string" ? "max" : "limit") }),
     ...(typeof values["page-size"] === "string" ? { pageSize: parsePositiveInt(values["page-size"], "page-size") } : {}),
     ...(typeof values.after === "string" ? { after: values.after } : {}),
     sync: values.sync === true,

@@ -4,6 +4,7 @@ import {
   resolveUserId,
   resolveLabelId,
   resolveStateId,
+  resolveProjectId,
   looksLikeId,
   ResolutionError
 } from "../../../src/core/resolution/resolve.js";
@@ -339,5 +340,33 @@ describe("resolveStateId", () => {
       expect((error as ResolutionError).kind).toBe("not-found");
       expect((error as ResolutionError).message).toContain("Team");
     }
+  });
+});
+
+describe("resolveProjectId", () => {
+  it("scopes project lookup with accessibleTeams", async () => {
+    const fetchImpl = makeFetch({
+      data: {
+        projects: {
+          pageInfo: { hasNextPage: false, endCursor: null },
+          nodes: [
+            {
+              id: "project-1",
+              name: "A2A Runner Staging Database Sidecar",
+              teams: { nodes: [{ id: "team-1", key: "INF", name: "Infrastructure" }] }
+            }
+          ]
+        }
+      }
+    });
+
+    const result = await resolveProjectId("sidecar", "team-1", makeOptions(fetchImpl));
+    expect(result).toBe("project-1");
+
+    const call = (fetchImpl as ReturnType<typeof vi.fn>).mock.calls[0] as [string, RequestInit];
+    const body = JSON.parse(call[1].body as string) as { variables: Record<string, unknown> };
+    expect(body.variables.filter).toEqual({
+      accessibleTeams: { some: { id: { eq: "team-1" } } }
+    });
   });
 });

@@ -63,6 +63,7 @@ export interface ParsedCliArguments {
   state?: string;
   states?: string[];
   status?: string;
+  search?: string;
   inputJson?: string;
   issuesJson?: string;
   ids?: string;
