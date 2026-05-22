@@ -1,5 +1,6 @@
 import { ExitCode } from "../core/errors/exit-codes.js";
 import { loadOptionalConfig, loadOptionalCredentials } from "../core/auth/runtime.js";
+import { setProfileMetadata, writeLinearConfigFile } from "../core/config/config-file.js";
 import type { FetchLike } from "../core/transport/graphql.js";
 import { CommandContext } from "../core/runtime/command-context.js";
 
@@ -25,6 +26,16 @@ interface WorkspaceListEntry {
 
 interface WorkspaceListResult {
   workspaces: WorkspaceListEntry[];
+}
+
+interface ViewerWorkspaceResponse {
+  viewer: {
+    email?: string;
+    organization?: {
+      id: string;
+      name: string;
+    };
+  };
 }
 
 /** Build a CommandContext from workspace handler options */
@@ -58,18 +69,57 @@ async function handleWorkspaceList(options: WorkspaceCommandOptions): Promise<nu
     ...Object.keys(credentials.profiles)
   ]);
 
-  const workspaces: WorkspaceListEntry[] = [...profileNames].sort().map((profileName) => {
+  let updatedConfig = config;
+  const workspaces: WorkspaceListEntry[] = [];
+
+  for (const profileName of [...profileNames].sort()) {
     const metadata = config.profiles[profileName] ?? {};
     const credential = credentials.profiles[profileName];
+    let resolvedMetadata = metadata;
 
-    return {
+    if (
+      credential !== undefined &&
+      (metadata.workspace === undefined || metadata.workspaceId === undefined || metadata.userEmail === undefined)
+    ) {
+      const ctx = new CommandContext({
+        json: options.json,
+        jsonEnvelope: options.jsonEnvelope,
+        profile: profileName,
+        configFile: options.configFile,
+        credentialsFile: options.credentialsFile,
+        env: options.env,
+        ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl }),
+      });
+      try {
+        const response = await ctx.graphql<ViewerWorkspaceResponse>(
+          "query WorkspaceListViewer { viewer { email organization { id name } } }"
+        );
+        if (!ctx.hasErrors(response.body.errors)) {
+          resolvedMetadata = {
+            ...metadata,
+            ...(response.body.data?.viewer.organization?.name === undefined ? {} : { workspace: response.body.data.viewer.organization.name }),
+            ...(response.body.data?.viewer.organization?.id === undefined ? {} : { workspaceId: response.body.data.viewer.organization.id }),
+            ...(response.body.data?.viewer.email === undefined ? {} : { userEmail: response.body.data.viewer.email })
+          };
+          updatedConfig = setProfileMetadata(updatedConfig, profileName, resolvedMetadata);
+        }
+      } catch {
+        // Keep listing local profile data even if one profile cannot be contacted.
+      }
+    }
+
+    workspaces.push({
       profile: profileName,
-      workspace: metadata.workspace ?? null,
-      workspaceId: metadata.workspaceId ?? null,
-      userEmail: metadata.userEmail ?? null,
+      workspace: resolvedMetadata.workspace ?? null,
+      workspaceId: resolvedMetadata.workspaceId ?? null,
+      userEmail: resolvedMetadata.userEmail ?? null,
       authType: credential?.type ?? "missing"
-    };
-  });
+    });
+  }
+
+  if (JSON.stringify(updatedConfig) !== JSON.stringify(config)) {
+    await writeLinearConfigFile(options.configFile, updatedConfig);
+  }
 
   const result: WorkspaceListResult = { workspaces };
 

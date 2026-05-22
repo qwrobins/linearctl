@@ -84,14 +84,16 @@ fragment CuratedAttachment on Attachment {
 }`;
 
 const ATTACHMENT_LIST_QUERY = `
-query AttachmentList($first: Int!, $after: String, $issueId: ID!) {
-  attachments(first: $first, after: $after, filter: { issue: { id: { eq: $issueId } } }) {
+query AttachmentList($first: Int!, $after: String, $issueId: String!) {
+  issue(id: $issueId) {
+    attachments(first: $first, after: $after) {
     nodes {
       ...CuratedAttachment
     }
     pageInfo {
       hasNextPage
       endCursor
+    }
     }
   }
 }
@@ -183,8 +185,11 @@ async function handleAttachmentList(options: AttachmentCommandOptions): Promise<
         : { apiUrl: options.apiUrl }),
       ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl }),
       extractConnection: (data: unknown) => {
-        const d = data as { attachments: { nodes: RawAttachment[]; pageInfo: PageInfo } };
-        return d.attachments;
+        const d = data as {
+          issue?: { attachments: { nodes: RawAttachment[]; pageInfo: PageInfo } } | null;
+          attachments?: { nodes: RawAttachment[]; pageInfo: PageInfo };
+        };
+        return d.issue?.attachments ?? d.attachments ?? { nodes: [], pageInfo: { hasNextPage: false, endCursor: null } };
       }
     };
 

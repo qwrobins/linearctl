@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.7] - 2026-05-22
+
+### Added
+
+- `cycle archive/delete` and `state archive/delete` provide curated cleanup commands without raw GraphQL.
+
+### Fixed
+
+- Curated issue JSON now includes `estimate`, and `issue update --project` plus `issue bulk-update --state` resolve friendly names consistently.
+- `team get/members`, `user get`, `label get`, and `state get` now accept friendly names where Linear supports resolution.
+- `cycle list`, `file upload`, and `attachment list --issue` use current Linear GraphQL shapes.
+- `project create-with-issues` now defaults missing issue `teamId` values from the command-level `--team`.
+- `workspace list` refreshes missing workspace/user metadata from each configured profile.
+- Unknown top-level commands now report a clear unknown-command error.
+
 ## [0.6.6] - 2026-05-22
 
 ### Added

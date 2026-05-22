@@ -6,7 +6,7 @@ import { paginateGraphQL, validatePaginationOptions } from "../core/pagination/p
 import type { PaginationOptions } from "../core/pagination/pagination.js";
 import { streamPaginateGraphQL } from "../core/pagination/streaming.js";
 import { emitDryRunResult } from "../core/output/dry-run.js";
-import { resolveTeamId, looksLikeId } from "../core/resolution/resolve.js";
+import { resolveTeamId, resolveStateId, looksLikeId } from "../core/resolution/resolve.js";
 import { CommandContext } from "../core/runtime/command-context.js";
 
 const VALID_STATE_TYPES = ["backlog", "unstarted", "started", "completed", "canceled"] as const;
@@ -111,6 +111,21 @@ mutation StateCreate($input: WorkflowStateCreateInput!) {
 }
 ${CURATED_STATE_FRAGMENT}`;
 
+const STATE_ARCHIVE_MUTATION = `
+mutation StateArchive($id: String!) {
+  workflowStateArchive(id: $id) {
+    success
+  }
+}`;
+
+const DEFAULT_STATE_COLORS: Record<string, string> = {
+  backlog: "#bec2c8",
+  unstarted: "#bec2c8",
+  started: "#f2c94c",
+  completed: "#5e6ad2",
+  canceled: "#95a2b3"
+};
+
 export function normalizeWorkflowState(raw: RawWorkflowState): NormalizedWorkflowState {
   return {
     id: raw.id,
@@ -162,13 +177,24 @@ async function handleStateGet(
   const ctx = buildContext(options);
 
   try {
-    const response = await ctx.graphql<{ workflowState: RawWorkflowState | null }>(
+    let response = await ctx.graphql<{ workflowState: RawWorkflowState | null }>(
       STATE_GET_QUERY,
       { id: identifier }
     );
 
     if (ctx.hasErrors(response.body.errors)) {
-      return ctx.emitFailure(ctx.mapGraphQLErrors(response.body.errors));
+      const profile = await ctx.resolveProfile();
+      const resolverOpts = await ctx.resolverOptions();
+      const effectiveTeam = options.allTeams ? undefined : (options.team ?? profile.metadata.defaultTeam);
+      if (looksLikeId(identifier) || effectiveTeam === undefined) {
+        return ctx.emitFailure(ctx.mapGraphQLErrors(response.body.errors));
+      }
+      const teamId = looksLikeId(effectiveTeam) ? effectiveTeam : await resolveTeamId(effectiveTeam, resolverOpts);
+      const stateId = await resolveStateId(identifier, teamId, resolverOpts);
+      response = await ctx.graphql<{ workflowState: RawWorkflowState | null }>(STATE_GET_QUERY, { id: stateId });
+      if (ctx.hasErrors(response.body.errors)) {
+        return ctx.emitFailure(ctx.mapGraphQLErrors(response.body.errors));
+      }
     }
 
     if (response.body.data?.workflowState === null || response.body.data?.workflowState === undefined) {
@@ -298,9 +324,7 @@ async function handleStateCreate(options: StateCommandOptions): Promise<number> 
   if (options.description !== undefined) {
     input.description = options.description;
   }
-  if (options.color !== undefined) {
-    input.color = options.color;
-  }
+  input.color = options.color ?? DEFAULT_STATE_COLORS[options.stateType];
   if (options.position !== undefined) {
     const pos = parseFloat(options.position);
     if (Number.isNaN(pos)) {
@@ -350,6 +374,50 @@ async function handleStateCreate(options: StateCommandOptions): Promise<number> 
   }
 }
 
+async function handleStateArchive(identifier: string, options: StateCommandOptions): Promise<number> {
+  const ctx = buildContext(options);
+
+  try {
+    const profile = await ctx.resolveProfile();
+    const resolverOpts = await ctx.resolverOptions();
+    const effectiveTeam = options.allTeams ? undefined : (options.team ?? profile.metadata.defaultTeam);
+    let stateId = identifier;
+    if (!looksLikeId(identifier)) {
+      if (effectiveTeam === undefined) {
+        return emitValidationError("state archive by name requires --team or a default team.", options);
+      }
+      const teamId = looksLikeId(effectiveTeam) ? effectiveTeam : await resolveTeamId(effectiveTeam, resolverOpts);
+      stateId = await resolveStateId(identifier, teamId, resolverOpts);
+    }
+
+    if (options.dryRun === true) {
+      return emitDryRunResult("archive", "state", { id: stateId }, options);
+    }
+
+    const response = await ctx.graphql<{ workflowStateArchive: { success: boolean } }>(
+      STATE_ARCHIVE_MUTATION,
+      { id: stateId }
+    );
+
+    if (ctx.hasErrors(response.body.errors) || response.body.data?.workflowStateArchive?.success !== true) {
+      const errors = ctx.mapGraphQLErrors(response.body.errors);
+      return ctx.emitFailure(errors.length > 0 ? errors : [{ category: "general", message: "Workflow state archive failed" }]);
+    }
+
+    const result = { id: stateId, archived: true };
+    if (options.jsonEnvelope) {
+      return ctx.emitSuccess(result);
+    } else if (options.json) {
+      process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+    } else {
+      process.stdout.write(`Archived state ${stateId}\n`);
+    }
+    return ExitCode.Success;
+  } catch (error) {
+    return ctx.emitCaughtError(error);
+  }
+}
+
 export async function handleStateCommand(
   positionals: string[],
   options: StateCommandOptions
@@ -381,7 +449,18 @@ export async function handleStateCommand(
     return handleStateCreate(options);
   }
 
-  return emitValidationError("unsupported state command. Try linearctl state get, linearctl state list, or linearctl state create.", options);
+  if (subcommand === "archive" || subcommand === "delete") {
+    const identifier = rest[0];
+    if (identifier === undefined || identifier === "") {
+      return emitValidationError(`usage: linearctl state ${subcommand} <id-or-name>`, options);
+    }
+    if (rest.length > 1) {
+      return emitValidationError(`state ${subcommand} accepts exactly one identifier.`, options);
+    }
+    return handleStateArchive(identifier, options);
+  }
+
+  return emitValidationError("unsupported state command. Try linearctl state get, list, create, archive, or delete.", options);
 }
 
 function hasErrors(errors: GraphQLErrorPayload[] | undefined): boolean {

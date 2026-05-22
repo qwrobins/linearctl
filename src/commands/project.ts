@@ -835,9 +835,6 @@ async function handleProjectCreateWithIssues(options: ProjectCommandOptions): Pr
     if (typeof issue.title !== "string" || issue.title === "") {
       return emitValidationError(`--issues-json[${i}] must have a non-empty "title" string.`, options);
     }
-    if (typeof issue.teamId !== "string" || issue.teamId === "") {
-      return emitValidationError(`--issues-json[${i}] must have a non-empty "teamId" string.`, options);
-    }
   }
 
   const projectInput: Record<string, unknown> = {
@@ -860,6 +857,7 @@ async function handleProjectCreateWithIssues(options: ProjectCommandOptions): Pr
         project: projectInput,
         issues: issuesArray.map((issue) => ({
           ...(issue as Record<string, unknown>),
+          teamId: (issue as Record<string, unknown>).teamId ?? teamId,
           projectId: "<will-be-set-after-project-creation>"
         }))
       }, options);
@@ -892,6 +890,7 @@ async function handleProjectCreateWithIssues(options: ProjectCommandOptions): Pr
           const issuesInput = {
             issues: issuesArray.map((issue) => ({
               ...(issue as Record<string, unknown>),
+              teamId: (issue as Record<string, unknown>).teamId ?? teamId,
               projectId: project.id,
             })),
           };

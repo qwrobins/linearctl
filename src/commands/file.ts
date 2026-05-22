@@ -62,11 +62,14 @@ function contentTypeFromExtension(filename: string): string {
 const FILE_UPLOAD_MUTATION = `
 mutation FileUpload($contentType: String!, $filename: String!, $size: Int!) {
   fileUpload(contentType: $contentType, filename: $filename, size: $size) {
-    uploadUrl
-    assetUrl
-    headers {
-      key
-      value
+    success
+    uploadFile {
+      uploadUrl
+      assetUrl
+      headers {
+        key
+        value
+      }
     }
   }
 }`;
@@ -93,9 +96,15 @@ query AttachmentUrl($id: String!) {
 
 interface FileUploadResponse {
   fileUpload: {
-    uploadUrl: string;
-    assetUrl: string;
-    headers: Array<{ key: string; value: string }>;
+    success?: boolean;
+    uploadUrl?: string;
+    assetUrl?: string;
+    headers?: Array<{ key: string; value: string }>;
+    uploadFile?: {
+      uploadUrl: string;
+      assetUrl: string;
+      headers: Array<{ key: string; value: string }>;
+    } | null;
   };
 }
 
@@ -174,14 +183,20 @@ async function handleFileUpload(
       { contentType, filename: fileName, size }
     );
 
-    if (ctx.hasErrors(uploadResponse.body.errors) || uploadResponse.body.data?.fileUpload == null) {
+    const uploadPayload = uploadResponse.body.data?.fileUpload;
+    const uploadFile = uploadPayload?.uploadFile ?? (
+      uploadPayload?.uploadUrl !== undefined && uploadPayload.assetUrl !== undefined && uploadPayload.headers !== undefined
+        ? { uploadUrl: uploadPayload.uploadUrl, assetUrl: uploadPayload.assetUrl, headers: uploadPayload.headers }
+        : null
+    );
+    if (ctx.hasErrors(uploadResponse.body.errors) || uploadPayload == null || uploadPayload.success === false || uploadFile == null) {
       const errors = ctx.mapGraphQLErrors(uploadResponse.body.errors);
       return ctx.emitFailure(
         errors.length > 0 ? errors : [{ category: "general", message: "File upload request failed" }]
       );
     }
 
-    const { uploadUrl, assetUrl, headers } = uploadResponse.body.data.fileUpload;
+    const { uploadUrl, assetUrl, headers } = uploadFile;
 
     const putHeaders: Record<string, string> = {};
     for (const header of headers) {

@@ -52,10 +52,6 @@ fragment CuratedCycleBase on Cycle {
   completedScopeHistory
   inProgressScopeHistory
   currentProgress
-  uncompletedIssuesUponClose(first: 100) {
-    nodes { id identifier title }
-    pageInfo { hasNextPage endCursor }
-  }
   team { id key name }
   completedAt
   createdAt
@@ -126,6 +122,13 @@ mutation CycleUpdate($id: String!, $input: CycleUpdateInput!) {
 }
 ${CURATED_CYCLE_BASE_FRAGMENT}`;
 
+const CYCLE_ARCHIVE_MUTATION = `
+mutation CycleArchive($id: String!) {
+  cycleArchive(id: $id) {
+    success
+  }
+}`;
+
 interface RawCycle {
   id: string;
   number: number;
@@ -148,6 +151,38 @@ interface RawCycle {
   completedAt: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+async function handleCycleArchive(id: string, options: CycleCommandOptions): Promise<number> {
+  if (options.dryRun === true) {
+    return emitDryRunResult("archive", "cycle", { id }, options);
+  }
+
+  const ctx = buildContext(options);
+
+  try {
+    const response = await ctx.graphql<{ cycleArchive: { success: boolean } }>(
+      CYCLE_ARCHIVE_MUTATION,
+      { id }
+    );
+
+    if (ctx.hasErrors(response.body.errors) || response.body.data?.cycleArchive?.success !== true) {
+      const errors = ctx.mapGraphQLErrors(response.body.errors);
+      return ctx.emitFailure(errors.length > 0 ? errors : [{ category: "general", message: "Cycle archive failed" }]);
+    }
+
+    const result = { id, archived: true };
+    if (options.jsonEnvelope) {
+      return ctx.emitSuccess(result);
+    } else if (options.json) {
+      process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+    } else {
+      process.stdout.write(`Archived cycle ${id}\n`);
+    }
+    return ExitCode.Success;
+  } catch (error) {
+    return ctx.emitCaughtError(error);
+  }
 }
 
 export interface NormalizedCycle {
@@ -593,5 +628,16 @@ export async function handleCycleCommand(
     return handleCycleUpdate(id, options);
   }
 
-  return emitValidationError("unsupported cycle command. Try linearctl cycle get, list, current, create, or update.", options);
+  if (subcommand === "archive" || subcommand === "delete") {
+    const id = rest[0];
+    if (id === undefined || id === "") {
+      return emitValidationError(`usage: linearctl cycle ${subcommand} <id>`, options);
+    }
+    if (rest.length > 1) {
+      return emitValidationError(`cycle ${subcommand} accepts exactly one identifier.`, options);
+    }
+    return handleCycleArchive(id, options);
+  }
+
+  return emitValidationError("unsupported cycle command. Try linearctl cycle get, list, current, create, update, archive, or delete.", options);
 }

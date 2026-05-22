@@ -6,7 +6,7 @@ import { paginateGraphQL, validatePaginationOptions } from "../core/pagination/p
 import type { PaginationOptions } from "../core/pagination/pagination.js";
 import { streamPaginateGraphQL } from "../core/pagination/streaming.js";
 import { emitDryRunResult } from "../core/output/dry-run.js";
-import { resolveTeamId, looksLikeId } from "../core/resolution/resolve.js";
+import { resolveTeamId, resolveLabelId, looksLikeId } from "../core/resolution/resolve.js";
 import { CommandContext } from "../core/runtime/command-context.js";
 
 export interface LabelCommandOptions {
@@ -166,13 +166,25 @@ async function handleLabelGet(
   const ctx = buildContext(options);
 
   try {
-    const response = await ctx.graphql<{ issueLabel: RawLabel | null }>(
+    let response = await ctx.graphql<{ issueLabel: RawLabel | null }>(
       LABEL_GET_QUERY,
       { id: identifier }
     );
 
     if (ctx.hasErrors(response.body.errors)) {
-      return ctx.emitFailure(ctx.mapGraphQLErrors(response.body.errors));
+      const profile = await ctx.resolveProfile();
+      const resolverOpts = await ctx.resolverOptions();
+      const effectiveTeam = options.allTeams ? undefined : (options.team ?? profile.metadata.defaultTeam);
+      const teamId = effectiveTeam === undefined
+        ? undefined
+        : looksLikeId(effectiveTeam)
+          ? effectiveTeam
+          : await resolveTeamId(effectiveTeam, resolverOpts);
+      const labelId = looksLikeId(identifier) ? identifier : await resolveLabelId(identifier, teamId, resolverOpts);
+      response = await ctx.graphql<{ issueLabel: RawLabel | null }>(LABEL_GET_QUERY, { id: labelId });
+      if (ctx.hasErrors(response.body.errors)) {
+        return ctx.emitFailure(ctx.mapGraphQLErrors(response.body.errors));
+      }
     }
 
     if (response.body.data?.issueLabel === null || response.body.data?.issueLabel === undefined) {
