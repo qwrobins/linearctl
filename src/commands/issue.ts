@@ -1367,6 +1367,9 @@ async function handleBulkUpdate(options: IssueCommandOptions): Promise<number> {
             `query IssueTeam($id: String!) { issue(id: $id) { team { id } } }`,
             { id }
           );
+          if (ctx.hasErrors(issueTeam.body.errors)) {
+            throw new Error(issueTeam.body.errors?.[0]?.message ?? "Issue team lookup failed");
+          }
           const teamId = issueTeam.body.data?.issue?.team?.id;
           if (teamId === undefined) {
             throw new Error(`Could not find issue "${id}" or its team for state resolution.`);

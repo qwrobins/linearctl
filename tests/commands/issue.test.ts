@@ -1324,6 +1324,34 @@ describe("handleIssueCommand — issue bulk-update", () => {
     }
   });
 
+  it("reports issue team lookup GraphQL errors while resolving bulk state names", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-issue-"));
+    const paths = await writeProfileFiles(directory);
+    const fetchImpl = vi.fn(async () =>
+      new Response(JSON.stringify({
+        data: { issue: null },
+        errors: [{ message: "Issue lookup failed" }]
+      }), { status: 200 })
+    ) as unknown as FetchLike;
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleIssueCommand(["bulk-update"], {
+        ...baseOptions(paths),
+        ids: "INF-2975",
+        state: "In Progress",
+        fetchImpl
+      });
+
+      expect(exitCode).toBe(1);
+      const parsed = JSON.parse(output.stdout.join(""));
+      expect(parsed.succeeded).toHaveLength(0);
+      expect(parsed.failed).toEqual([{ identifier: "INF-2975", error: "Issue lookup failed" }]);
+    } finally {
+      output.restore();
+    }
+  });
+
   it("returns exit code 5 when --ids is missing", async () => {
     const directory = await mkdtemp(join(tmpdir(), "linear-cli-issue-"));
     const paths = await writeProfileFiles(directory);
