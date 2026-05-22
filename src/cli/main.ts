@@ -256,6 +256,8 @@ function toParsedCliArguments(values: Record<string, unknown>, positionals: stri
     ...(typeof values.after === "string" ? { after: values.after } : {}),
     sync: values.sync === true,
     dryRun: values["dry-run"] === true,
+    yes: values.yes === true,
+    confirm: values.confirm === true,
     quiet: values.quiet === true,
     allTeams: values["all-teams"] === true,
     ...(typeof values.scope === "string" ? { scope: values.scope } : {}),

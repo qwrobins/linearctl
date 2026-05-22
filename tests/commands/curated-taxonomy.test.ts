@@ -14,6 +14,7 @@ describe("curated command taxonomy", () => {
       "linearctl issue create",
       "linearctl issue update",
       "linearctl issue close",
+      "linearctl issue delete",
       "linearctl issue assign",
       "linearctl issue comment",
       "linearctl issue attach-slack",
@@ -57,6 +58,7 @@ describe("curated command taxonomy", () => {
   it("marks destructive and confirmation-requiring commands explicitly", () => {
     expect(findCuratedCommand("linearctl comment delete")?.safety).toBe("destructive");
     expect(findCuratedCommand("linearctl attachment delete")?.safety).toBe("destructive");
+    expect(findCuratedCommand("linearctl issue delete")?.safety).toBe("destructive");
     expect(findCuratedCommand("linearctl auth logout")?.safety).toBe("confirmation-required");
     expect(findCuratedCommand("linearctl issue close")?.safety).toBe("confirmation-required");
   });

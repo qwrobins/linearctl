@@ -68,10 +68,11 @@ export async function handleGqlCommand(
   }
 
   try {
-    const document = await resolveGraphQLDocument(subcommand, rest, options);
-    if (document === undefined) {
+    const resolvedDocument = await resolveGraphQLDocument(subcommand, rest, options);
+    if (resolvedDocument === undefined) {
       return 5;
     }
+    const document = normalizeGraphQLDocument(subcommand, resolvedDocument);
 
     const variables = await resolveVariables(options);
     if (subcommand === "introspect" && (Object.keys(variables).length > 0 || options.varsFile !== undefined)) {
@@ -149,6 +150,14 @@ export async function handleGqlCommand(
 
     return failure.exitCode;
   }
+}
+
+function normalizeGraphQLDocument(subcommand: string, document: string): string {
+  const trimmed = document.trimStart();
+  if (subcommand !== "mutation" || /^mutation\b/.test(trimmed)) {
+    return document;
+  }
+  return `mutation ${trimmed}`;
 }
 
 async function resolveGraphQLDocument(

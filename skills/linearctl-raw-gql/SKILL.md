@@ -26,6 +26,7 @@ cat query.graphql | linearctl gql query --stdin --json
 ### Mutation
 ```bash
 linearctl gql mutation 'mutation { issueCreate(input: {...}) { success } }' --json
+linearctl gql mutation '{ issueDelete(id: "...") { success } }' --json
 linearctl gql mutation --file mutation.graphql --vars-file vars.json --json-envelope
 ```
 

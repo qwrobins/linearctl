@@ -33,8 +33,11 @@ linearctl issue update <identifier> [--title <text>] [--description <text>] \
   [--priority <0-4>] [--estimate <n>] [--assignee <email|"me"|id>] [--label <name|id>] \
   [--state <name|id>] [--cycle <id>] [--project <id>] [--parent <identifier>] --json
 
-# Close an issue (transitions to completed state, defaults to "Done")
+# Close an issue (transitions to a terminal completed/canceled state, defaults to "Done")
 linearctl issue close <identifier> [--state <name>] --json
+
+# Delete an issue
+linearctl issue delete <identifier> --json
 
 # Assign an issue
 linearctl issue assign <identifier> <assignee> --json
@@ -55,6 +58,9 @@ linearctl issue bulk-update --ids <id1,id2,...> [--state <id>] [--assignee <id>]
 
 # Bulk close multiple issues
 linearctl issue bulk-close --ids <id1,id2,...> --json
+
+# Bulk delete multiple issues
+linearctl issue bulk-delete --ids <id1,id2,...> --yes --json
 
 # Bulk assign multiple issues
 linearctl issue bulk-assign --ids <id1,id2,...> --assignee <id> --json
@@ -282,6 +288,9 @@ linearctl gql query --file query.graphql --var "teamId=abc123" --json
 
 # Mutation from file with variable file
 linearctl gql mutation --file mutation.graphql --vars-file vars.json --json
+
+# Bare mutation selection set, wrapped automatically as a mutation
+linearctl gql mutation '{ issueDelete(id: "issue-id") { success } }' --json
 
 # Introspection
 linearctl gql introspect --json

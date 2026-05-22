@@ -41,6 +41,8 @@ export function curatedOptions(args: ParsedCliArguments, env: NodeJS.ProcessEnv)
   return {
     ...baseOptions(args, env),
     dryRun: args.dryRun,
+    yes: args.yes,
+    confirm: args.confirm,
     quiet: args.quiet,
     jsonl: args.jsonl,
     noRetry: args.noRetry,
