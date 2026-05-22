@@ -936,7 +936,7 @@ describe("handleIssueCommand — issue update", () => {
     const directory = await mkdtemp(join(tmpdir(), "linear-cli-issue-"));
     const paths = await writeProfileFiles(directory);
     const updatedIssue = makeRawIssue({
-      project: { id: "project-2", name: "Distribution" }
+      project: { id: "00000000-0000-0000-0000-000000000002", name: "Distribution" }
     });
     const fetchSpy = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
       new Response(JSON.stringify({
@@ -949,16 +949,61 @@ describe("handleIssueCommand — issue update", () => {
     try {
       const exitCode = await handleIssueCommand(["update", "INF-2975"], {
         ...baseOptions(paths),
-        project: "project-2",
+        project: "00000000-0000-0000-0000-000000000002",
         fetchImpl
       });
 
       expect(exitCode).toBe(0);
       const request = JSON.parse(String(fetchSpy.mock.calls[0]?.[1]?.body ?? "{}"));
-      expect(request.variables.input.projectId).toBe("project-2");
+      expect(request.variables.input.projectId).toBe("00000000-0000-0000-0000-000000000002");
 
       const parsed = JSON.parse(output.stdout.join(""));
-      expect(parsed.project).toEqual({ id: "project-2", name: "Distribution" });
+      expect(parsed.project).toEqual({ id: "00000000-0000-0000-0000-000000000002", name: "Distribution" });
+    } finally {
+      output.restore();
+    }
+  });
+
+  it("resolves project names during issue update", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-issue-"));
+    const paths = await writeProfileFiles(directory);
+    const updatedIssue = makeRawIssue({
+      project: { id: "project-2", name: "project-redesign" }
+    });
+    const fetchSpy = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body ?? "{}"));
+      if (body.query.includes("IssueTeam")) {
+        return new Response(JSON.stringify({
+          data: { issue: { team: { id: "team-1" } } }
+        }), { status: 200 });
+      }
+      if (body.query.includes("ResolveProject")) {
+        return new Response(JSON.stringify({
+          data: {
+            projects: {
+              pageInfo: { hasNextPage: false, endCursor: null },
+              nodes: [{ id: "project-2", name: "project-redesign", teams: { nodes: [{ id: "team-1", key: "INF", name: "Infrastructure" }] } }]
+            }
+          }
+        }), { status: 200 });
+      }
+      return new Response(JSON.stringify({
+        data: { issueUpdate: { success: true, issue: updatedIssue } }
+      }), { status: 200 });
+    });
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleIssueCommand(["update", "INF-2975"], {
+        ...baseOptions(paths),
+        project: "project-redesign",
+        fetchImpl: fetchSpy as unknown as FetchLike
+      });
+
+      expect(exitCode).toBe(0);
+      const updateCall = fetchSpy.mock.calls.find(([, init]) => String(init?.body ?? "").includes("IssueUpdate"));
+      const request = JSON.parse(String(updateCall?.[1]?.body ?? "{}"));
+      expect(request.variables.input.projectId).toBe("project-2");
     } finally {
       output.restore();
     }
@@ -1274,6 +1319,34 @@ describe("handleIssueCommand — issue bulk-update", () => {
       expect(parsed.succeeded[0].identifier).toBe("INF-2975");
       expect(parsed.failed).toHaveLength(1);
       expect(parsed.failed[0].identifier).toBe("NONEXISTENT-1");
+    } finally {
+      output.restore();
+    }
+  });
+
+  it("reports issue team lookup GraphQL errors while resolving bulk state names", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-issue-"));
+    const paths = await writeProfileFiles(directory);
+    const fetchImpl = vi.fn(async () =>
+      new Response(JSON.stringify({
+        data: { issue: null },
+        errors: [{ message: "Issue lookup failed" }]
+      }), { status: 200 })
+    ) as unknown as FetchLike;
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleIssueCommand(["bulk-update"], {
+        ...baseOptions(paths),
+        ids: "INF-2975",
+        state: "In Progress",
+        fetchImpl
+      });
+
+      expect(exitCode).toBe(1);
+      const parsed = JSON.parse(output.stdout.join(""));
+      expect(parsed.succeeded).toHaveLength(0);
+      expect(parsed.failed).toEqual([{ identifier: "INF-2975", error: "Issue lookup failed" }]);
     } finally {
       output.restore();
     }

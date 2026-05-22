@@ -6,6 +6,7 @@ import { paginateGraphQL, validatePaginationOptions } from "../core/pagination/p
 import type { PaginationOptions } from "../core/pagination/pagination.js";
 import { streamPaginateGraphQL } from "../core/pagination/streaming.js";
 import { CommandContext } from "../core/runtime/command-context.js";
+import { resolveUserId, looksLikeId } from "../core/resolution/resolve.js";
 
 export interface UserCommandOptions {
   json: boolean;
@@ -145,13 +146,18 @@ async function handleUserGet(
   const ctx = buildContext(options);
 
   try {
-    const response = await ctx.graphql<{ user: RawUser | null }>(
+    let response = await ctx.graphql<{ user: RawUser | null }>(
       USER_GET_QUERY,
       { id: identifier }
     );
 
     if (ctx.hasErrors(response.body.errors)) {
-      return ctx.emitFailure(ctx.mapGraphQLErrors(response.body.errors));
+      const resolverOpts = await ctx.resolverOptions();
+      const userId = looksLikeId(identifier) ? identifier : await resolveUserId(identifier, resolverOpts);
+      response = await ctx.graphql<{ user: RawUser | null }>(USER_GET_QUERY, { id: userId });
+      if (ctx.hasErrors(response.body.errors)) {
+        return ctx.emitFailure(ctx.mapGraphQLErrors(response.body.errors));
+      }
     }
 
     if (response.body.data?.user === null || response.body.data?.user === undefined) {

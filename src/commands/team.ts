@@ -8,6 +8,7 @@ import { paginateGraphQL, validatePaginationOptions } from "../core/pagination/p
 import type { PaginationOptions } from "../core/pagination/pagination.js";
 import { streamPaginateGraphQL } from "../core/pagination/streaming.js";
 import { CommandContext } from "../core/runtime/command-context.js";
+import { resolveTeamId, looksLikeId, ResolutionError } from "../core/resolution/resolve.js";
 
 export interface TeamCommandOptions {
   json: boolean;
@@ -186,13 +187,18 @@ async function handleTeamGet(
   const ctx = buildContext(options);
 
   try {
-    const response = await ctx.graphql<{ team: RawTeam | null }>(
+    let response = await ctx.graphql<{ team: RawTeam | null }>(
       TEAM_GET_QUERY,
       { id: identifier }
     );
 
     if (ctx.hasErrors(response.body.errors)) {
-      return ctx.emitFailure(ctx.mapGraphQLErrors(response.body.errors));
+      const resolverOpts = await ctx.resolverOptions();
+      const teamId = looksLikeId(identifier) ? identifier : await resolveTeamId(identifier, resolverOpts);
+      response = await ctx.graphql<{ team: RawTeam | null }>(TEAM_GET_QUERY, { id: teamId });
+      if (ctx.hasErrors(response.body.errors)) {
+        return ctx.emitFailure(ctx.mapGraphQLErrors(response.body.errors));
+      }
     }
 
     if (response.body.data?.team === null || response.body.data?.team === undefined) {
@@ -318,11 +324,12 @@ async function handleTeamMembers(
 
   try {
     const profile = await ctx.resolveProfile();
+    let teamId = identifier;
 
     const commonPaginateInput = {
       query: TEAM_MEMBERS_QUERY,
       variables: {
-        id: identifier
+        id: teamId
       },
       credentials: profile.credentials,
       ...(options.apiUrl === undefined
@@ -370,6 +377,20 @@ async function handleTeamMembers(
     return ExitCode.Success;
   } catch (error) {
     if (error instanceof TeamNotFoundError) {
+      if (!looksLikeId(identifier)) {
+        try {
+          const resolverOpts = await ctx.resolverOptions();
+          const resolvedTeamId = await resolveTeamId(identifier, resolverOpts);
+          if (resolvedTeamId !== identifier) {
+            return handleTeamMembers(resolvedTeamId, options);
+          }
+        } catch (resolutionError) {
+          if (resolutionError instanceof ResolutionError && resolutionError.kind === "ambiguous") {
+            return ctx.emitCaughtError(resolutionError);
+          }
+          return ctx.emitNotFound("Team not found");
+        }
+      }
       return ctx.emitNotFound("Team not found");
     }
     return ctx.emitCaughtError(error);

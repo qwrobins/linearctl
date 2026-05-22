@@ -112,6 +112,15 @@ function makeFetch(responseBody: unknown): FetchLike {
   ) as FetchLike;
 }
 
+function makeFetchSequence(responseBodies: unknown[]): FetchLike {
+  let index = 0;
+  return vi.fn(async () => {
+    const responseBody = responseBodies[Math.min(index, responseBodies.length - 1)]!;
+    index += 1;
+    return new Response(JSON.stringify(responseBody), { status: 200 });
+  }) as FetchLike;
+}
+
 function baseOptions(paths: { configFile: string; credentialsFile: string }) {
   return {
     json: true,
@@ -570,22 +579,28 @@ describe("handleProjectCommand — project create-with-issues", () => {
     }
   });
 
-  it("returns exit code 5 when an issue is missing teamId", async () => {
+  it("defaults missing issue teamId from --team", async () => {
     const directory = await mkdtemp(join(tmpdir(), "linear-cli-project-"));
     const paths = await writeProfileFiles(directory);
     const output = captureOutput();
+    const createdProject = makeRawProject({ id: "project-created", name: "Test" });
+    const fetchImpl = makeFetchSequence([
+      { data: { projectCreate: { success: true, project: createdProject } } },
+      { data: { issueBatchCreate: { success: true, issues: [{ id: "issue-1", identifier: "INF-1", title: "T1" }] } } },
+    ]);
 
     try {
       const exitCode = await handleProjectCommand(["create-with-issues"], {
         ...baseOptions(paths),
         name: "Test",
         team: TEAM_UUID,
-        issuesJson: '[{"title":"T1"}]'
+        issuesJson: '[{"title":"T1"}]',
+        fetchImpl
       });
 
-      expect(exitCode).toBe(5);
-      expect(output.stderr.join("")).toContain("--issues-json[0]");
-      expect(output.stderr.join("")).toContain("teamId");
+      expect(exitCode).toBe(0);
+      const batchRequest = JSON.parse((fetchImpl as ReturnType<typeof vi.fn>).mock.calls[1]![1]!.body as string);
+      expect(batchRequest.variables.input.issues[0].teamId).toBe(TEAM_UUID);
     } finally {
       output.restore();
     }

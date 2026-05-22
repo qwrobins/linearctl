@@ -333,7 +333,13 @@ async function main(argv: string[]): Promise<number> {
     }
   }
 
-  process.stderr.write("Error: command execution is not implemented yet in this scaffold.\n");
+  if (args.positionals.length === 0) {
+    process.stderr.write("Error: No command provided. Run 'linearctl --help' for available commands.\n");
+    return ExitCode.ValidationError;
+  }
+
+  const unknown = commandName ?? args.positionals.join(" ");
+  process.stderr.write(`Error: unknown command '${unknown}'. Run 'linearctl --help' for available commands.\n`);
   return ExitCode.ValidationError;
 }
 

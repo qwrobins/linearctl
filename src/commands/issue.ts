@@ -107,6 +107,7 @@ fragment CuratedIssue on Issue {
   title
   description
   priority
+  estimate
   state { id name type }
   team { id key name }
   assignee { id name email }
@@ -126,6 +127,7 @@ fragment CuratedIssueSearchResult on IssueSearchResult {
   title
   description
   priority
+  estimate
   state { id name type }
   team { id key name }
   assignee { id name email }
@@ -253,6 +255,7 @@ interface RawIssue {
   title: string;
   description: string | null;
   priority: number;
+  estimate: number | null;
   state: { id: string; name: string; type: string } | null;
   team: { id: string; key: string; name: string };
   assignee: { id: string; name: string; email: string } | null;
@@ -271,6 +274,7 @@ export interface NormalizedIssue {
   title: string;
   description: string | null;
   priority: number;
+  estimate: number | null;
   state: { id: string; name: string; type: string } | null;
   team: { id: string; key: string; name: string };
   assignee: { id: string; name: string; email: string } | null;
@@ -290,6 +294,7 @@ export function normalizeIssue(raw: RawIssue): NormalizedIssue {
     title: raw.title,
     description: raw.description,
     priority: raw.priority,
+    estimate: raw.estimate,
     state: raw.state,
     team: raw.team,
     assignee: raw.assignee,
@@ -315,6 +320,9 @@ function printHumanIssue(issue: NormalizedIssue): void {
   if (issue.priority !== 0) {
     process.stdout.write(`  Priority: ${issue.priority}\n`);
   }
+  if (issue.estimate !== null) {
+    process.stdout.write(`  Estimate: ${issue.estimate}\n`);
+  }
   if (issue.project !== null) {
     process.stdout.write(`  Project:  ${issue.project.name}\n`);
   }
@@ -322,6 +330,10 @@ function printHumanIssue(issue: NormalizedIssue): void {
     process.stdout.write(`  Labels:   ${issue.labels.map((l) => l.name).join(", ")}\n`);
   }
   process.stdout.write(`  URL:      ${issue.url}\n`);
+}
+
+function shouldResolveProjectIdentifier(value: string): boolean {
+  return !looksLikeId(value);
 }
 
 async function handleIssueGet(
@@ -828,7 +840,8 @@ async function handleIssueUpdate(
     // Fetch the issue's team when label or state resolution needs it
     const needsTeamLookup =
       (options.label !== undefined && !looksLikeId(options.label)) ||
-      (options.state !== undefined && !looksLikeId(options.state));
+      (options.state !== undefined && !looksLikeId(options.state)) ||
+      (options.project !== undefined && shouldResolveProjectIdentifier(options.project));
     let issueTeamId: string | undefined;
     if (needsTeamLookup) {
       const issueData = await ctx.graphql<{ issue: { team: { id: string } } | null }>(
@@ -846,6 +859,9 @@ async function handleIssueUpdate(
     }
     if (options.state !== undefined && !looksLikeId(options.state)) {
       input.stateId = await resolveStateId(options.state, issueTeamId!, resolverOpts);
+    }
+    if (options.project !== undefined && shouldResolveProjectIdentifier(options.project)) {
+      input.projectId = await resolveProjectId(options.project, issueTeamId, resolverOpts);
     }
     if (options.parent !== undefined) {
       if (looksLikeId(options.parent)) {
@@ -1342,13 +1358,28 @@ async function handleBulkUpdate(options: IssueCommandOptions): Promise<number> {
     if (options.label !== undefined && !looksLikeId(options.label)) {
       input.labelIds = [await resolveLabelId(options.label, undefined, resolverOpts)];
     }
-
     return await executeBulk(
       identifiers,
       async (id) => {
+        const issueInput = { ...input };
+        if (options.state !== undefined && !looksLikeId(options.state)) {
+          const issueTeam = await ctx.graphql<{ issue: { team: { id: string } } | null }>(
+            `query IssueTeam($id: String!) { issue(id: $id) { team { id } } }`,
+            { id }
+          );
+          if (ctx.hasErrors(issueTeam.body.errors)) {
+            throw new Error(issueTeam.body.errors?.[0]?.message ?? "Issue team lookup failed");
+          }
+          const teamId = issueTeam.body.data?.issue?.team?.id;
+          if (teamId === undefined) {
+            throw new Error(`Could not find issue "${id}" or its team for state resolution.`);
+          }
+          issueInput.stateId = await resolveStateId(options.state, teamId, resolverOpts);
+        }
+
         const response = await ctx.graphql<{
           issueUpdate: { success: boolean; issue: RawIssue | null };
-        }>(ISSUE_UPDATE_MUTATION, { id, input });
+        }>(ISSUE_UPDATE_MUTATION, { id, input: issueInput });
 
         if (
           ctx.hasErrors(response.body.errors) ||

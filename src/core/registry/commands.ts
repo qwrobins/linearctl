@@ -52,13 +52,13 @@ export const COMMAND_REGISTRY: readonly CommandRegistration[] = [
       create:         { usage: "linearctl issue create --title <title> --team <id> [--description <text>] [--priority <0-4>] [--estimate <n>] [--assignee <id>] [--label <id>] [--state <id>] [--cycle <id>] [--project <id|name>] [--project-milestone <id>|--milestone <id>] [--parent <identifier>] [--json]" },
       list:           { usage: "linearctl issue list [--search <text>|--query <text>] [--state <name> ...] [--status <name>] [--assignee <id>] [--team <id>] [--label <name|id>] [--priority <0-4>] [--cycle <id>] [--project <id|name>] [--created-after <date>] [--updated-after <date>] [--completed-after <date>] [--order-by <field>] [--all-teams] [--all] [--json]" },
       search:         { usage: "linearctl issue search [<text>|--query <text>|--search <text>] [--all] [--json]" },
-      update:         { usage: "linearctl issue update <identifier> [--title <text>] [--description <text>] [--priority <0-4>] [--estimate <n>] [--assignee <id>] [--label <name|id>] [--state <id>] [--cycle <id>] [--project <id>] [--parent <identifier>] [--json]" },
+      update:         { usage: "linearctl issue update <identifier> [--title <text>] [--description <text>] [--priority <0-4>] [--estimate <n>] [--assignee <id>] [--label <name|id>] [--state <name|id>] [--cycle <id>] [--project <name|id>] [--parent <identifier>] [--json]" },
       close:          { usage: "linearctl issue close <identifier> [--state <name>] [--json]" },
       delete:         { usage: "linearctl issue delete <identifier> [--json]" },
       assign:         { usage: "linearctl issue assign <identifier> <assignee-id> [--json]" },
       comment:        { usage: "linearctl issue comment <identifier> --body <text> [--json]" },
       "attach-slack": { usage: "linearctl issue attach-slack <identifier> --url <slack-url> [--sync] [--title <text>] [--json]" },
-      "bulk-update":  { usage: "linearctl issue bulk-update --ids <id1,id2,...> [--state <id>] [--assignee <id>] [--priority <0-4>] [--estimate <n>] [--label <id>] [--cycle <id>] [--json]" },
+      "bulk-update":  { usage: "linearctl issue bulk-update --ids <id1,id2,...> [--state <name|id>] [--assignee <id>] [--priority <0-4>] [--estimate <n>] [--label <id>] [--cycle <id>] [--json]" },
       "bulk-close":   { usage: "linearctl issue bulk-close --ids <id1,id2,...> [--json]" },
       "bulk-delete":  { usage: "linearctl issue bulk-delete --ids <id1,id2,...> (--yes|--confirm) [--json]" },
       "bulk-assign":  { usage: "linearctl issue bulk-assign --ids <id1,id2,...> --assignee <id> [--json]" },
@@ -115,6 +115,8 @@ export const COMMAND_REGISTRY: readonly CommandRegistration[] = [
       current: { usage: "linearctl cycle current [--team <id>] [--json]" },
       create:  { usage: "linearctl cycle create --team <id> [--name ...] [--starts-at ...] [--ends-at ...] [--json]" },
       update:  { usage: "linearctl cycle update <id> [--name ...] [--starts-at ...] [--ends-at ...] [--json]" },
+      archive: { usage: "linearctl cycle archive <id> [--json]" },
+      delete:  { usage: "linearctl cycle delete <id> [--json]" },
     },
     handler: handleCycleCommand,
     buildOptions: (args, env) => ({
@@ -136,9 +138,9 @@ export const COMMAND_REGISTRY: readonly CommandRegistration[] = [
       "set-default",
     ],
     subcommands: {
-      get:     { usage: "linearctl team get <id-or-key> [--set-default] [--json]" },
+      get:     { usage: "linearctl team get <id-or-key-or-name> [--set-default] [--json]" },
       list:    { usage: "linearctl team list [--json]" },
-      members: { usage: "linearctl team members <id-or-key> [--all] [--json]" },
+      members: { usage: "linearctl team members <id-or-key-or-name> [--all] [--json]" },
     },
     handler: handleTeamCommand,
     buildOptions: (args, env) => ({
@@ -161,7 +163,7 @@ export const COMMAND_REGISTRY: readonly CommandRegistration[] = [
       ...OPTION_GROUPS.pagination,
     ],
     subcommands: {
-      get:  { usage: "linearctl user get <id> [--json]" },
+      get:  { usage: "linearctl user get <id|name|displayName|email> [--json]" },
       me:   { usage: "linearctl user me [--json]" },
       list: { usage: "linearctl user list [--json]" },
     },
@@ -184,7 +186,7 @@ export const COMMAND_REGISTRY: readonly CommandRegistration[] = [
       "name", "description", "color", "team",
     ],
     subcommands: {
-      get:    { usage: "linearctl label get <id> [--json]" },
+      get:    { usage: "linearctl label get <id|name> [--team <id>] [--json]" },
       list:   { usage: "linearctl label list [--team <id>] [--all-teams] [--json]" },
       create: { usage: "linearctl label create --name <name> [--description ...] [--color ...] [--team <id>] [--json]" },
       delete: { usage: "linearctl label delete <id> [--json]" },
@@ -207,9 +209,11 @@ export const COMMAND_REGISTRY: readonly CommandRegistration[] = [
       "name", "state-type", "description", "color", "position", "team",
     ],
     subcommands: {
-      get:    { usage: "linearctl state get <id> [--json]" },
+      get:    { usage: "linearctl state get <id|name> [--team <id>] [--json]" },
       list:   { usage: "linearctl state list [--team <id>] [--all-teams] [--json]" },
-      create: { usage: "linearctl state create --name <name> --team <id> --state-type <type> [--json]" },
+      create: { usage: "linearctl state create --name <name> --team <id> --state-type <type> [--color <hex>] [--json]" },
+      archive:{ usage: "linearctl state archive <id|name> [--team <id>] [--json]" },
+      delete: { usage: "linearctl state delete <id|name> [--team <id>] [--json]" },
     },
     handler: handleStateCommand,
     buildOptions: (args, env) => ({
