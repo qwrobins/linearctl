@@ -81,9 +81,12 @@ describe("handleFileCommand — file upload", () => {
           JSON.stringify({
             data: {
               fileUpload: {
-                uploadUrl: "https://storage.example.com/put-here",
-                assetUrl: "https://uploads.linear.app/asset-123.png",
-                headers: [{ key: "x-amz-acl", value: "public-read" }]
+                success: true,
+                uploadFile: {
+                  uploadUrl: "https://storage.example.com/put-here",
+                  assetUrl: "https://uploads.linear.app/asset-123.png",
+                  headers: [{ key: "x-amz-acl", value: "public-read" }]
+                }
               }
             }
           }),
@@ -130,9 +133,12 @@ describe("handleFileCommand — file upload", () => {
           JSON.stringify({
             data: {
               fileUpload: {
-                uploadUrl: "https://storage.example.com/put-pdf",
-                assetUrl: "https://uploads.linear.app/asset-pdf.pdf",
-                headers: []
+                success: true,
+                uploadFile: {
+                  uploadUrl: "https://storage.example.com/put-pdf",
+                  assetUrl: "https://uploads.linear.app/asset-pdf.pdf",
+                  headers: []
+                }
               }
             }
           }),

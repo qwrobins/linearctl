@@ -140,7 +140,7 @@ export const COMMAND_REGISTRY: readonly CommandRegistration[] = [
     subcommands: {
       get:     { usage: "linearctl team get <id-or-key-or-name> [--set-default] [--json]" },
       list:    { usage: "linearctl team list [--json]" },
-      members: { usage: "linearctl team members <id-or-key> [--all] [--json]" },
+      members: { usage: "linearctl team members <id-or-key-or-name> [--all] [--json]" },
     },
     handler: handleTeamCommand,
     buildOptions: (args, env) => ({
@@ -209,7 +209,7 @@ export const COMMAND_REGISTRY: readonly CommandRegistration[] = [
       "name", "state-type", "description", "color", "position", "team",
     ],
     subcommands: {
-      get:    { usage: "linearctl state get <id> [--json]" },
+      get:    { usage: "linearctl state get <id|name> [--team <id>] [--json]" },
       list:   { usage: "linearctl state list [--team <id>] [--all-teams] [--json]" },
       create: { usage: "linearctl state create --name <name> --team <id> --state-type <type> [--color <hex>] [--json]" },
       archive:{ usage: "linearctl state archive <id|name> [--team <id>] [--json]" },

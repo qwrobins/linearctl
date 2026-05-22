@@ -135,14 +135,15 @@ async function handleWorkspaceList(options: WorkspaceCommandOptions): Promise<nu
       return ExitCode.Success;
     }
 
-    process.stdout.write("Profile          Workspace        User             Auth Type\n");
-    process.stdout.write("---------------- ---------------- ---------------- ---------\n");
+    process.stdout.write("Profile          Workspace        Workspace ID     User             Auth Type\n");
+    process.stdout.write("---------------- ---------------- ---------------- ---------------- ---------\n");
     for (const entry of workspaces) {
       const profile = (entry.profile).padEnd(16);
       const workspace = (entry.workspace ?? "(unknown)").padEnd(16);
+      const workspaceId = (entry.workspaceId ?? "(unknown)").padEnd(16);
       const user = (entry.userEmail ?? "(unknown)").padEnd(16);
       const authType = entry.authType;
-      process.stdout.write(`${profile} ${workspace} ${user} ${authType}\n`);
+      process.stdout.write(`${profile} ${workspace} ${workspaceId} ${user} ${authType}\n`);
     }
   }
 

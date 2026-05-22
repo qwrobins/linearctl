@@ -333,7 +333,7 @@ function printHumanIssue(issue: NormalizedIssue): void {
 }
 
 function shouldResolveProjectIdentifier(value: string): boolean {
-  return !looksLikeId(value) && !/^project[-_]/i.test(value);
+  return !looksLikeId(value);
 }
 
 async function handleIssueGet(
@@ -1358,24 +1358,25 @@ async function handleBulkUpdate(options: IssueCommandOptions): Promise<number> {
     if (options.label !== undefined && !looksLikeId(options.label)) {
       input.labelIds = [await resolveLabelId(options.label, undefined, resolverOpts)];
     }
-    if (options.state !== undefined && !looksLikeId(options.state)) {
-      const firstIssueTeam = await ctx.graphql<{ issue: { team: { id: string } } | null }>(
-        `query IssueTeam($id: String!) { issue(id: $id) { team { id } } }`,
-        { id: identifiers[0] }
-      );
-      const teamId = firstIssueTeam.body.data?.issue?.team?.id;
-      if (teamId === undefined) {
-        return emitValidationError(`Could not find issue "${identifiers[0]}" or its team for state resolution.`, options);
-      }
-      input.stateId = await resolveStateId(options.state, teamId, resolverOpts);
-    }
-
     return await executeBulk(
       identifiers,
       async (id) => {
+        const issueInput = { ...input };
+        if (options.state !== undefined && !looksLikeId(options.state)) {
+          const issueTeam = await ctx.graphql<{ issue: { team: { id: string } } | null }>(
+            `query IssueTeam($id: String!) { issue(id: $id) { team { id } } }`,
+            { id }
+          );
+          const teamId = issueTeam.body.data?.issue?.team?.id;
+          if (teamId === undefined) {
+            throw new Error(`Could not find issue "${id}" or its team for state resolution.`);
+          }
+          issueInput.stateId = await resolveStateId(options.state, teamId, resolverOpts);
+        }
+
         const response = await ctx.graphql<{
           issueUpdate: { success: boolean; issue: RawIssue | null };
-        }>(ISSUE_UPDATE_MUTATION, { id, input });
+        }>(ISSUE_UPDATE_MUTATION, { id, input: issueInput });
 
         if (
           ctx.hasErrors(response.body.errors) ||

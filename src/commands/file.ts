@@ -184,12 +184,16 @@ async function handleFileUpload(
     );
 
     const uploadPayload = uploadResponse.body.data?.fileUpload;
-    const uploadFile = uploadPayload?.uploadFile ?? (
-      uploadPayload?.uploadUrl !== undefined && uploadPayload.assetUrl !== undefined && uploadPayload.headers !== undefined
-        ? { uploadUrl: uploadPayload.uploadUrl, assetUrl: uploadPayload.assetUrl, headers: uploadPayload.headers }
-        : null
-    );
-    if (ctx.hasErrors(uploadResponse.body.errors) || uploadPayload == null || uploadPayload.success === false || uploadFile == null) {
+    const uploadFile = uploadPayload?.uploadFile;
+    if (
+      ctx.hasErrors(uploadResponse.body.errors) ||
+      uploadPayload == null ||
+      uploadPayload.success !== true ||
+      uploadFile == null ||
+      typeof uploadFile.uploadUrl !== "string" ||
+      typeof uploadFile.assetUrl !== "string" ||
+      !Array.isArray(uploadFile.headers)
+    ) {
       const errors = ctx.mapGraphQLErrors(uploadResponse.body.errors);
       return ctx.emitFailure(
         errors.length > 0 ? errors : [{ category: "general", message: "File upload request failed" }]
