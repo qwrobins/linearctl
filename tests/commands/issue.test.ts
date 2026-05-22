@@ -129,6 +129,26 @@ describe("handleIssueCommand — issue get", () => {
     }
   });
 
+  it("accepts view as an alias for get", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-issue-"));
+    const paths = await writeProfileFiles(directory);
+    const fetchImpl = makeFetch({ data: { issue: makeRawIssue() } });
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleIssueCommand(["view", "INF-2975"], {
+        ...baseOptions(paths),
+        fetchImpl
+      });
+
+      expect(exitCode).toBe(0);
+      const parsed = JSON.parse(output.stdout.join(""));
+      expect(parsed.identifier).toBe("INF-2975");
+    } finally {
+      output.restore();
+    }
+  });
+
   it("returns exit code 4 when issue is not found", async () => {
     const directory = await mkdtemp(join(tmpdir(), "linear-cli-issue-"));
     const paths = await writeProfileFiles(directory);
@@ -608,7 +628,7 @@ describe("handleIssueCommand — issue list", () => {
       if (body.query.includes("ResolveProject")) {
         expect(body.variables).toMatchObject({
           first: 100,
-          filter: { teams: { some: { id: { eq: "team-1" } } } }
+          filter: { accessibleTeams: { some: { id: { eq: "team-1" } } } }
         });
         return new Response(JSON.stringify({
           data: {
@@ -692,6 +712,37 @@ describe("handleIssueCommand — issue list", () => {
       output.restore();
     }
   });
+
+  it("accepts --status as an alias for --state", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-issue-"));
+    const paths = await writeProfileFiles(directory);
+    const fetchSpy = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
+      new Response(JSON.stringify({
+        data: {
+          issues: {
+            nodes: [makeRawIssue()],
+            pageInfo: { hasNextPage: false, endCursor: null }
+          }
+        }
+      }), { status: 200 })
+    );
+    const fetchImpl = fetchSpy as unknown as FetchLike;
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleIssueCommand(["list"], {
+        ...baseOptions(paths),
+        status: "Backlog",
+        fetchImpl
+      });
+
+      expect(exitCode).toBe(0);
+      const callBody = JSON.parse(String((fetchSpy as ReturnType<typeof vi.fn>).mock.calls[0]?.[1]?.body));
+      expect(callBody.variables.filter.state).toEqual({ name: { eq: "Backlog" } });
+    } finally {
+      output.restore();
+    }
+  });
 });
 
 describe("handleIssueCommand — issue search", () => {
@@ -723,6 +774,83 @@ describe("handleIssueCommand — issue search", () => {
       expect(callBody.query).toContain("searchIssues");
       expect(callBody.query).not.toContain("issueSearch");
       expect(callBody.variables.term).toBe("vault upgrade");
+    } finally {
+      output.restore();
+    }
+  });
+
+  it("accepts a positional query argument", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-issue-"));
+    const paths = await writeProfileFiles(directory);
+    const fetchImpl = makeFetch({
+      data: {
+        searchIssues: {
+          nodes: [makeRawIssue()],
+          pageInfo: { hasNextPage: false, endCursor: null }
+        }
+      }
+    });
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleIssueCommand(["search", "db sidecar"], {
+        ...baseOptions(paths),
+        fetchImpl
+      });
+
+      expect(exitCode).toBe(0);
+      const callBody = JSON.parse(String((fetchImpl as ReturnType<typeof vi.fn>).mock.calls[0]?.[1]?.body));
+      expect(callBody.variables.term).toBe("db sidecar");
+    } finally {
+      output.restore();
+    }
+  });
+
+  it("routes issue list --search through text search", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-issue-"));
+    const paths = await writeProfileFiles(directory);
+    const fetchImpl = makeFetch({
+      data: {
+        searchIssues: {
+          nodes: [makeRawIssue()],
+          pageInfo: { hasNextPage: false, endCursor: null }
+        }
+      }
+    });
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleIssueCommand(["list"], {
+        ...baseOptions(paths),
+        search: "db sidecar",
+        fetchImpl
+      });
+
+      expect(exitCode).toBe(0);
+      const callBody = JSON.parse(String((fetchImpl as ReturnType<typeof vi.fn>).mock.calls[0]?.[1]?.body));
+      expect(callBody.query).toContain("searchIssues");
+      expect(callBody.variables.term).toBe("db sidecar");
+    } finally {
+      output.restore();
+    }
+  });
+
+  it("rejects mixed positional and flag-based search terms", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-issue-"));
+    const paths = await writeProfileFiles(directory);
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleIssueCommand(["search", "positional"], {
+        ...baseOptions(paths),
+        query: "flag"
+      });
+
+      expect(exitCode).toBe(5);
+      expect(output.stderr.join("")).toContain(
+        "mixed positional and flag-based search terms are not allowed"
+      );
+      expect(output.stdout.join("")).toBe("");
     } finally {
       output.restore();
     }

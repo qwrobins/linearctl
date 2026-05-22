@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.5] - 2026-05-22
+
+### Added
+
+- `issue view <identifier>` is now an alias for `issue get <identifier>`.
+- `issue search` now accepts the query as a positional argument, and `issue list --search/--query <text>` routes to full-text issue search.
+- `project list` now supports `--query`, `--search`, and `--name` for project-name filtering.
+- `--limit <n>` is accepted as an alias for `--max <n>` on paginated commands.
+
+### Fixed
+
+- Team-scoped project name resolution now uses Linear's `accessibleTeams` project filter instead of invalid `ProjectFilter.teams`, fixing project lookups and `issue list --project` workflows that previously failed with GraphQL 400 errors.
+- `issue list --status <name>` is accepted as an alias for `--state <name>`.
+
 ## [0.6.4] - 2026-05-18
 
 ### Added

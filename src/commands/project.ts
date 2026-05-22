@@ -34,6 +34,8 @@ export interface ProjectCommandOptions {
   state?: string;
   states?: string[];
   status?: string;
+  query?: string;
+  search?: string;
   lead?: string;
   startDate?: string;
   targetDate?: string;
@@ -588,6 +590,11 @@ async function handleProjectList(options: ProjectCommandOptions): Promise<number
       }
       const stateFilter = { or: stateValues.map((state) => ({ status: { type: { eq: state } } })) };
       filter = filter === undefined ? stateFilter : { and: [filter, stateFilter] };
+    }
+    const nameQuery = options.query ?? options.search ?? options.name;
+    if (nameQuery !== undefined && nameQuery.trim() !== "") {
+      const nameFilter = { name: { containsIgnoreCase: nameQuery.trim() } };
+      filter = filter === undefined ? nameFilter : { and: [filter, nameFilter] };
     }
 
     const commonPaginateInput = {

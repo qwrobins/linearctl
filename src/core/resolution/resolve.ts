@@ -295,7 +295,7 @@ export async function resolveProjectId(
 ): Promise<string> {
   const filter =
     teamId !== undefined
-      ? { teams: { some: { id: { eq: teamId } } } }
+      ? { accessibleTeams: { some: { id: { eq: teamId } } } }
       : undefined;
 
   const nodes: ProjectNode[] = [];

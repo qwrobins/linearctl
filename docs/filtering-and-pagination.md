@@ -16,6 +16,7 @@ This prevents silently incomplete data. Always check stderr or use `--all`/`--ma
 |---|---|
 | `--all` | Auto-paginate through all results |
 | `--max <n>` | Cap total results (works with or without `--all`) |
+| `--limit <n>` | Alias for `--max <n>` |
 | `--page-size <n>` | Number of results per page (API request) |
 | `--after <cursor>` | Resume from a pagination cursor |
 
@@ -50,6 +51,8 @@ Issue list supports these filter flags:
 |---|---|---|
 | `--team <value>` | Filter by team | Name, key (e.g. `INF`), or UUID |
 | `--state <value>` | Filter by workflow state; repeat for a union filter | Name (e.g. `"In Progress"`) or UUID |
+| `--status <value>` | Alias for `--state <value>` | Name (e.g. `"Backlog"`) or UUID |
+| `--search <text>` / `--query <text>` | Full-text issue search | Search text |
 | `--assignee <value>` | Filter by assignee | `"me"`, name, displayName, email, or UUID |
 | `--label <value>` | Filter by label | Name or UUID |
 | `--priority <n>` | Filter by priority | Integer 0-4 (0 = no priority, 1 = urgent, 4 = low) |
@@ -96,6 +99,7 @@ Project list supports:
 |---|---|---|
 | `--team <value>` | Filter by team | Name, key (e.g. `INF`), or UUID |
 | `--state <value>` | Filter by project status type; repeat for a union filter | `backlog`, `planned`, `started`, `paused`, `completed`, `canceled` |
+| `--query <text>` / `--search <text>` / `--name <text>` | Filter by project name text | Search text |
 | `--all-teams` | Disable default-team team filtering | boolean |
 
 ## Name resolution

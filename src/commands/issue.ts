@@ -40,6 +40,7 @@ export interface IssueCommandOptions {
   label?: string;
   state?: string;
   states?: string[];
+  status?: string;
   milestone?: string;
   projectMilestone?: string;
   inputJson?: string;
@@ -63,6 +64,7 @@ export interface IssueCommandOptions {
   orderDir?: string;
   // issue search flags
   query?: string;
+  search?: string;
   // pagination flags
   all?: boolean;
   max?: number;
@@ -544,7 +546,8 @@ async function handleIssueList(options: IssueCommandOptions): Promise<number> {
         resolvedTeamId = looksLikeId(effectiveTeam) ? effectiveTeam : await resolveTeamId(effectiveTeam, resolverOpts);
         buildFilter.team = { id: { eq: resolvedTeamId } };
       }
-      const stateValues = options.states ?? (options.state === undefined ? [] : [options.state]);
+      const stateValue = options.state ?? options.status;
+      const stateValues = options.states ?? (stateValue === undefined ? [] : [stateValue]);
       if (stateValues.length === 1) {
         const state = stateValues[0]!;
         buildFilter.state = looksLikeId(state) ? { id: { eq: state } } : { name: { eq: state } };
@@ -655,9 +658,9 @@ async function handleIssueList(options: IssueCommandOptions): Promise<number> {
 }
 
 async function handleIssueSearch(options: IssueCommandOptions): Promise<number> {
-  const trimmedQuery = options.query?.trim();
+  const trimmedQuery = (options.query ?? options.search)?.trim();
   if (trimmedQuery === undefined || trimmedQuery === "") {
-    return emitValidationError("usage: linearctl issue search --query <text>", options);
+    return emitValidationError("usage: linearctl issue search [<text>|--query <text>]", options);
   }
 
   const paginationOptions: PaginationOptions = {
@@ -1468,10 +1471,10 @@ export async function handleIssueCommand(
 ): Promise<number> {
   const [subcommand, ...rest] = positionals;
 
-  if (subcommand === "get") {
+  if (subcommand === "get" || subcommand === "view") {
     const identifier = rest[0];
     if (identifier === undefined || identifier === "") {
-      return emitValidationError("usage: linearctl issue get <identifier>", options);
+      return emitValidationError(`usage: linearctl issue ${subcommand} <identifier>`, options);
     }
     if (rest.length > 1) {
       return emitValidationError("issue get accepts exactly one identifier.", options);
@@ -1490,14 +1493,23 @@ export async function handleIssueCommand(
     if (rest.length > 0) {
       return emitValidationError("issue list does not accept positional arguments.", options);
     }
+    if ((options.query ?? options.search) !== undefined) {
+      return handleIssueSearch(options);
+    }
     return handleIssueList(options);
   }
 
   if (subcommand === "search") {
-    if (rest.length > 0) {
-      return emitValidationError("issue search does not accept positional arguments. Use --query.", options);
+    if (rest.length > 1) {
+      return emitValidationError("issue search accepts at most one query argument.", options);
     }
-    return handleIssueSearch(options);
+    if (rest[0] !== undefined && (options.query !== undefined || options.search !== undefined)) {
+      return emitValidationError(
+        "mixed positional and flag-based search terms are not allowed; provide either a positional query or --query/--search, not both.",
+        options
+      );
+    }
+    return handleIssueSearch(rest[0] === undefined ? options : { ...options, query: options.query ?? options.search ?? rest[0] });
   }
 
   if (subcommand === "update") {
@@ -1577,5 +1589,5 @@ export async function handleIssueCommand(
     return handleBulkAssign(options);
   }
 
-  return emitValidationError("unsupported issue command. Try: get, create, list, search, update, close, assign, comment, attach-slack, bulk-update, bulk-close, bulk-assign.", options);
+  return emitValidationError("unsupported issue command. Try: get, view, create, list, search, update, close, assign, comment, attach-slack, bulk-update, bulk-close, bulk-assign.", options);
 }
