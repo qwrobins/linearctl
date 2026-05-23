@@ -20,6 +20,7 @@ export * from "./core/output/validation-error.js";
 export * from "./core/output/dry-run.js";
 export * from "./core/io/stdin.js";
 export * from "./core/schema/schema-meta.js";
+export * from "./core/schema/freshness.js";
 export * from "./core/pagination/pagination.js";
 export * from "./core/transport/graphql.js";
 export * from "./core/transport/retry.js";

@@ -32,6 +32,26 @@ linearctl schema check --json
 
 Compares the bundled schema against the live API. Reports added/removed types and fields. Exits with code 6 if drift is detected.
 
+### Startup freshness warning
+
+For normal commands, `linearctl` checks schema freshness at most once per day when the bundled schema is older than the configured threshold. The default threshold is 14 days. If the live Linear API schema has drifted, the command continues and a warning is printed to stderr:
+
+```text
+Warning: linearctl schema is 38 days old. Run `linearctl schema pull` to update, or `linearctl schema check` for details.
+```
+
+Configure the threshold and optional automatic updates in `~/.config/linear/config`:
+
+```ini
+[schema]
+stale_after_days = 14
+auto_update = false
+```
+
+When `auto_update = true`, `linearctl` writes the refreshed schema under `~/.config/linear/schema/` after drift is detected. Startup checks are advisory and never block command execution if the freshness check cannot run.
+
+GraphQL HTTP 400 errors that look like missing fields or types also include a stale-schema hint so drift is diagnosable even when the startup check has not run.
+
 ### Regenerate for CI
 
 ```bash
