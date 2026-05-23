@@ -40,7 +40,7 @@ For normal commands, `linearctl` checks schema freshness at most once per day wh
 Warning: linearctl schema is 38 days old. Run `linearctl schema pull` to update, or `linearctl schema check` for details.
 ```
 
-Configure the threshold and optional automatic updates in `~/.config/linear/config`:
+Configure the threshold and optional automatic updates in `~/.config/linear/config`. The config-file spelling for the `schema.autoUpdate` option is `auto_update` inside the `[schema]` section:
 
 ```ini
 [schema]
@@ -48,7 +48,7 @@ stale_after_days = 14
 auto_update = false
 ```
 
-When `auto_update = true`, `linearctl` writes the refreshed schema under `~/.config/linear/schema/` after drift is detected. Startup checks are advisory and never block command execution if the freshness check cannot run.
+When `auto_update = true`, `linearctl` automatically pulls and writes the refreshed schema under `~/.config/linear/schema/` after drift is detected. The default is `false`, so users get warn-only behavior unless they opt in. Startup checks are advisory and never block command execution if the freshness check cannot run.
 
 GraphQL HTTP 400 errors that look like missing fields or types also include a stale-schema hint so drift is diagnosable even when the startup check has not run.
 
