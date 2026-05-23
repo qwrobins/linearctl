@@ -55,6 +55,7 @@ describe("formatCommandErrorHuman", () => {
     expect(result).toContain("Field 'state' doesn't exist on type 'Project'");
     expect(result).toContain("(at query.team.projects)");
     expect(result).toContain("Field 'state' doesn't exist on type 'ProjectConnection'");
+    expect(result).toContain("Hint: This may be caused by a stale schema.");
   });
 
   it("formats error payloads without paths", () => {
@@ -65,6 +66,16 @@ describe("formatCommandErrorHuman", () => {
     });
     expect(result).toContain("Parse error");
     expect(result).not.toContain("(at ");
+  });
+
+  it("adds schema hints for common GraphQL field lookup wording", () => {
+    const result = formatCommandErrorHuman({
+      category: "general",
+      message: "Linear GraphQL request failed with HTTP 400",
+      details: [{ message: 'Cannot query field "assetUrl" on type "UploadPayload".' }]
+    });
+
+    expect(result).toContain("Hint: This may be caused by a stale schema.");
   });
 
   it("formats resolution error candidates from object shapes", () => {

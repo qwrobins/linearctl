@@ -14,7 +14,13 @@ export interface ProfileMetadata {
 
 export interface LinearConfig {
   defaultProfile?: string;
+  schema?: SchemaConfig;
   profiles: Record<string, ProfileMetadata>;
+}
+
+export interface SchemaConfig {
+  autoUpdate?: boolean;
+  staleAfterDays?: number;
 }
 
 export function stringifyLinearConfig(config: LinearConfig): string {
@@ -24,6 +30,22 @@ export function stringifyLinearConfig(config: LinearConfig): string {
     document.default = {
       profile: config.defaultProfile
     };
+  }
+
+  if (config.schema !== undefined) {
+    const section = Object.create(null) as Record<string, string>;
+
+    if (config.schema.autoUpdate !== undefined) {
+      section.auto_update = config.schema.autoUpdate ? "true" : "false";
+    }
+
+    if (config.schema.staleAfterDays !== undefined) {
+      section.stale_after_days = String(config.schema.staleAfterDays);
+    }
+
+    if (Object.keys(section).length > 0) {
+      document.schema = section;
+    }
   }
 
   for (const [profileName, metadata] of Object.entries(config.profiles)) {
@@ -71,6 +93,7 @@ export function setDefaultProfile(config: LinearConfig, profileName: string): Li
 
 export function clearDefaultProfile(config: LinearConfig): LinearConfig {
   return {
+    ...(config.schema === undefined ? {} : { schema: config.schema }),
     profiles: { ...config.profiles }
   };
 }
@@ -102,17 +125,22 @@ export function removeProfileMetadata(config: LinearConfig, profileName: string)
   }
 
   if (config.defaultProfile === trimmedProfileName) {
-    return { profiles };
+    return {
+      ...(config.schema === undefined ? {} : { schema: config.schema }),
+      profiles
+    };
   }
 
   return {
     ...(config.defaultProfile === undefined ? {} : { defaultProfile: config.defaultProfile }),
+    ...(config.schema === undefined ? {} : { schema: config.schema }),
     profiles
   };
 }
 
 export function parseLinearConfig(document: IniDocument): LinearConfig {
   const defaultProfile = document.default?.profile;
+  const schema = parseSchemaConfig(document.schema);
   const profiles: Record<string, ProfileMetadata> = {};
 
   for (const [sectionName, section] of Object.entries(document)) {
@@ -160,6 +188,7 @@ export function parseLinearConfig(document: IniDocument): LinearConfig {
 
   return {
     ...(defaultProfile === undefined ? {} : { defaultProfile }),
+    ...(schema === undefined ? {} : { schema }),
     profiles
   };
 }
@@ -188,4 +217,40 @@ function validateProfileName(profileName: string, subject: string): string {
   }
 
   return trimmedProfileName;
+}
+
+function parseSchemaConfig(section: Record<string, string> | undefined): SchemaConfig | undefined {
+  if (section === undefined) {
+    return undefined;
+  }
+
+  const schema: SchemaConfig = {};
+
+  if (section.auto_update !== undefined) {
+    schema.autoUpdate = parseBoolean(section.auto_update, "schema.auto_update");
+  }
+
+  if (section.stale_after_days !== undefined) {
+    schema.staleAfterDays = parsePositiveInteger(section.stale_after_days, "schema.stale_after_days");
+  }
+
+  return Object.keys(schema).length > 0 ? schema : undefined;
+}
+
+function parseBoolean(value: string, subject: string): boolean {
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "true" || normalized === "yes" || normalized === "1") {
+    return true;
+  }
+  if (normalized === "false" || normalized === "no" || normalized === "0") {
+    return false;
+  }
+  throw new Error(`${subject} must be true or false`);
+}
+
+function parsePositiveInteger(value: string, subject: string): number {
+  if (!/^[1-9]\d*$/.test(value.trim())) {
+    throw new Error(`${subject} must be a positive integer`);
+  }
+  return parseInt(value, 10);
 }

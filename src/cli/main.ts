@@ -5,6 +5,7 @@ import { OPTION_CATALOG, buildOptionDefinitions } from "../core/registry/option-
 import { generateCommandHelp, generateTopLevelHelp } from "../core/registry/help.js";
 import type { CommandRegistration, ParsedCliArguments } from "../core/registry/types.js";
 import { curatedCommandMetadata, defaultLinearConfigPaths, ExitCode } from "../index.js";
+import { maybeWarnForStaleSchema } from "../core/schema/freshness.js";
 import packageJson from "../../package.json" with { type: "json" };
 
 function printTopLevelHelp(): void {
@@ -324,6 +325,17 @@ async function main(argv: string[]): Promise<number> {
     if (registration !== undefined) {
       try {
         const options = registration.buildOptions(args, process.env, process.stdin);
+        void maybeWarnForStaleSchema({
+          commandName,
+          ...(args.profile === undefined ? {} : { profile: args.profile }),
+          configFile: args.configFile,
+          credentialsFile: args.credentialsFile,
+          ...(args.apiUrl === undefined ? {} : { apiUrl: args.apiUrl }),
+          env: process.env
+        }).catch((error) => {
+          const message = error instanceof Error ? error.message : "schema freshness check failed";
+          process.stderr.write(`Warning: ${message}\n`);
+        });
         return await registration.handler(args.positionals.slice(1), options);
       } catch (error) {
         const message = error instanceof Error ? error.message : "command failed";

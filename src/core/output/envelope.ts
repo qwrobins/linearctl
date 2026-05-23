@@ -50,6 +50,7 @@ export function successEnvelope<TData>(
 
 export function formatCommandErrorHuman(error: CommandError): string {
   const lines = [`Error: ${error.message}`];
+  let schemaHint = false;
 
   if (error.details == null) {
     return lines.join("\n");
@@ -62,6 +63,9 @@ export function formatCommandErrorHuman(error: CommandError): string {
       if (typeof entry === "object" && entry !== null && "message" in entry && typeof entry.message === "string") {
         const path = "path" in entry && Array.isArray(entry.path) ? ` (at ${entry.path.join(".")})` : "";
         lines.push(`  - ${entry.message}${path}`);
+        if (isSchemaLookupError(entry.message)) {
+          schemaHint = true;
+        }
       }
     }
   } else if (typeof details === "object" && details !== null) {
@@ -96,7 +100,22 @@ export function formatCommandErrorHuman(error: CommandError): string {
     }
   }
 
+  if (schemaHint) {
+    lines.push("");
+    lines.push("Hint: This may be caused by a stale schema. Run `linearctl schema check` to verify.");
+  }
+
   return lines.join("\n");
+}
+
+function isSchemaLookupError(message: string): boolean {
+  return (
+    /field ["'][^"']+["'] (?:is not defined by|doesn't exist on) type ["'][^"']+["']/i.test(message) ||
+    /cannot query field ["'][^"']+["'] on type ["'][^"']+["']/i.test(message) ||
+    /type ["'][^"']+["'] (?:is not defined|doesn't exist|not found)/i.test(message) ||
+    /unknown type ["'][^"']+["']/i.test(message) ||
+    /unknown (?:field|type) ["'][^"']+["']/i.test(message)
+  );
 }
 
 export function failureEnvelope(
