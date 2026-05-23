@@ -42,6 +42,24 @@ describe("parseLinearConfig", () => {
     });
   });
 
+  it("parses schema freshness settings", () => {
+    const config = parseLinearConfig(
+      parseIni(`
+        [schema]
+        auto_update = true
+        stale_after_days = 7
+
+        [profile work]
+        workspace = main
+      `)
+    );
+
+    expect(config.schema).toEqual({
+      autoUpdate: true,
+      staleAfterDays: 7
+    });
+  });
+
   it("keeps default as a valid profile name", () => {
     const config = parseLinearConfig(
       parseIni(`
@@ -115,6 +133,18 @@ describe("parseLinearConfig", () => {
         ""
       ].join("\n")
     );
+  });
+
+  it("serializes schema freshness settings", () => {
+    expect(
+      stringifyLinearConfig({
+        schema: {
+          autoUpdate: false,
+          staleAfterDays: 14
+        },
+        profiles: {}
+      })
+    ).toBe(["[schema]", "auto_update = false", "stale_after_days = 14", ""].join("\n"));
   });
 
   it("writes config atomically with restrictive permissions", async () => {

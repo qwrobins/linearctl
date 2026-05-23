@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.9] - 2026-05-23
+
+### Added
+
+- Normal commands now perform a best-effort schema freshness check at most once per day when the bundled schema is older than the configured threshold.
+- Added `[schema]` config support for `stale_after_days` and opt-in `auto_update`.
+- GraphQL field/type lookup failures now include a hint to run `linearctl schema check`.
+
 ## [0.6.8] - 2026-05-22
 
 ### Fixed
