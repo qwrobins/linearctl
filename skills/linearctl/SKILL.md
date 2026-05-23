@@ -116,7 +116,7 @@ Raw GraphQL should not be used merely because it is possible. It is the fallback
 - `linearctl schema version --json`
 - `linearctl schema pull --json`
 - `linearctl schema check --json`
-- Normal commands warn on stderr when the bundled schema is stale; configure `[schema] stale_after_days` and `auto_update` in the linear config.
+- Normal commands warn on stderr when the bundled schema is stale; configure `[schema] stale_after_days` and `auto_update = true` in the linear config to opt into automatic schema pulls (`schema.autoUpdate`).
 
 ### Auth
 - `linearctl auth status --json`
