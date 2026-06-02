@@ -670,6 +670,11 @@ async function handleProjectCreate(options: ProjectCommandOptions): Promise<numb
       input.teamIds = [looksLikeId(options.team) ? options.team : await resolveTeamId(options.team, resolverOpts)];
     }
 
+    if (options.lead !== undefined) {
+      const resolverOpts = await ctx.resolverOptions();
+      input.leadId = looksLikeId(options.lead) ? options.lead : await resolveUserId(options.lead, resolverOpts);
+    }
+
     if (options.dryRun === true) {
       return emitDryRunResult("create", "project", input, options);
     }
