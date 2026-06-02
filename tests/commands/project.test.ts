@@ -332,6 +332,80 @@ describe("handleProjectCommand — project create", () => {
     }
   });
 
+  it("passes --lead through as leadId when creating a project", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-project-"));
+    const paths = await writeProfileFiles(directory);
+    const createdProject = makeRawProject({ name: "New project" });
+    const calls: Array<{ query: string; variables?: Record<string, unknown> }> = [];
+    const fetchImpl = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body ?? "{}")) as { query: string; variables?: Record<string, unknown> };
+      calls.push(body);
+
+      return new Response(JSON.stringify({
+        data: { projectCreate: { success: true, project: createdProject } }
+      }), { status: 200 });
+    }) as FetchLike;
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleProjectCommand(["create"], {
+        ...baseOptions(paths),
+        name: "New project",
+        lead: "00000000-0000-0000-0000-000000000002",
+        fetchImpl
+      });
+
+      expect(exitCode).toBe(0);
+      const createCall = calls.find((call) => call.query.includes("ProjectCreate"));
+      expect(createCall?.variables?.input).toEqual({
+        name: "New project",
+        leadId: "00000000-0000-0000-0000-000000000002"
+      });
+    } finally {
+      output.restore();
+    }
+  });
+
+  it("resolves --lead before creating a project when a user lookup value is provided", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-project-"));
+    const paths = await writeProfileFiles(directory);
+    const createdProject = makeRawProject({ name: "New project" });
+    const calls: Array<{ query: string; variables?: Record<string, unknown> }> = [];
+    const fetchImpl = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body ?? "{}")) as { query: string; variables?: Record<string, unknown> };
+      calls.push(body);
+
+      if (body.query.includes("ResolveUser")) {
+        return new Response(JSON.stringify({
+          data: { users: { nodes: [{ id: "user-2", name: "Ada", email: "ada@example.com" }] } }
+        }), { status: 200 });
+      }
+
+      return new Response(JSON.stringify({
+        data: { projectCreate: { success: true, project: createdProject } }
+      }), { status: 200 });
+    }) as FetchLike;
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleProjectCommand(["create"], {
+        ...baseOptions(paths),
+        name: "New project",
+        lead: "ada@example.com",
+        fetchImpl
+      });
+
+      expect(exitCode).toBe(0);
+      const createCall = calls.find((call) => call.query.includes("ProjectCreate"));
+      expect(createCall?.variables?.input).toEqual({
+        name: "New project",
+        leadId: "user-2"
+      });
+    } finally {
+      output.restore();
+    }
+  });
+
   it("returns exit code 5 when --name is missing", async () => {
     const directory = await mkdtemp(join(tmpdir(), "linear-cli-project-"));
     const paths = await writeProfileFiles(directory);

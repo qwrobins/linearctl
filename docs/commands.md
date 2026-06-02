@@ -73,7 +73,7 @@ Bulk operations report partial success. Check the response for per-item results.
 ```bash
 linearctl project get <name|id> --json             # supports exact, unique prefix, or unique substring names
 linearctl project list [--query <text>|--search <text>|--name <text>] [--team <name|key|id>] [--state <status-type> ...] [--all-teams] --json
-linearctl project create --name <name> [--description <text>] [--team <name|key|id>] --json
+linearctl project create --name <name> [--description <text>] [--team <name|key|id>] [--lead <user-id|email|"me">] --json
 linearctl project create-with-issues --name <name> --team <name|key|id> \
   --issues-json '[{"title":"...","teamId":"..."}]' [--description <text>] --json
 linearctl project update <id> [--name <text>] [--description <text>] \
