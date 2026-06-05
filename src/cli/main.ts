@@ -211,6 +211,7 @@ function toParsedCliArguments(values: Record<string, unknown>, positionals: stri
     ...(typeof values.title === "string" ? { title: values.title } : {}),
     ...(typeof values.team === "string" ? { team: values.team } : {}),
     ...(typeof values.description === "string" ? { description: values.description } : {}),
+    ...(typeof values["description-file"] === "string" ? { descriptionFile: values["description-file"] } : {}),
     ...(typeof values.priority === "string" ? { priority: values.priority } : {}),
     ...(typeof values.estimate === "string" ? { estimate: values.estimate } : {}),
     ...(typeof values.assignee === "string" ? { assignee: values.assignee } : {}),

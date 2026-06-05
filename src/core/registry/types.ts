@@ -56,6 +56,7 @@ export interface ParsedCliArguments {
   title?: string;
   team?: string;
   description?: string;
+  descriptionFile?: string;
   priority?: string;
   estimate?: string;
   assignee?: string;
