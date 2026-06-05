@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.11] - 2026-06-05
+
+### Added
+
+- `issue create`, `issue update`, `project create`, and `project update` now support `--description-file <path>` and `--description-file -` for explicit stdin-sourced descriptions.
+
+### Fixed
+
+- `issue create`, `issue update`, `project create`, and `project update` keep `--description` as a literal flag value and only read stdin when `--description-file -` is provided, avoiding accidental stdin consumption in shell loops.
+
 ## [0.6.10] - 2026-06-02
 
 ### Fixed

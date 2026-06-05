@@ -23,13 +23,13 @@ linearctl issue search [<text>|--query <text>] [--all] --json
 
 # Create an issue
 linearctl issue create --title <title> --team <name|key|id> \
-  [--description <text>] [--priority <0-4>] [--estimate <n>] [--assignee <email|"me"|id>] \
+  [--description <text>|--description-file <path|->] [--priority <0-4>] [--estimate <n>] [--assignee <email|"me"|id>] \
   [--label <name|id>] [--state <name|id>] [--cycle <id>] [--project <name|id>] \
   [--project-milestone <id>|--milestone <id>] \
   [--parent <identifier>] --json
 
 # Update an issue
-linearctl issue update <identifier> [--title <text>] [--description <text>] \
+linearctl issue update <identifier> [--title <text>] [--description <text>|--description-file <path|->] \
   [--priority <0-4>] [--estimate <n>] [--assignee <email|"me"|id>] [--label <name|id>] \
   [--state <name|id>] [--cycle <id>] [--project <id>] [--parent <identifier>] --json
 
@@ -73,10 +73,10 @@ Bulk operations report partial success. Check the response for per-item results.
 ```bash
 linearctl project get <name|id> --json             # supports exact, unique prefix, or unique substring names
 linearctl project list [--query <text>|--search <text>|--name <text>] [--team <name|key|id>] [--state <status-type> ...] [--all-teams] --json
-linearctl project create --name <name> [--description <text>] [--team <name|key|id>] [--lead <user-id|email|"me">] --json
+linearctl project create --name <name> [--description <text>|--description-file <path|->] [--team <name|key|id>] [--lead <user-id|email|"me">] --json
 linearctl project create-with-issues --name <name> --team <name|key|id> \
   --issues-json '[{"title":"...","teamId":"..."}]' [--description <text>] --json
-linearctl project update <id> [--name <text>] [--description <text>] \
+linearctl project update <id> [--name <text>] [--description <text>|--description-file <path|->] \
   [--status <id|name|type>|--state <name|type>] [--lead <user-id|email|"me">] \
   [--start-date <YYYY-MM-DD>] [--target-date <YYYY-MM-DD>] --json
 linearctl project delete <id> --json              # [destructive]
@@ -85,6 +85,8 @@ linearctl project delete <id> --json              # [destructive]
 `project list --json` includes portfolio fields such as `progress`, `health`, `description`, `updatedAt`, `currentProgress`, a normalized `milestones` array with `name`, `targetDate`, `progress`, and `status`, and milestone pagination metadata (`milestonesPageInfo`, `milestonesTruncated`) so clients can detect truncation. Human output also shows progress, health, description, updated time, and milestone summaries.
 
 For `project update`, `--status` accepts a status name, status type, or status ID. `--state` remains supported as an alias for compatibility.
+
+For issue and project create/update descriptions, use `--description-file <path>` to read markdown from a file, or `--description-file -` to read from stdin explicitly. `--description` and `--description-file` are mutually exclusive.
 
 For `project list`, `--state` accepts project status types: `backlog`, `planned`, `started`, `paused`, `completed`, or `canceled`. Repeat `--state` to return projects matching any provided type. Use `--query`, `--search`, or `--name` to filter by project name.
 

@@ -7,6 +7,7 @@ import { paginateGraphQL, validatePaginationOptions } from "../core/pagination/p
 import type { PaginationOptions } from "../core/pagination/pagination.js";
 import { streamPaginateGraphQL } from "../core/pagination/streaming.js";
 import { emitDryRunResult } from "../core/output/dry-run.js";
+import { resolveDescriptionInput } from "../core/io/text-input.js";
 import {
   resolveTeamId,
   resolveUserId,
@@ -36,6 +37,8 @@ export interface IssueCommandOptions {
   team?: string;
   allTeams?: boolean;
   description?: string;
+  descriptionFile?: string;
+  stdinStream?: NodeJS.ReadableStream;
   priority?: string;
   estimate?: string;
   assignee?: string;
@@ -408,8 +411,14 @@ async function handleIssueCreate(options: IssueCommandOptions): Promise<number> 
     title
   };
 
-  if (options.description !== undefined) {
-    input.description = options.description;
+  let description: string | undefined;
+  try {
+    description = await resolveDescriptionInput(options);
+  } catch (error) {
+    return emitValidationError(error instanceof Error ? error.message : String(error), options);
+  }
+  if (description !== undefined) {
+    input.description = description;
   }
   if (options.priority !== undefined) {
     const parsed = Number(options.priority);
@@ -792,8 +801,14 @@ async function handleIssueUpdate(
   if (options.title !== undefined) {
     input.title = options.title;
   }
-  if (options.description !== undefined) {
-    input.description = options.description;
+  let description: string | undefined;
+  try {
+    description = await resolveDescriptionInput(options);
+  } catch (error) {
+    return emitValidationError(error instanceof Error ? error.message : String(error), options);
+  }
+  if (description !== undefined) {
+    input.description = description;
   }
   if (options.priority !== undefined) {
     const parsed = Number(options.priority);

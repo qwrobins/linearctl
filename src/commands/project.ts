@@ -9,6 +9,7 @@ import { resolveStoredProfile } from "../core/auth/runtime.js";
 import { paginateGraphQL, validatePaginationOptions, type PaginationOptions } from "../core/pagination/pagination.js";
 import { streamPaginateGraphQL } from "../core/pagination/streaming.js";
 import { emitDryRunResult } from "../core/output/dry-run.js";
+import { resolveDescriptionInput } from "../core/io/text-input.js";
 import { resolveProjectId, resolveTeamId, resolveUserId, looksLikeId } from "../core/resolution/resolve.js";
 import type { ResolverOptions } from "../core/resolution/resolve.js";
 import { CommandContext } from "../core/runtime/command-context.js";
@@ -28,6 +29,8 @@ export interface ProjectCommandOptions {
   // project flags
   name?: string;
   description?: string;
+  descriptionFile?: string;
+  stdinStream?: NodeJS.ReadableStream;
   team?: string;
   issuesJson?: string;
   allTeams?: boolean;
@@ -656,8 +659,14 @@ async function handleProjectCreate(options: ProjectCommandOptions): Promise<numb
     name: options.name
   };
 
-  if (options.description !== undefined) {
-    input.description = options.description;
+  let description: string | undefined;
+  try {
+    description = await resolveDescriptionInput(options);
+  } catch (error) {
+    return emitValidationError(error instanceof Error ? error.message : String(error), options);
+  }
+  if (description !== undefined) {
+    input.description = description;
   }
 
   const ctx = buildContext(options);
@@ -720,8 +729,14 @@ async function handleProjectUpdate(
   if (options.name !== undefined) {
     input.name = options.name;
   }
-  if (options.description !== undefined) {
-    input.description = options.description;
+  let description: string | undefined;
+  try {
+    description = await resolveDescriptionInput(options);
+  } catch (error) {
+    return emitValidationError(error instanceof Error ? error.message : String(error), options);
+  }
+  if (description !== undefined) {
+    input.description = description;
   }
   if (options.startDate !== undefined) {
     const validation = validateIsoDate(options.startDate, "start-date", options);
@@ -745,7 +760,7 @@ async function handleProjectUpdate(
   }
 
   if (Object.keys(input).length === 0 && !needsStatusResolution) {
-    return emitValidationError("project update requires at least one of --name, --description, --status, --state, --lead, --start-date, --target-date.", options);
+    return emitValidationError("project update requires at least one of --name, --description, --description-file, --status, --state, --lead, --start-date, --target-date.", options);
   }
 
   const ctx = buildContext(options);

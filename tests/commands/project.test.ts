@@ -1,6 +1,7 @@
-import { mkdtemp } from "node:fs/promises";
+import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { Readable } from "node:stream";
 import { describe, expect, it, vi } from "vitest";
 import { handleProjectCommand, normalizeProject, normalizeProjectDetail } from "../../src/commands/project.js";
 import { writeCredentialsFile } from "../../src/core/auth/credentials.js";
@@ -327,6 +328,97 @@ describe("handleProjectCommand — project create", () => {
       expect(exitCode).toBe(0);
       const parsed = JSON.parse(output.stdout.join(""));
       expect(parsed.name).toBe("New project");
+    } finally {
+      output.restore();
+    }
+  });
+
+  it("reads --description-file into the project create input", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-project-"));
+    const paths = await writeProfileFiles(directory);
+    const descriptionPath = join(directory, "project.md");
+    await writeFile(descriptionPath, "Project from file\n", "utf8");
+    const createdProject = makeRawProject({ name: "New project" });
+    const calls: Array<{ query: string; variables?: Record<string, unknown> }> = [];
+    const fetchImpl = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body ?? "{}")) as { query: string; variables?: Record<string, unknown> };
+      calls.push(body);
+      return new Response(JSON.stringify({
+        data: { projectCreate: { success: true, project: createdProject } }
+      }), { status: 200 });
+    }) as FetchLike;
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleProjectCommand(["create"], {
+        ...baseOptions(paths),
+        name: "New project",
+        descriptionFile: descriptionPath,
+        fetchImpl
+      });
+
+      expect(exitCode).toBe(0);
+      const createCall = calls.find((call) => call.query.includes("ProjectCreate"));
+      expect(createCall?.variables?.input).toMatchObject({
+        name: "New project",
+        description: "Project from file\n"
+      });
+    } finally {
+      output.restore();
+    }
+  });
+
+  it("reads --description-file - from explicit stdin for project create", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-project-"));
+    const paths = await writeProfileFiles(directory);
+    const createdProject = makeRawProject({ name: "New project" });
+    const calls: Array<{ query: string; variables?: Record<string, unknown> }> = [];
+    const fetchImpl = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body ?? "{}")) as { query: string; variables?: Record<string, unknown> };
+      calls.push(body);
+      return new Response(JSON.stringify({
+        data: { projectCreate: { success: true, project: createdProject } }
+      }), { status: 200 });
+    }) as FetchLike;
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleProjectCommand(["create"], {
+        ...baseOptions(paths),
+        name: "New project",
+        descriptionFile: "-",
+        stdinStream: Readable.from(["Project from stdin\n"]),
+        fetchImpl
+      });
+
+      expect(exitCode).toBe(0);
+      const createCall = calls.find((call) => call.query.includes("ProjectCreate"));
+      expect(createCall?.variables?.input).toMatchObject({
+        name: "New project",
+        description: "Project from stdin\n"
+      });
+    } finally {
+      output.restore();
+    }
+  });
+
+  it("rejects project create with both --description and --description-file", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-project-"));
+    const paths = await writeProfileFiles(directory);
+    const descriptionPath = join(directory, "project.md");
+    await writeFile(descriptionPath, "Project from file\n", "utf8");
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleProjectCommand(["create"], {
+        ...baseOptions(paths),
+        name: "New project",
+        description: "Inline description",
+        descriptionFile: descriptionPath
+      });
+
+      expect(exitCode).toBe(5);
+      expect(output.stderr.join("")).toContain("--description and --description-file are mutually exclusive");
     } finally {
       output.restore();
     }
@@ -1053,6 +1145,39 @@ describe("handleProjectCommand — project update", () => {
         statusId: "status-1"
       });
       expect(JSON.parse(output.stdout.join("")).name).toBe("Updated project");
+    } finally {
+      output.restore();
+    }
+  });
+
+  it("reads --description-file into the project update input", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-project-"));
+    const paths = await writeProfileFiles(directory);
+    const descriptionPath = join(directory, "project.md");
+    await writeFile(descriptionPath, "Updated project from file\n", "utf8");
+    const updatedProject = makeRawProject({ name: "Updated project" });
+    const calls: Array<{ query: string; variables?: Record<string, unknown> }> = [];
+    const fetchImpl = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body ?? "{}")) as { query: string; variables?: Record<string, unknown> };
+      calls.push(body);
+      return new Response(JSON.stringify({
+        data: { projectUpdate: { success: true, project: updatedProject } }
+      }), { status: 200 });
+    }) as FetchLike;
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleProjectCommand(["update", "proj-uuid-1"], {
+        ...baseOptions(paths),
+        descriptionFile: descriptionPath,
+        fetchImpl
+      });
+
+      expect(exitCode).toBe(0);
+      const updateCall = calls.find((call) => call.query.includes("ProjectUpdate"));
+      expect(updateCall?.variables?.input).toEqual({
+        description: "Updated project from file\n"
+      });
     } finally {
       output.restore();
     }

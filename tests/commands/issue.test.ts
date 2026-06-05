@@ -1,6 +1,7 @@
-import { mkdtemp } from "node:fs/promises";
+import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { Readable } from "node:stream";
 import { describe, expect, it, vi } from "vitest";
 import { handleIssueCommand, normalizeIssue } from "../../src/commands/issue.js";
 import { writeCredentialsFile } from "../../src/core/auth/credentials.js";
@@ -363,6 +364,115 @@ describe("handleIssueCommand — issue create", () => {
       expect(input.labelIds).toEqual(["c0000000-0000-0000-0000-000000000001"]);
       expect(input.stateId).toBe("d0000000-0000-0000-0000-000000000001");
       expect(input.projectMilestoneId).toBe("e0000000-0000-0000-0000-000000000001");
+    } finally {
+      output.restore();
+    }
+  });
+
+  it("reads --description-file into the issue create input", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-issue-"));
+    const paths = await writeProfileFiles(directory);
+    const descriptionPath = join(directory, "body.md");
+    await writeFile(descriptionPath, "From file\nwith markdown `code`\n", "utf8");
+    const fetchSpy = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
+      new Response(JSON.stringify({
+        data: { issueCreate: { success: true, issue: makeRawIssue() } }
+      }), { status: 200 })
+    );
+    const fetchImpl = fetchSpy as unknown as FetchLike;
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleIssueCommand(["create"], {
+        ...baseOptions(paths),
+        title: "Bug fix",
+        team: "a0000000-0000-0000-0000-000000000001",
+        descriptionFile: descriptionPath,
+        fetchImpl
+      });
+
+      expect(exitCode).toBe(0);
+      const fetchBody = JSON.parse(String((fetchSpy as ReturnType<typeof vi.fn>).mock.calls[0]?.[1]?.body));
+      expect(fetchBody.variables.input.description).toBe("From file\nwith markdown `code`\n");
+    } finally {
+      output.restore();
+    }
+  });
+
+  it("reads --description-file - from explicit stdin for issue create", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-issue-"));
+    const paths = await writeProfileFiles(directory);
+    const fetchSpy = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
+      new Response(JSON.stringify({
+        data: { issueCreate: { success: true, issue: makeRawIssue() } }
+      }), { status: 200 })
+    );
+    const fetchImpl = fetchSpy as unknown as FetchLike;
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleIssueCommand(["create"], {
+        ...baseOptions(paths),
+        title: "Bug fix",
+        team: "a0000000-0000-0000-0000-000000000001",
+        descriptionFile: "-",
+        stdinStream: Readable.from(["From stdin\n"]),
+        fetchImpl
+      });
+
+      expect(exitCode).toBe(0);
+      const fetchBody = JSON.parse(String((fetchSpy as ReturnType<typeof vi.fn>).mock.calls[0]?.[1]?.body));
+      expect(fetchBody.variables.input.description).toBe("From stdin\n");
+    } finally {
+      output.restore();
+    }
+  });
+
+  it("does not read stdin when --description is provided for issue create", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-issue-"));
+    const paths = await writeProfileFiles(directory);
+    const fetchSpy = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
+      new Response(JSON.stringify({
+        data: { issueCreate: { success: true, issue: makeRawIssue() } }
+      }), { status: 200 })
+    );
+    const fetchImpl = fetchSpy as unknown as FetchLike;
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleIssueCommand(["create"], {
+        ...baseOptions(paths),
+        title: "Bug fix",
+        team: "a0000000-0000-0000-0000-000000000001",
+        description: "From flag",
+        stdinStream: Readable.from(["Wrong body\n"]),
+        fetchImpl
+      });
+
+      expect(exitCode).toBe(0);
+      const fetchBody = JSON.parse(String((fetchSpy as ReturnType<typeof vi.fn>).mock.calls[0]?.[1]?.body));
+      expect(fetchBody.variables.input.description).toBe("From flag");
+    } finally {
+      output.restore();
+    }
+  });
+
+  it("rejects issue create with both --description and --description-file", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-issue-"));
+    const paths = await writeProfileFiles(directory);
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleIssueCommand(["create"], {
+        ...baseOptions(paths),
+        title: "Bug fix",
+        team: "a0000000-0000-0000-0000-000000000001",
+        description: "From flag",
+        descriptionFile: "body.md"
+      });
+
+      expect(exitCode).toBe(5);
+      expect(output.stderr.join("")).toContain("mutually exclusive");
     } finally {
       output.restore();
     }
@@ -905,6 +1015,34 @@ describe("handleIssueCommand — issue update", () => {
 
       expect(exitCode).toBe(5);
       expect(output.stderr.join("")).toContain("at least one field");
+    } finally {
+      output.restore();
+    }
+  });
+
+  it("reads --description-file into the issue update input", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-issue-"));
+    const paths = await writeProfileFiles(directory);
+    const descriptionPath = join(directory, "body.md");
+    await writeFile(descriptionPath, "Updated from file\n", "utf8");
+    const fetchSpy = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
+      new Response(JSON.stringify({
+        data: { issueUpdate: { success: true, issue: makeRawIssue() } }
+      }), { status: 200 })
+    );
+    const fetchImpl = fetchSpy as unknown as FetchLike;
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleIssueCommand(["update", "INF-2975"], {
+        ...baseOptions(paths),
+        descriptionFile: descriptionPath,
+        fetchImpl
+      });
+
+      expect(exitCode).toBe(0);
+      const fetchBody = JSON.parse(String((fetchSpy as ReturnType<typeof vi.fn>).mock.calls[0]?.[1]?.body));
+      expect(fetchBody.variables.input.description).toBe("Updated from file\n");
     } finally {
       output.restore();
     }
