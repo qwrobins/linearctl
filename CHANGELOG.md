@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- `issue create` and `issue update` keep `--description` as a literal flag value and only read stdin when `--description-file -` is provided, avoiding accidental stdin consumption in shell loops.
+- `issue create`, `issue update`, `project create`, and `project update` keep `--description` as a literal flag value and only read stdin when `--description-file -` is provided, avoiding accidental stdin consumption in shell loops.
 
 ## [0.6.10] - 2026-06-02
 

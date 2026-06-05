@@ -9,7 +9,7 @@ import { resolveStoredProfile } from "../core/auth/runtime.js";
 import { paginateGraphQL, validatePaginationOptions, type PaginationOptions } from "../core/pagination/pagination.js";
 import { streamPaginateGraphQL } from "../core/pagination/streaming.js";
 import { emitDryRunResult } from "../core/output/dry-run.js";
-import { readTextInput } from "../core/io/text-input.js";
+import { resolveDescriptionInput } from "../core/io/text-input.js";
 import { resolveProjectId, resolveTeamId, resolveUserId, looksLikeId } from "../core/resolution/resolve.js";
 import type { ResolverOptions } from "../core/resolution/resolve.js";
 import { CommandContext } from "../core/runtime/command-context.js";
@@ -51,23 +51,6 @@ export interface ProjectCommandOptions {
   // retry flags
   noRetry?: boolean;
   maxRetries?: number;
-}
-
-async function resolveDescriptionInput(options: {
-  description?: string;
-  descriptionFile?: string;
-  stdinStream?: NodeJS.ReadableStream;
-}): Promise<string | undefined> {
-  if (options.description !== undefined && options.descriptionFile !== undefined) {
-    throw new Error("--description and --description-file are mutually exclusive.");
-  }
-  if (options.description !== undefined) {
-    return options.description;
-  }
-  if (options.descriptionFile !== undefined) {
-    return readTextInput(options.descriptionFile, "description-file", options.stdinStream);
-  }
-  return undefined;
 }
 
 const VALID_PROJECT_STATE_TYPES = ["backlog", "planned", "started", "paused", "completed", "canceled"] as const;

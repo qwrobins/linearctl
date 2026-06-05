@@ -402,6 +402,28 @@ describe("handleProjectCommand — project create", () => {
     }
   });
 
+  it("rejects project create with both --description and --description-file", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-project-"));
+    const paths = await writeProfileFiles(directory);
+    const descriptionPath = join(directory, "project.md");
+    await writeFile(descriptionPath, "Project from file\n", "utf8");
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleProjectCommand(["create"], {
+        ...baseOptions(paths),
+        name: "New project",
+        description: "Inline description",
+        descriptionFile: descriptionPath
+      });
+
+      expect(exitCode).toBe(5);
+      expect(output.stderr.join("")).toContain("--description and --description-file are mutually exclusive");
+    } finally {
+      output.restore();
+    }
+  });
+
   it("passes --lead through as leadId when creating a project", async () => {
     const directory = await mkdtemp(join(tmpdir(), "linear-cli-project-"));
     const paths = await writeProfileFiles(directory);

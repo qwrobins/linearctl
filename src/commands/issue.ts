@@ -7,7 +7,7 @@ import { paginateGraphQL, validatePaginationOptions } from "../core/pagination/p
 import type { PaginationOptions } from "../core/pagination/pagination.js";
 import { streamPaginateGraphQL } from "../core/pagination/streaming.js";
 import { emitDryRunResult } from "../core/output/dry-run.js";
-import { readTextInput } from "../core/io/text-input.js";
+import { resolveDescriptionInput } from "../core/io/text-input.js";
 import {
   resolveTeamId,
   resolveUserId,
@@ -79,23 +79,6 @@ export interface IssueCommandOptions {
   // retry flags
   noRetry?: boolean;
   maxRetries?: number;
-}
-
-async function resolveDescriptionInput(options: {
-  description?: string;
-  descriptionFile?: string;
-  stdinStream?: NodeJS.ReadableStream;
-}): Promise<string | undefined> {
-  if (options.description !== undefined && options.descriptionFile !== undefined) {
-    throw new Error("--description and --description-file are mutually exclusive.");
-  }
-  if (options.description !== undefined) {
-    return options.description;
-  }
-  if (options.descriptionFile !== undefined) {
-    return readTextInput(options.descriptionFile, "description-file", options.stdinStream);
-  }
-  return undefined;
 }
 
 /** Build a CommandContext from issue handler options */
