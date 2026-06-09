@@ -1,12 +1,10 @@
 import { readFile } from "node:fs/promises";
 import { failureEnvelope, successEnvelope } from "../core/output/envelope.js";
-import { mapCommandFailure } from "../core/errors/command-failure.js";
 import { ExitCode } from "../core/errors/exit-codes.js";
-import { executeGraphQL } from "../core/transport/graphql.js";
-import type { FetchLike, GraphQLErrorPayload } from "../core/transport/graphql.js";
-import { executeGraphQLWithRetry, normalizeRetryOptions, type RetryOptions } from "../core/transport/retry.js";
-import { resolveStoredProfile } from "../core/auth/runtime.js";
+import type { FetchLike } from "../core/transport/graphql.js";
+import { normalizeRetryOptions } from "../core/transport/retry.js";
 import { readAllStdin, isTtyInput } from "../core/io/stdin.js";
+import { createCommandContext } from "../core/runtime/command-context.js";
 import type { ApiCommandEntry, ApiCommandManifest } from "../generated/generate-manifest.js";
 import bundledApiCommands from "../generated/manifest/api-commands.json" with { type: "json" };
 
@@ -384,48 +382,33 @@ export async function handleApiCommand(
   }
 
   // Build and execute the GraphQL operation
-  try {
-    const profile = await resolveStoredProfile({
-      paths: {
-        configFile: options.configFile,
-        credentialsFile: options.credentialsFile
-      },
-      ...(options.profile === undefined ? {} : { explicitProfile: options.profile }),
-      env: options.env
-    });
+  const retry = normalizeRetryOptions(options);
+  const ctx = createCommandContext({
+    json: options.json,
+    jsonEnvelope: options.jsonEnvelope,
+    ...(options.profile === undefined ? {} : { profile: options.profile }),
+    configFile: options.configFile,
+    credentialsFile: options.credentialsFile,
+    ...(options.apiUrl === undefined ? {} : { apiUrl: options.apiUrl }),
+    env: options.env,
+    ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl }),
+    ...(retry === undefined ? {} : { retry }),
+    sourceLayer: "generated"
+  });
 
+  try {
     const variables = buildVariables(entry, options.id, inputJson);
     const query = buildGraphQLOperation(entry, options.fields);
-
-    const graphqlInput = {
+    const response = await ctx.graphql<Record<string, unknown>>(
       query,
-      ...(Object.keys(variables).length > 0 ? { variables } : {}),
-      credentials: profile.credentials,
-      ...(options.apiUrl === undefined
-        ? profile.metadata.baseUrl === undefined
-          ? {}
-          : { apiUrl: profile.metadata.baseUrl }
-        : { apiUrl: options.apiUrl }),
-      ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl })
-    };
-
-    const response = await executeGeneratedGraphQL<Record<string, unknown>>(
-      graphqlInput,
-      normalizeRetryOptions(options)
+      Object.keys(variables).length > 0 ? variables : undefined
     );
 
-    if (hasErrors(response.body.errors)) {
-      const errors = mapGraphQLErrors(response.body.errors);
-      if (options.jsonEnvelope) {
-        const envelope = failureEnvelope(errors, {
-          sourceLayer: "generated",
-          profile: profile.name
-        });
-        process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
-      } else {
-        process.stderr.write(`Error: ${errors[0]?.message ?? "API request failed"}\n`);
-      }
-      return ExitCode.GeneralError;
+    if (ctx.hasErrors(response.body.errors)) {
+      const errors = ctx.mapGraphQLErrors(response.body.errors);
+      return ctx.emitFailure(
+        errors.length > 0 ? errors : [{ category: "general", message: "API request failed" }]
+      );
     }
 
     const data = response.body.data?.[entry.graphqlField] ?? null;
@@ -433,11 +416,7 @@ export async function handleApiCommand(
     if (options.raw) {
       process.stdout.write(`${response.text}\n`);
     } else if (options.jsonEnvelope) {
-      const envelope = successEnvelope(data, {
-        sourceLayer: "generated",
-        profile: profile.name
-      });
-      process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
+      return ctx.emitSuccess(data);
     } else if (options.json) {
       process.stdout.write(`${JSON.stringify(data, null, 2)}\n`);
     } else {
@@ -447,45 +426,6 @@ export async function handleApiCommand(
 
     return ExitCode.Success;
   } catch (error) {
-    const failure = mapCommandFailure(error);
-
-    if (options.jsonEnvelope) {
-      const envelope = failureEnvelope([failure.error], {
-        sourceLayer: "generated",
-        ...(options.profile === undefined ? {} : { profile: options.profile })
-      });
-      process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
-    } else {
-      process.stderr.write(`Error: ${failure.error.message}\n`);
-    }
-
-    return failure.exitCode;
+    return ctx.emitCaughtError(error);
   }
-}
-
-function executeGeneratedGraphQL<TData>(
-  input: Parameters<typeof executeGraphQL<TData>>[0],
-  retry: RetryOptions | undefined
-) {
-  if (retry !== undefined) {
-    return executeGraphQLWithRetry<TData>({ ...input, retry });
-  }
-  return executeGraphQL<TData>(input);
-}
-
-function hasErrors(errors: GraphQLErrorPayload[] | undefined): boolean {
-  return Array.isArray(errors) && errors.length > 0;
-}
-
-function mapGraphQLErrors(
-  errors: GraphQLErrorPayload[] | undefined
-): Array<{ category: "general"; message: string; details: Record<string, unknown> }> {
-  return (errors ?? []).map((error) => ({
-    category: "general" as const,
-    message: error.message,
-    details: {
-      ...(error.path === undefined ? {} : { path: error.path }),
-      ...(error.extensions === undefined ? {} : { extensions: error.extensions })
-    }
-  }));
 }

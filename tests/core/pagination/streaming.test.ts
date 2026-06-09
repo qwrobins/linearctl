@@ -1,6 +1,7 @@
 import { describe, expect, it, vi, type Mock } from "vitest";
 import { streamPaginateGraphQL } from "../../../src/core/pagination/streaming.js";
 import type { FetchLike } from "../../../src/core/transport/graphql.js";
+import { GraphQLTransportError } from "../../../src/core/transport/graphql.js";
 import type { PageInfo } from "../../../src/core/output/envelope.js";
 
 type MockFetch = FetchLike & Mock;
@@ -11,6 +12,21 @@ function makeGraphQLResponse(nodes: Array<{ id: string }>, pageInfo: PageInfo) {
       data: {
         issues: { nodes, pageInfo }
       }
+    }),
+    { status: 200 }
+  );
+}
+
+function makeGraphQLErrorResponse(message = "Complexity limit exceeded") {
+  return new Response(
+    JSON.stringify({
+      data: null,
+      errors: [
+        {
+          message,
+          extensions: { code: "COMPLEXITY_LIMITED" }
+        }
+      ]
     }),
     { status: 200 }
   );
@@ -144,5 +160,40 @@ describe("streamPaginateGraphQL", () => {
     expect(items).toEqual([{ id: "1" }]);
     // Should have stopped after 2 calls due to stall guard
     expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+
+  it("throws typed GraphQL transport errors with progress when a streamed page returns GraphQL errors", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(makeGraphQLResponse([{ id: "1" }], { hasNextPage: true, endCursor: "cursor1" }))
+      .mockResolvedValueOnce(makeGraphQLErrorResponse()) as MockFetch;
+    const items: Array<{ id: string }> = [];
+    let caught: unknown;
+
+    try {
+      await streamPaginateGraphQL({
+        query: "query ($first: Int) { issues { nodes { id } pageInfo { hasNextPage endCursor } } }",
+        options: { all: true },
+        credentials,
+        fetchImpl,
+        extractConnection: extractIssuesConnection,
+        onItem: (item) => { items.push(item); }
+      });
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(items).toEqual([{ id: "1" }]);
+    expect(caught).toBeInstanceOf(GraphQLTransportError);
+    expect(caught).toMatchObject({
+      name: "GraphQLTransportError",
+      kind: "graphql",
+      errors: [{ message: "Complexity limit exceeded" }],
+      details: {
+        totalItems: 1,
+        endCursor: "cursor1",
+        pageInfo: { hasNextPage: true, endCursor: "cursor1" }
+      }
+    });
   });
 });

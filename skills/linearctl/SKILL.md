@@ -53,8 +53,8 @@ Raw GraphQL should not be used merely because it is possible. It is the fallback
 ### Projects
 - `linearctl project get <name|id> --json` — richer single-project detail payload than `project list` (includes progress/health/currentProgress, and milestones with id, name, description, targetDate, sortOrder, createdAt, updatedAt); project names resolve by exact match, unique prefix, or unique substring
 - `linearctl project list [--query <text>|--search <text>|--name <text>] [--team <id>] [--state <status-type> ...] [--all-teams] --json` — includes portfolio fields (`progress`, `health`, `description`, `updatedAt`, `currentProgress`), normalized `milestones` with `name`, `targetDate`, `progress`, and `status`, and milestone truncation metadata (`milestonesPageInfo`, `milestonesTruncated`) in JSON output; human output shows progress, health, description, updated time, and milestone summaries; `--state` values: backlog, planned, started, paused, completed, canceled; repeated `--state` values are unioned; text flags filter project names
-- `linearctl project create --name <name> [--description <text>|--description-file <path|->] [--content <text>|--content-file <path|->] [--team <id>] [--lead <user-id|email|"me">] --json`
-- `linearctl project create-with-issues --name <name> --team <id> --issues-json <json> [--description <text>] --json` — create a project then batch-create linked issues (reports partial success if issue creation fails after project was created)
+- `linearctl project create --name <name> [--description <text>|--description-file <path|->] [--content <text>|--content-file <path|->] [--team <id>] [--lead <user-id|email|"me">] [--status <id|name|type>|--state <name|type>] [--start-date <YYYY-MM-DD>] [--target-date <YYYY-MM-DD>] --json`
+- `linearctl project create-with-issues --name <name> --team <id> --issues-json <json> [--description <text>|--description-file <path|->] [--content <text>|--content-file <path|->] [--lead <user-id|email|"me">] [--status <id|name|type>|--state <name|type>] [--start-date <YYYY-MM-DD>] [--target-date <YYYY-MM-DD>] --json` — create a project then batch-create linked issues (reports partial success if issue creation fails after project was created)
 - `linearctl project update <id> [--name <text>] [--description <text>|--description-file <path|->] [--content <text>|--content-file <path|->] [--status <id|name|type>|--state <name|type>] [--lead <user-id|email|"me">] [--start-date <YYYY-MM-DD>] [--target-date <YYYY-MM-DD>] --json` — `--status`/`--state` accepts status names, state types, or status IDs; `--state` remains an alias
 - `linearctl project delete <id> --json`
 
@@ -116,7 +116,7 @@ Raw GraphQL should not be used merely because it is possible. It is the fallback
 - `linearctl schema version --json`
 - `linearctl schema pull --json`
 - `linearctl schema check --json`
-- Normal commands warn on stderr when the bundled schema is stale; configure `[schema] stale_after_days` and `auto_update = true` in the linear config to opt into automatic schema pulls (`schema.autoUpdate`).
+- Normal commands run best-effort schema freshness checks after command output, skip help/dry-run paths, and warn on stderr when the effective schema metadata is stale. `schema pull` writes `schema.json` and `schema-meta.json`; commands prefer pulled metadata from the profile config directory when present. Configure `[schema] stale_after_days` and `auto_update = true` in the linear config to opt into automatic schema pulls (`schema.autoUpdate`).
 
 ### Auth
 - `linearctl auth status --json`
@@ -144,6 +144,7 @@ When no curated command exists, use `linearctl api <resource> <operation>`:
 
 - Use `--json` when parsing output programmatically
 - Use `--json-envelope` only when metadata (pagination, rate limits, complexity) is needed
+- Parse-level validation errors also emit failure envelopes when `--json-envelope` is set
 - Use `--jsonl` for streaming large list results (one JSON object per line, auto-paginates)
 - Do not parse human-readable default output
 

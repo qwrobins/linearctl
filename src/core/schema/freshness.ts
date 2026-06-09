@@ -7,7 +7,7 @@ import { executeGraphQL } from "../transport/graphql.js";
 import { INTROSPECTION_QUERY } from "./introspection-query.js";
 import {
   computeSchemaFingerprint,
-  loadBundledSchemaMetadata,
+  loadPreferredSchemaMetadata,
   writeSchemaIntrospection,
   writeSchemaMetadata
 } from "./schema-meta.js";
@@ -43,7 +43,7 @@ export async function maybeWarnForStaleSchema(options: SchemaFreshnessOptions): 
   try {
     const now = options.now ?? new Date();
     const config = await loadLinearConfigFile(options.configFile);
-    const bundledMeta = loadBundledSchemaMetadata();
+    const bundledMeta = await loadPreferredSchemaMetadata(options.configFile);
     const bundledAt = bundledMeta.bundledAt === null ? null : Date.parse(bundledMeta.bundledAt);
     const staleAfterDays = config.schema?.staleAfterDays ?? DEFAULT_STALE_AFTER_DAYS;
 

@@ -151,6 +151,20 @@ describe("CLI scaffold", () => {
     expect(fetchImpl).not.toHaveBeenCalled();
   });
 
+  it("does not run schema freshness checks for dry-run commands", async () => {
+    const { code, stdout: output, stderr, fetchImpl } = await runMainWithThrowingFetch([
+      "issue",
+      "delete",
+      "INF-99999",
+      "--dry-run"
+    ]);
+
+    expect(code).toBe(0);
+    expect(output).toContain("Dry run: would delete issue");
+    expect(stderr).toBe("");
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
   it("prints curated help for unknown subcommand help without dispatching", async () => {
     const { code, stdout: output, stderr, fetchImpl } = await runMainWithThrowingFetch(["issue", "bogus", "--help"]);
 
@@ -182,10 +196,56 @@ describe("CLI scaffold", () => {
     });
   });
 
+  it("emits a failure envelope for parse-level validation in envelope mode", async () => {
+    await expect(runCli(["issue", "list", "--max", "0", "--json-envelope"])).rejects.toMatchObject({
+      code: 5,
+      stderr: ""
+    });
+
+    try {
+      await runCli(["issue", "list", "--max", "0", "--json-envelope"]);
+      throw new Error("expected command to fail");
+    } catch (error) {
+      const failure = error as { stdout: string };
+      const envelope = JSON.parse(failure.stdout) as {
+        ok: boolean;
+        data: null;
+        errors: Array<{ category: string; message: string }>;
+        meta: { sourceLayer: string };
+      };
+
+      expect(envelope.ok).toBe(false);
+      expect(envelope.data).toBeNull();
+      expect(envelope.errors).toEqual([
+        { category: "validation", message: "--max must be a positive integer" }
+      ]);
+      expect(envelope.meta.sourceLayer).toBe("curated");
+    }
+  });
+
+  it("does not treat leading option values as the envelope source layer", async () => {
+    try {
+      await runCli(["--profile", "api", "issue", "list", "--max", "0", "--json-envelope"]);
+      throw new Error("expected command to fail");
+    } catch (error) {
+      const failure = error as { stdout: string };
+      const envelope = JSON.parse(failure.stdout) as { meta: { sourceLayer: string } };
+
+      expect(envelope.meta.sourceLayer).toBe("curated");
+    }
+  });
+
   it("rejects unknown flags", async () => {
     await expect(runCli(["--no-such-flag"])).rejects.toMatchObject({
       code: 5,
       stderr: expect.stringContaining("Unknown option '--no-such-flag'")
+    });
+  });
+
+  it("rejects command-specific flags before commands that do not consume them", async () => {
+    await expect(runCli(["--title", "foo", "skills", "list"])).rejects.toMatchObject({
+      code: 5,
+      stderr: expect.stringContaining("Unknown option '--title'")
     });
   });
 

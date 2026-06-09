@@ -1,10 +1,11 @@
-import { mkdtemp, readFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { handleSchemaCommand } from "../../src/commands/schema.js";
 import { writeCredentialsFile } from "../../src/core/auth/credentials.js";
 import { writeLinearConfigFile } from "../../src/core/config/config-file.js";
+import { computeSchemaFingerprint } from "../../src/core/schema/schema-meta.js";
 import type { FetchLike } from "../../src/core/transport/graphql.js";
 
 function captureOutput() {
@@ -185,6 +186,45 @@ describe("handleSchemaCommand", () => {
       }
     });
 
+    it("writes pulled schema beside the selected config file by default", async () => {
+      const directory = await mkdtemp(join(tmpdir(), "linear-cli-schema-"));
+      const { configFile, credentialsFile } = await writeProfileFiles(directory);
+      const fetchImpl = vi.fn(async () =>
+        new Response(
+          JSON.stringify({
+            data: {
+              __schema: {
+                queryType: { name: "Query" },
+                types: [{ kind: "OBJECT", name: "Query" }]
+              }
+            }
+          }),
+          { status: 200 }
+        )
+      ) as FetchLike;
+      const output = captureOutput();
+
+      try {
+        await expect(
+          handleSchemaCommand(["pull"], {
+            json: true,
+            jsonEnvelope: false,
+            configFile,
+            credentialsFile,
+            env: {},
+            fetchImpl
+          })
+        ).resolves.toBe(0);
+
+        const parsed = JSON.parse(output.stdout.join(""));
+        expect(parsed.schemaFile).toBe(join(directory, "schema", "schema.json"));
+        expect(parsed.metaFile).toBe(join(directory, "schema", "schema-meta.json"));
+        await expect(readFile(join(directory, "schema", "schema-meta.json"), "utf8")).resolves.toContain("introspection");
+      } finally {
+        output.restore();
+      }
+    });
+
     it("returns an envelope on pull with --json-envelope", async () => {
       const directory = await mkdtemp(join(tmpdir(), "linear-cli-schema-"));
       const { configFile, credentialsFile } = await writeProfileFiles(directory);
@@ -296,6 +336,14 @@ describe("handleSchemaCommand", () => {
         return;
       }
 
+      const schemaVersion = computeSchemaFingerprint((schemaData as { __schema: Record<string, unknown> }).__schema);
+      await mkdir(join(directory, "schema"));
+      await writeFile(
+        join(directory, "schema", "schema-meta.json"),
+        JSON.stringify({ schemaVersion, bundledAt: "2099-01-01T00:00:00Z", source: "introspection" }),
+        "utf8"
+      );
+
       const fetchImpl = vi.fn(async () =>
         new Response(JSON.stringify({ data: schemaData }), { status: 200 })
       ) as FetchLike;
@@ -367,13 +415,12 @@ describe("handleSchemaCommand", () => {
       const directory = await mkdtemp(join(tmpdir(), "linear-cli-schema-"));
       const { configFile, credentialsFile } = await writeProfileFiles(directory);
 
-      // Mock loadBundledSchemaMetadata to return null version
-      const schemaMeta = await import("../../src/core/schema/schema-meta.js");
-      const loadSpy = vi.spyOn(schemaMeta, "loadBundledSchemaMetadata").mockReturnValue({
-        schemaVersion: null,
-        bundledAt: null,
-        source: "none"
-      });
+      await mkdir(join(directory, "schema"));
+      await writeFile(
+        join(directory, "schema", "schema-meta.json"),
+        JSON.stringify({ schemaVersion: null, bundledAt: null, source: "none" }),
+        "utf8"
+      );
 
       const fetchImpl = vi.fn(async () =>
         new Response(
@@ -406,20 +453,12 @@ describe("handleSchemaCommand", () => {
         expect(parsed.bundledVersion).toBeNull();
       } finally {
         output.restore();
-        loadSpy.mockRestore();
       }
     });
 
     it("returns exit code 0 when up to date", async () => {
       const directory = await mkdtemp(join(tmpdir(), "linear-cli-schema-"));
       const { configFile, credentialsFile } = await writeProfileFiles(directory);
-
-      const { loadBundledSchemaMetadata } = await import("../../src/core/schema/schema-meta.js");
-      const bundled = loadBundledSchemaMetadata();
-
-      if (bundled.schemaVersion === null) {
-        return;
-      }
 
       const { readFile: readFs } = await import("node:fs/promises");
       const { join: joinPath, dirname } = await import("node:path");
@@ -432,6 +471,14 @@ describe("handleSchemaCommand", () => {
       } catch {
         return;
       }
+
+      const schemaVersion = computeSchemaFingerprint((schemaData as { __schema: Record<string, unknown> }).__schema);
+      await mkdir(join(directory, "schema"));
+      await writeFile(
+        join(directory, "schema", "schema-meta.json"),
+        JSON.stringify({ schemaVersion, bundledAt: "2099-01-01T00:00:00Z", source: "introspection" }),
+        "utf8"
+      );
 
       const fetchImpl = vi.fn(async () =>
         new Response(JSON.stringify({ data: schemaData }), { status: 200 })

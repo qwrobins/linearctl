@@ -1,5 +1,5 @@
 import { readFile, writeFile, mkdir } from "node:fs/promises";
-import { dirname } from "node:path";
+import { dirname, join } from "node:path";
 import bundledMeta from "../../generated/manifest/schema-meta.json" with { type: "json" };
 
 export interface SchemaMetadata {
@@ -17,6 +17,15 @@ export interface SchemaVersionOutput {
 
 export function loadBundledSchemaMetadata(): SchemaMetadata {
   return parseSchemaMetadata(bundledMeta);
+}
+
+export async function loadPreferredSchemaMetadata(configFile: string): Promise<SchemaMetadata> {
+  const metaFile = join(dirname(configFile), "schema", "schema-meta.json");
+  try {
+    return parseSchemaMetadata(JSON.parse(await readFile(metaFile, "utf8")) as unknown);
+  } catch {
+    return loadBundledSchemaMetadata();
+  }
 }
 
 export function parseSchemaMetadata(raw: unknown): SchemaMetadata {
@@ -64,15 +73,25 @@ export function computeSchemaFingerprint(schema: Record<string, unknown>): strin
   }
 
   const typeEntries = types
-    .filter((t): t is { name: string; fields?: Array<{ name: string }>; inputFields?: Array<{ name: string }>; enumValues?: Array<{ name: string }> } =>
+    .filter((t): t is {
+      name: string;
+      fields?: Array<{ name: string; type?: unknown; args?: Array<{ name: string; type?: unknown }> }>;
+      inputFields?: Array<{ name: string; type?: unknown }>;
+      enumValues?: Array<{ name: string }>;
+    } =>
       t !== null && typeof t === "object" && typeof (t as Record<string, unknown>).name === "string"
     )
     .filter((t) => !t.name.startsWith("__"))
     .sort((a, b) => a.name.localeCompare(b.name))
     .map((t) => {
       const fields = [
-        ...(Array.isArray(t.fields) ? t.fields.map((f) => f.name) : []),
-        ...(Array.isArray(t.inputFields) ? t.inputFields.map((f) => f.name) : []),
+        ...(Array.isArray(t.fields) ? t.fields.map((f) => {
+          const args = Array.isArray(f.args)
+            ? `(${f.args.map((arg) => `${arg.name}:${formatTypeRef(arg.type)}`).sort().join(",")})`
+            : "";
+          return `${f.name}${args}:${formatTypeRef(f.type)}`;
+        }) : []),
+        ...(Array.isArray(t.inputFields) ? t.inputFields.map((f) => `${f.name}:${formatTypeRef(f.type)}`) : []),
         ...(Array.isArray(t.enumValues) ? t.enumValues.map((f) => f.name) : [])
       ].sort().join(",");
       return fields.length > 0 ? `${t.name}:${fields}` : t.name;
@@ -90,4 +109,17 @@ export function computeSchemaFingerprint(schema: Record<string, unknown>): strin
   }
   const hex = (hash >>> 0).toString(16).padStart(8, "0");
   return `introspect-${hex}`;
+}
+
+function formatTypeRef(type: unknown): string {
+  if (type === null || typeof type !== "object" || Array.isArray(type)) {
+    return "";
+  }
+
+  const record = type as Record<string, unknown>;
+  const kind = typeof record.kind === "string" ? record.kind : "";
+  const name = typeof record.name === "string" ? record.name : "";
+  const ofType = formatTypeRef(record.ofType);
+
+  return [kind, name, ofType].filter((part) => part !== "").join(":");
 }

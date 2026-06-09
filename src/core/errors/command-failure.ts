@@ -34,13 +34,14 @@ export function mapCommandFailure(error: unknown): CommandFailure {
   }
 
   if (error instanceof GraphQLTransportError) {
+    const details = graphQLTransportDetails(error);
     if (error.status === 401 || error.status === 403) {
       return {
         exitCode: ExitCode.AuthenticationError,
         error: {
           category: "authentication",
           message: error.message,
-          details: error.errors
+          ...(details === undefined ? {} : { details })
         }
       };
     }
@@ -51,7 +52,7 @@ export function mapCommandFailure(error: unknown): CommandFailure {
         error: {
           category: "rate-limit",
           message: error.message,
-          details: error.errors
+          ...(details === undefined ? {} : { details })
         }
       };
     }
@@ -61,7 +62,7 @@ export function mapCommandFailure(error: unknown): CommandFailure {
       error: {
         category: "general",
         message: error.message,
-        details: error.errors
+        ...(details === undefined ? {} : { details })
       }
     };
   }
@@ -83,4 +84,18 @@ export function mapCommandFailure(error: unknown): CommandFailure {
       message: "command failed"
     }
   };
+}
+
+function graphQLTransportDetails(error: GraphQLTransportError): unknown {
+  if (error.details !== undefined) {
+    return {
+      ...(Array.isArray(error.errors) ? { errors: error.errors } : {}),
+      ...(isRecord(error.details) ? error.details : { context: error.details })
+    };
+  }
+  return error.errors;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

@@ -5,6 +5,7 @@ import {
   paginateGraphQL
 } from "../../../src/core/pagination/pagination.js";
 import type { FetchLike } from "../../../src/core/transport/graphql.js";
+import { GraphQLTransportError } from "../../../src/core/transport/graphql.js";
 import type { PageInfo } from "../../../src/core/output/envelope.js";
 
 type MockFetch = FetchLike & Mock;
@@ -15,6 +16,21 @@ function makeGraphQLResponse(nodes: Array<{ id: string }>, pageInfo: PageInfo) {
       data: {
         issues: { nodes, pageInfo }
       }
+    }),
+    { status: 200 }
+  );
+}
+
+function makeGraphQLErrorResponse(message = "Rate limit exceeded") {
+  return new Response(
+    JSON.stringify({
+      data: null,
+      errors: [
+        {
+          message,
+          extensions: { code: "RATE_LIMITED" }
+        }
+      ]
     }),
     { status: 200 }
   );
@@ -276,5 +292,37 @@ describe("paginateGraphQL", () => {
     const callBody = JSON.parse(((fetchImpl as MockFetch).mock.calls[0]?.[1] as RequestInit).body as string);
     expect(callBody.variables.after).toBe("cursor4");
     expect(result.items).toEqual([{ id: "5" }]);
+  });
+
+  it("throws typed GraphQL transport errors with partial progress when a page returns GraphQL errors", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(makeGraphQLResponse([{ id: "1" }], { hasNextPage: true, endCursor: "cursor1" }))
+      .mockResolvedValueOnce(makeGraphQLErrorResponse()) as MockFetch;
+    let caught: unknown;
+
+    try {
+      await paginateGraphQL({
+        query: "query ($first: Int) { issues { nodes { id } pageInfo { hasNextPage endCursor } } }",
+        options: { all: true },
+        credentials,
+        fetchImpl,
+        extractConnection: extractIssuesConnection
+      });
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(caught).toBeInstanceOf(GraphQLTransportError);
+    expect(caught).toMatchObject({
+      name: "GraphQLTransportError",
+      kind: "graphql",
+      errors: [{ message: "Rate limit exceeded" }],
+      details: {
+        partialItems: [{ id: "1" }],
+        endCursor: "cursor1",
+        pageInfo: { hasNextPage: true, endCursor: "cursor1" }
+      }
+    });
   });
 });

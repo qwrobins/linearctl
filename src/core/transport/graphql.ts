@@ -35,7 +35,8 @@ export class GraphQLTransportError extends Error {
     message: string,
     readonly kind: "http" | "graphql" | "invalid-response",
     readonly status?: number,
-    readonly errors?: GraphQLErrorPayload[]
+    readonly errors?: GraphQLErrorPayload[],
+    readonly details?: unknown
   ) {
     super(message);
     this.name = "GraphQLTransportError";
