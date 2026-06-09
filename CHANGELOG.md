@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.13] - 2026-06-09
+
+### Fixed
+
+- `--help` on curated subcommands with additional positionals now prints help and exits before command dispatch, preventing discovery commands such as `issue delete <id> --help` from executing.
+- CLI subprocess tests now pass explicit temp config and credentials paths so the suite does not read or update the user's Linear config.
+
 ## [0.6.12] - 2026-06-09
 
 ### Added

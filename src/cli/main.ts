@@ -8,16 +8,33 @@ import { curatedCommandMetadata, defaultLinearConfigPaths, ExitCode } from "../i
 import { maybeWarnForStaleSchema } from "../core/schema/freshness.js";
 import packageJson from "../../package.json" with { type: "json" };
 
-function printTopLevelHelp(): void {
-  process.stdout.write(generateTopLevelHelp());
+interface MainRuntime {
+  env: NodeJS.ProcessEnv;
+  stdin: NodeJS.ReadableStream;
+  stdout: NodeJS.WriteStream | Pick<NodeJS.WriteStream, "write">;
+  stderr: NodeJS.WriteStream | Pick<NodeJS.WriteStream, "write">;
+  fetchImpl?: typeof fetch;
 }
 
-function printCommandHelp(registration: CommandRegistration): void {
-  process.stdout.write(generateCommandHelp(registration));
+function defaultRuntime(): MainRuntime {
+  return {
+    env: process.env,
+    stdin: process.stdin,
+    stdout: process.stdout,
+    stderr: process.stderr
+  };
 }
 
-function printCuratedMetadata(): void {
-  process.stdout.write(`${JSON.stringify(curatedCommandMetadata, null, 2)}\n`);
+function printTopLevelHelp(stdout: MainRuntime["stdout"]): void {
+  stdout.write(generateTopLevelHelp());
+}
+
+function printCommandHelp(registration: CommandRegistration, stdout: MainRuntime["stdout"]): void {
+  stdout.write(generateCommandHelp(registration));
+}
+
+function printCuratedMetadata(stdout: MainRuntime["stdout"]): void {
+  stdout.write(`${JSON.stringify(curatedCommandMetadata, null, 2)}\n`);
 }
 
 /**
@@ -275,14 +292,14 @@ function toParsedCliArguments(values: Record<string, unknown>, positionals: stri
 /**
  * Main entry point. Uses the command registry for dispatch.
  */
-async function main(argv: string[]): Promise<number> {
+export async function main(argv: string[], runtime: MainRuntime = defaultRuntime()): Promise<number> {
   let args: ParsedCliArguments;
 
   try {
     args = parseCliArguments(argv);
   } catch (error) {
     const message = error instanceof Error ? error.message : "invalid arguments";
-    process.stderr.write(`Error: ${message}\n`);
+    runtime.stderr.write(`Error: ${message}\n`);
     return ExitCode.ValidationError;
   }
 
@@ -291,33 +308,33 @@ async function main(argv: string[]): Promise<number> {
     const registration = commandName === undefined ? undefined : findCommand(commandName);
 
     if (args.positionals.length === 0) {
-      printTopLevelHelp();
+      printTopLevelHelp(runtime.stdout);
       return ExitCode.Success;
     }
 
-    if (args.positionals.length === 1 && registration !== undefined && commandName !== "api") {
-      printCommandHelp(registration);
+    if (registration !== undefined && commandName !== "api") {
+      printCommandHelp(registration, runtime.stdout);
       return ExitCode.Success;
     }
   }
 
   if (argv.length === 0) {
-    printTopLevelHelp();
+    printTopLevelHelp(runtime.stdout);
     return ExitCode.Success;
   }
 
   if (args.version) {
-    process.stdout.write(`linearctl ${packageJson.version}\n`);
+    runtime.stdout.write(`linearctl ${packageJson.version}\n`);
     return ExitCode.Success;
   }
 
   if (args.team !== undefined && args.allTeams) {
-    process.stderr.write("Error: --team cannot be used with --all-teams\n");
+    runtime.stderr.write("Error: --team cannot be used with --all-teams\n");
     return ExitCode.ValidationError;
   }
 
   if (args.metadata === "curated" && args.json) {
-    printCuratedMetadata();
+    printCuratedMetadata(runtime.stdout);
     return ExitCode.Success;
   }
 
@@ -327,35 +344,41 @@ async function main(argv: string[]): Promise<number> {
     const registration = findCommand(commandName);
     if (registration !== undefined) {
       try {
-        const options = registration.buildOptions(args, process.env, process.stdin);
+        const options = registration.buildOptions(args, runtime.env, runtime.stdin);
+        if (runtime.fetchImpl !== undefined && options !== null && typeof options === "object") {
+          (options as Record<string, unknown>).fetchImpl = runtime.fetchImpl;
+        }
         void maybeWarnForStaleSchema({
           commandName,
           ...(args.profile === undefined ? {} : { profile: args.profile }),
           configFile: args.configFile,
           credentialsFile: args.credentialsFile,
           ...(args.apiUrl === undefined ? {} : { apiUrl: args.apiUrl }),
-          env: process.env
+          env: runtime.env,
+          ...(runtime.fetchImpl === undefined ? {} : { fetchImpl: runtime.fetchImpl })
         }).catch((error) => {
           const message = error instanceof Error ? error.message : "schema freshness check failed";
-          process.stderr.write(`Warning: ${message}\n`);
+          runtime.stderr.write(`Warning: ${message}\n`);
         });
         return await registration.handler(args.positionals.slice(1), options);
       } catch (error) {
         const message = error instanceof Error ? error.message : "command failed";
-        process.stderr.write(`Error: ${message}\n`);
+        runtime.stderr.write(`Error: ${message}\n`);
         return ExitCode.GeneralError;
       }
     }
   }
 
   if (args.positionals.length === 0) {
-    process.stderr.write("Error: No command provided. Run 'linearctl --help' for available commands.\n");
+    runtime.stderr.write("Error: No command provided. Run 'linearctl --help' for available commands.\n");
     return ExitCode.ValidationError;
   }
 
   const unknown = commandName ?? args.positionals.join(" ");
-  process.stderr.write(`Error: unknown command '${unknown}'. Run 'linearctl --help' for available commands.\n`);
+  runtime.stderr.write(`Error: unknown command '${unknown}'. Run 'linearctl --help' for available commands.\n`);
   return ExitCode.ValidationError;
 }
 
-process.exitCode = await main(process.argv.slice(2));
+if (import.meta.main) {
+  process.exitCode = await main(process.argv.slice(2));
+}
