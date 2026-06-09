@@ -3,16 +3,65 @@ import { chmod, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { describe, expect, it } from "vitest";
+import { Readable } from "node:stream";
+import { describe, expect, it, vi } from "vitest";
+import { main } from "../../src/cli/main.js";
 
 const CLI_PATH = "src/cli/main.ts";
 const execFileAsync = promisify(execFile);
 
-function runCli(args: string[]) {
+async function hermeticArgs(args: string[]): Promise<string[]> {
+  const directory = await mkdtemp(join(tmpdir(), "linear-cli-main-"));
+  return [
+    ...args,
+    "--config",
+    join(directory, "config"),
+    "--credentials",
+    join(directory, "credentials")
+  ];
+}
+
+async function runCli(args: string[]) {
+  return runCliRaw(await hermeticArgs(args));
+}
+
+function runCliRaw(args: string[]) {
   return execFileAsync("bun", [CLI_PATH, ...args], {
     timeout: 5000,
     maxBuffer: 10 * 1024 * 1024
   });
+}
+
+async function runMainWithThrowingFetch(args: string[]) {
+  let stdout = "";
+  let stderr = "";
+  const fetchImpl = vi.fn(async () => {
+    throw new Error("unexpected network call");
+  }) as unknown as typeof fetch;
+  const stdoutSpy = vi.spyOn(process.stdout, "write").mockImplementation((chunk: string | Uint8Array) => {
+    stdout += String(chunk);
+    return true;
+  });
+  const stderrSpy = vi.spyOn(process.stderr, "write").mockImplementation((chunk: string | Uint8Array) => {
+    stderr += String(chunk);
+    return true;
+  });
+
+  let code: number;
+  try {
+    code = await main(await hermeticArgs(args), {
+      env: {},
+      stdin: Readable.from([]),
+      stdout: { write: (chunk: string | Uint8Array) => { stdout += String(chunk); return true; } },
+      stderr: { write: (chunk: string | Uint8Array) => { stderr += String(chunk); return true; } },
+      fetchImpl
+    });
+  } finally {
+    stdoutSpy.mockRestore();
+    stderrSpy.mockRestore();
+  }
+
+  return { code, stdout, stderr, fetchImpl };
 }
 
 describe("CLI scaffold", () => {
@@ -72,11 +121,44 @@ describe("CLI scaffold", () => {
     expect(stderr).not.toContain("--id is required");
   });
 
-  it("does not treat mistyped resource help as bare resource help", async () => {
-    await expect(runCli(["issue", "bogus", "--help"])).rejects.toMatchObject({
-      code: 5,
-      stderr: expect.stringContaining("unsupported issue command")
-    });
+  it("prints destructive curated subcommand help without network access", async () => {
+    const { code, stdout: output, stderr, fetchImpl } = await runMainWithThrowingFetch(["issue", "delete", "INF-99999", "--help"]);
+
+    expect(code).toBe(0);
+    expect(output).toContain("linearctl issue");
+    expect(output).toContain("linearctl issue delete <identifier>");
+    expect(stderr).toBe("");
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it("prints curated list help without network access", async () => {
+    const { code, stdout: output, stderr, fetchImpl } = await runMainWithThrowingFetch(["issue", "list", "--help"]);
+
+    expect(code).toBe(0);
+    expect(output).toContain("linearctl issue");
+    expect(output).toContain("linearctl issue list");
+    expect(stderr).toBe("");
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it("prints generated resource help without network access", async () => {
+    const { code, stdout: output, stderr, fetchImpl } = await runMainWithThrowingFetch(["api", "issue", "--help"]);
+
+    expect(code).toBe(0);
+    expect(output).toContain("linearctl api issue <operation>");
+    expect(output).toContain("Operations:");
+    expect(stderr).toBe("");
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it("prints curated help for unknown subcommand help without dispatching", async () => {
+    const { code, stdout: output, stderr, fetchImpl } = await runMainWithThrowingFetch(["issue", "bogus", "--help"]);
+
+    expect(code).toBe(0);
+    expect(output).toContain("linearctl issue");
+    expect(output).toContain("linearctl issue list");
+    expect(stderr).toBe("");
+    expect(fetchImpl).not.toHaveBeenCalled();
   });
 
   it("prints curated metadata as JSON", async () => {
@@ -130,7 +212,7 @@ describe("CLI scaffold", () => {
     );
     await chmod(credentialsFile, 0o600);
 
-    const { stdout: output } = await runCli([
+    const { stdout: output } = await runCliRaw([
       "auth",
       "status",
       "--json",
@@ -189,7 +271,7 @@ describe("CLI scaffold", () => {
     await chmod(credentialsFile, 0o600);
     const originalCredentials = await readFile(credentialsFile, "utf8");
 
-    const { stdout: output } = await runCli([
+    const { stdout: output } = await runCliRaw([
       "auth",
       "switch",
       "work",
@@ -210,7 +292,7 @@ describe("CLI scaffold", () => {
     const credentialsFile = join(directory, "credentials");
 
     await expect(
-      runCli(["auth", "switch", "missing", "--config", configFile, "--credentials", credentialsFile])
+      runCliRaw(["auth", "switch", "missing", "--config", configFile, "--credentials", credentialsFile])
     ).rejects.toMatchObject({
       code: 5,
       stderr: 'Error: Profile "missing" does not exist.\n'
@@ -228,7 +310,7 @@ describe("CLI scaffold", () => {
     const directory = await mkdtemp(join(tmpdir(), "linear-cli-main-"));
 
     await expect(
-      runCli([
+      runCliRaw([
         "auth",
         "login",
         "--profile",
