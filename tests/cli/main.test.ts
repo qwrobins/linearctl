@@ -34,7 +34,17 @@ describe("CLI scaffold", () => {
     expect(output).toContain("linearctl issue");
     expect(output).toContain("Issues and bulk issue changes");
     expect(output).toContain("linearctl issue create --title <title>");
+    expect(output).toContain("linearctl issue update <identifier>");
+    expect(output).toContain("--project-milestone <id>|--milestone <id>");
     expect(output).toContain("linearctl --metadata curated --json");
+  });
+
+  it("prints full project content flags in curated help", async () => {
+    const { stdout: output } = await runCli(["project", "--help"]);
+
+    expect(output).toContain("linearctl project create --name <name>");
+    expect(output).toContain("--content <text>|--content-file <path|->");
+    expect(output).toContain("linearctl project update <id>");
   });
 
   it("keeps generated API help routed through the api command", async () => {
@@ -51,6 +61,15 @@ describe("CLI scaffold", () => {
     expect(output).toContain("linearctl api issue <operation>");
     expect(output).toContain("Operations:");
     expect(output).toContain("list");
+  });
+
+  it("prints generated API operation help before validating required inputs", async () => {
+    const { stdout: output, stderr } = await runCli(["api", "issue", "update", "--help"]);
+
+    expect(output).toContain("linearctl api issue update");
+    expect(output).toContain("--id <id>");
+    expect(output).toContain("--input-json <json>");
+    expect(stderr).not.toContain("--id is required");
   });
 
   it("does not treat mistyped resource help as bare resource help", async () => {

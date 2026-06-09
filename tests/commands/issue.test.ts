@@ -1112,6 +1112,32 @@ describe("handleIssueCommand — issue update", () => {
     }
   });
 
+  it("applies --project-milestone by sending projectMilestoneId in issue update input", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-issue-"));
+    const paths = await writeProfileFiles(directory);
+    const fetchSpy = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
+      new Response(JSON.stringify({
+        data: { issueUpdate: { success: true, issue: makeRawIssue() } }
+      }), { status: 200 })
+    );
+    const fetchImpl = fetchSpy as unknown as FetchLike;
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleIssueCommand(["update", "INF-2975"], {
+        ...baseOptions(paths),
+        projectMilestone: "e0000000-0000-0000-0000-000000000001",
+        fetchImpl
+      });
+
+      expect(exitCode).toBe(0);
+      const request = JSON.parse(String(fetchSpy.mock.calls[0]?.[1]?.body ?? "{}"));
+      expect(request.variables.input.projectMilestoneId).toBe("e0000000-0000-0000-0000-000000000001");
+    } finally {
+      output.restore();
+    }
+  });
+
   it("resolves project names during issue update", async () => {
     const directory = await mkdtemp(join(tmpdir(), "linear-cli-issue-"));
     const paths = await writeProfileFiles(directory);
@@ -1467,6 +1493,36 @@ describe("handleIssueCommand — issue bulk-update", () => {
       expect(parsed.succeeded[0].identifier).toBe("INF-2975");
       expect(parsed.failed).toHaveLength(1);
       expect(parsed.failed[0].identifier).toBe("NONEXISTENT-1");
+    } finally {
+      output.restore();
+    }
+  });
+
+  it("applies --milestone to every bulk update", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-issue-"));
+    const paths = await writeProfileFiles(directory);
+    const fetchImpl = vi.fn(async () =>
+      new Response(JSON.stringify({
+        data: { issueUpdate: { success: true, issue: makeRawIssue() } }
+      }), { status: 200 })
+    ) as unknown as FetchLike;
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleIssueCommand(["bulk-update"], {
+        ...baseOptions(paths),
+        ids: "INF-2975,INF-2976",
+        milestone: "e0000000-0000-0000-0000-000000000001",
+        fetchImpl
+      });
+
+      expect(exitCode).toBe(0);
+      const calls = (fetchImpl as ReturnType<typeof vi.fn>).mock.calls;
+      expect(calls).toHaveLength(2);
+      for (const call of calls) {
+        const request = JSON.parse(String(call[1]?.body ?? "{}"));
+        expect(request.variables.input.projectMilestoneId).toBe("e0000000-0000-0000-0000-000000000001");
+      }
     } finally {
       output.restore();
     }

@@ -38,6 +38,8 @@ export const OPTION_CATALOG: Record<string, OptionSpec> = {
   team: { type: "string" },
   description: { type: "string" },
   "description-file": { type: "string" },
+  content: { type: "string" },
+  "content-file": { type: "string" },
   priority: { type: "string" },
   estimate: { type: "string" },
   assignee: { type: "string" },

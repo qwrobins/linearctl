@@ -268,6 +268,25 @@ describe("handleApiCommand", () => {
     });
   });
 
+  describe("api <resource> <operation> --help", () => {
+    it("prints operation help without validating required inputs", async () => {
+      const manifestPath = await writeManifest(tmpDir);
+      const paths = await writeProfileFiles(tmpDir);
+      const result = await handleApiCommand(["issue", "update"], {
+        ...baseOptions(paths, manifestPath),
+        help: true
+      });
+
+      expect(result).toBe(0);
+      const text = output.stdout.join("");
+      expect(text).toContain("linearctl api issue update");
+      expect(text).toContain("--id <id>");
+      expect(text).toContain("--input-json <json>");
+      expect(text).toContain("IssueUpdateInput");
+      expect(output.stderr.join("")).not.toContain("--id is required");
+    });
+  });
+
   describe("api search", () => {
     it("finds matching commands", async () => {
       const manifestPath = await writeManifest(tmpDir);

@@ -38,3 +38,20 @@ export async function resolveDescriptionInput(options: {
   }
   return undefined;
 }
+
+export async function resolveContentInput(options: {
+  content?: string;
+  contentFile?: string;
+  stdinStream?: NodeJS.ReadableStream;
+}): Promise<string | undefined> {
+  if (options.content !== undefined && options.contentFile !== undefined) {
+    throw new Error("--content and --content-file are mutually exclusive.");
+  }
+  if (options.content !== undefined) {
+    return options.content;
+  }
+  if (options.contentFile !== undefined) {
+    return readTextInput(options.contentFile, "content-file", options.stdinStream);
+  }
+  return undefined;
+}

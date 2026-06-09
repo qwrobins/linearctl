@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.12] - 2026-06-09
+
+### Added
+
+- `issue update` and `issue bulk-update` now support `--project-milestone <id>` and the `--milestone <id>` alias.
+- `project create` and `project update` now support long-form project bodies with `--content <text>` and `--content-file <path|->`.
+- Generated `api <resource> <operation> --help` now prints operation usage and input guidance before validating required arguments.
+
+### Fixed
+
+- `issue update` and `project update` missing-identifier usage now lists the full supported flag set.
+
 ## [0.6.11] - 2026-06-05
 
 ### Added
