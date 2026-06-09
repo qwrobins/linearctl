@@ -31,7 +31,8 @@ linearctl issue create --title <title> --team <name|key|id> \
 # Update an issue
 linearctl issue update <identifier> [--title <text>] [--description <text>|--description-file <path|->] \
   [--priority <0-4>] [--estimate <n>] [--assignee <email|"me"|id>] [--label <name|id>] \
-  [--state <name|id>] [--cycle <id>] [--project <id>] [--parent <identifier>] --json
+  [--state <name|id>] [--cycle <id>] [--project <name|id>] \
+  [--project-milestone <id>|--milestone <id>] [--parent <identifier>] --json
 
 # Close an issue (transitions to a terminal completed/canceled state, defaults to "Done")
 linearctl issue close <identifier> [--state <name>] --json
@@ -54,7 +55,8 @@ linearctl issue comment <identifier> --body <text> --json
 ```bash
 # Bulk update fields on multiple issues
 linearctl issue bulk-update --ids <id1,id2,...> [--state <id>] [--assignee <id>] \
-  [--priority <0-4>] [--estimate <n>] [--label <id>] [--cycle <id>] --json
+  [--priority <0-4>] [--estimate <n>] [--label <id>] [--cycle <id>] \
+  [--project-milestone <id>|--milestone <id>] --json
 
 # Bulk close multiple issues
 linearctl issue bulk-close --ids <id1,id2,...> --json
@@ -73,10 +75,12 @@ Bulk operations report partial success. Check the response for per-item results.
 ```bash
 linearctl project get <name|id> --json             # supports exact, unique prefix, or unique substring names
 linearctl project list [--query <text>|--search <text>|--name <text>] [--team <name|key|id>] [--state <status-type> ...] [--all-teams] --json
-linearctl project create --name <name> [--description <text>|--description-file <path|->] [--team <name|key|id>] [--lead <user-id|email|"me">] --json
+linearctl project create --name <name> [--description <text>|--description-file <path|->] \
+  [--content <text>|--content-file <path|->] [--team <name|key|id>] [--lead <user-id|email|"me">] --json
 linearctl project create-with-issues --name <name> --team <name|key|id> \
   --issues-json '[{"title":"...","teamId":"..."}]' [--description <text>] --json
 linearctl project update <id> [--name <text>] [--description <text>|--description-file <path|->] \
+  [--content <text>|--content-file <path|->] \
   [--status <id|name|type>|--state <name|type>] [--lead <user-id|email|"me">] \
   [--start-date <YYYY-MM-DD>] [--target-date <YYYY-MM-DD>] --json
 linearctl project delete <id> --json              # [destructive]
@@ -86,7 +90,7 @@ linearctl project delete <id> --json              # [destructive]
 
 For `project update`, `--status` accepts a status name, status type, or status ID. `--state` remains supported as an alias for compatibility.
 
-For issue and project create/update descriptions, use `--description-file <path>` to read markdown from a file, or `--description-file -` to read from stdin explicitly. `--description` and `--description-file` are mutually exclusive.
+For issue and project create/update descriptions, use `--description-file <path>` to read markdown from a file, or `--description-file -` to read from stdin explicitly. `--description` and `--description-file` are mutually exclusive. For long-form project bodies, use `--content` or `--content-file` the same way.
 
 For `project list`, `--state` accepts project status types: `backlog`, `planned`, `started`, `paused`, `completed`, or `canceled`. Repeat `--state` to return projects matching any provided type. Use `--query`, `--search`, or `--name` to filter by project name.
 
@@ -266,6 +270,9 @@ linearctl api --help
 
 # List operations for a resource
 linearctl api <resource> --help
+
+# Show usage for one generated operation
+linearctl api <resource> <operation> --help
 
 # Search for commands
 linearctl api search <term>

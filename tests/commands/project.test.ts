@@ -58,6 +58,7 @@ function makeRawProject(overrides?: Partial<Record<string, unknown>>) {
     id: "00000000-0000-0000-0000-000000000001",
     name: "Auth hardening",
     description: "Harden authentication flows",
+    content: "Long-form project body",
     state: "started",
     progress: 0.42,
     health: "onTrack",
@@ -1177,6 +1178,70 @@ describe("handleProjectCommand — project update", () => {
       const updateCall = calls.find((call) => call.query.includes("ProjectUpdate"));
       expect(updateCall?.variables?.input).toEqual({
         description: "Updated project from file\n"
+      });
+    } finally {
+      output.restore();
+    }
+  });
+
+  it("sends --content in project create input", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-project-"));
+    const paths = await writeProfileFiles(directory);
+    const calls: Array<{ query: string; variables?: Record<string, unknown> }> = [];
+    const fetchImpl = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body ?? "{}")) as { query: string; variables?: Record<string, unknown> };
+      calls.push(body);
+      return new Response(JSON.stringify({
+        data: { projectCreate: { success: true, project: makeRawProject() } }
+      }), { status: 200 });
+    }) as FetchLike;
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleProjectCommand(["create"], {
+        ...baseOptions(paths),
+        name: "Auth hardening",
+        content: "## Overview\n\nProject body",
+        fetchImpl
+      });
+
+      expect(exitCode).toBe(0);
+      const createCall = calls.find((call) => call.query.includes("ProjectCreate"));
+      expect(createCall?.variables?.input).toEqual({
+        name: "Auth hardening",
+        content: "## Overview\n\nProject body"
+      });
+    } finally {
+      output.restore();
+    }
+  });
+
+  it("reads --content-file into the project update input", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-project-"));
+    const paths = await writeProfileFiles(directory);
+    const contentPath = join(directory, "content.md");
+    await writeFile(contentPath, "Updated body from file\n", "utf8");
+    const calls: Array<{ query: string; variables?: Record<string, unknown> }> = [];
+    const fetchImpl = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body ?? "{}")) as { query: string; variables?: Record<string, unknown> };
+      calls.push(body);
+      return new Response(JSON.stringify({
+        data: { projectUpdate: { success: true, project: makeRawProject() } }
+      }), { status: 200 });
+    }) as FetchLike;
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleProjectCommand(["update", "proj-uuid-1"], {
+        ...baseOptions(paths),
+        contentFile: contentPath,
+        fetchImpl
+      });
+
+      expect(exitCode).toBe(0);
+      const updateCall = calls.find((call) => call.query.includes("ProjectUpdate"));
+      expect(updateCall?.variables?.input).toEqual({
+        content: "Updated body from file\n"
       });
     } finally {
       output.restore();

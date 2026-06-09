@@ -839,6 +839,10 @@ async function handleIssueUpdate(
   if (options.project !== undefined) {
     input.projectId = options.project;
   }
+  const projectMilestone = options.projectMilestone ?? options.milestone;
+  if (projectMilestone !== undefined) {
+    input.projectMilestoneId = projectMilestone;
+  }
   if (options.parent !== undefined) {
     input.parentId = options.parent;
   }
@@ -1357,9 +1361,13 @@ async function handleBulkUpdate(options: IssueCommandOptions): Promise<number> {
   if (options.cycle !== undefined) {
     input.cycleId = options.cycle;
   }
+  const projectMilestone = options.projectMilestone ?? options.milestone;
+  if (projectMilestone !== undefined) {
+    input.projectMilestoneId = projectMilestone;
+  }
 
   if (Object.keys(input).length === 0) {
-    return emitValidationError("bulk-update requires at least one field to update (--state, --assignee, --priority, --label, --estimate, --cycle).", options);
+    return emitValidationError("bulk-update requires at least one field to update (--state, --assignee, --priority, --label, --estimate, --cycle, --project-milestone, --milestone).", options);
   }
 
   if (options.dryRun) {
@@ -1686,7 +1694,7 @@ export async function handleIssueCommand(
   if (subcommand === "update") {
     const identifier = rest[0];
     if (identifier === undefined || identifier === "") {
-      return emitValidationError("usage: linearctl issue update <identifier> [--title ...]", options);
+      return emitValidationError("usage: linearctl issue update <identifier> [--title <text>] [--description <text>|--description-file <path|->] [--priority <0-4>] [--estimate <n>] [--assignee <id>] [--label <name|id>] [--state <name|id>] [--cycle <id>] [--project <name|id>] [--project-milestone <id>|--milestone <id>] [--parent <identifier>] [--json]", options);
     }
     if (rest.length > 1) {
       return emitValidationError("issue update accepts exactly one identifier.", options);

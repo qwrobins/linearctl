@@ -13,6 +13,7 @@ import bundledApiCommands from "../generated/manifest/api-commands.json" with { 
 export type { ApiCommandEntry, ApiCommandManifest };
 
 export interface ApiCommandOptions {
+  help?: boolean;
   json: boolean;
   jsonEnvelope: boolean;
   raw: boolean;
@@ -108,6 +109,34 @@ function printResourceHelp(manifest: ApiCommandManifest, resource: string): void
     const desc = entry.description !== "" ? `  ${entry.description}` : "";
     const type = entry.graphqlOperationType === "mutation" ? " [mutation]" : "";
     process.stdout.write(`  ${entry.operation}${type}${desc}\n`);
+  }
+}
+
+function printOperationHelp(entry: ApiCommandEntry): void {
+  process.stdout.write(`${entry.commandPath}\n\n`);
+  if (entry.description !== "") {
+    process.stdout.write(`${entry.description}\n\n`);
+  }
+  process.stdout.write("Usage:\n");
+  process.stdout.write(`  ${entry.commandPath}`);
+  if (entry.inputMode === "id" || entry.inputMode === "id-plus-json") {
+    process.stdout.write(" --id <id>");
+  }
+  if (entry.inputMode !== "none" && entry.inputMode !== "id") {
+    process.stdout.write(" [--input-json <json>|--input-file <path>|--input-stdin]");
+  }
+  process.stdout.write(" [--fields <selection>] [--json]\n");
+
+  const args = [...entry.requiredArgs, ...entry.optionalArgs];
+  if (args.length > 0) {
+    process.stdout.write("\nGraphQL arguments:\n");
+    for (const arg of args) {
+      const required = entry.requiredArgs.some((requiredArg) => requiredArg.name === arg.name);
+      process.stdout.write(`  ${arg.name}: ${arg.typeName}${required ? " (required)" : ""}\n`);
+      if (arg.description !== "") {
+        process.stdout.write(`    ${arg.description}\n`);
+      }
+    }
   }
 }
 
@@ -319,6 +348,11 @@ export async function handleApiCommand(
   if (rest.length > 0) {
     process.stderr.write("Error: unexpected positional arguments after operation.\n");
     return ExitCode.ValidationError;
+  }
+
+  if (options.help === true) {
+    printOperationHelp(entry);
+    return ExitCode.Success;
   }
 
   // Validate input mode vs provided flags

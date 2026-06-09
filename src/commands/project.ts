@@ -9,7 +9,7 @@ import { resolveStoredProfile } from "../core/auth/runtime.js";
 import { paginateGraphQL, validatePaginationOptions, type PaginationOptions } from "../core/pagination/pagination.js";
 import { streamPaginateGraphQL } from "../core/pagination/streaming.js";
 import { emitDryRunResult } from "../core/output/dry-run.js";
-import { resolveDescriptionInput } from "../core/io/text-input.js";
+import { resolveContentInput, resolveDescriptionInput } from "../core/io/text-input.js";
 import { resolveProjectId, resolveTeamId, resolveUserId, looksLikeId } from "../core/resolution/resolve.js";
 import type { ResolverOptions } from "../core/resolution/resolve.js";
 import { CommandContext } from "../core/runtime/command-context.js";
@@ -30,6 +30,8 @@ export interface ProjectCommandOptions {
   name?: string;
   description?: string;
   descriptionFile?: string;
+  content?: string;
+  contentFile?: string;
   stdinStream?: NodeJS.ReadableStream;
   team?: string;
   issuesJson?: string;
@@ -161,6 +163,7 @@ fragment CuratedProject on Project {
   id
   name
   description
+  content
   state
   progress
   health
@@ -282,6 +285,7 @@ interface RawProject {
   id: string;
   name: string;
   description: string | null;
+  content: string | null;
   state: string;
   progress: number | null;
   health: string | null;
@@ -337,6 +341,7 @@ export interface NormalizedProject {
   id: string;
   name: string;
   description: string | null;
+  content: string | null;
   state: string;
   progress: number | null;
   health: string | null;
@@ -388,6 +393,7 @@ export function normalizeProject(raw: RawProject): NormalizedProject {
     id: raw.id,
     name: raw.name,
     description: raw.description,
+    content: raw.content,
     state: raw.state,
     progress: raw.progress,
     health: raw.health,
@@ -668,6 +674,15 @@ async function handleProjectCreate(options: ProjectCommandOptions): Promise<numb
   if (description !== undefined) {
     input.description = description;
   }
+  let content: string | undefined;
+  try {
+    content = await resolveContentInput(options);
+  } catch (error) {
+    return emitValidationError(error instanceof Error ? error.message : String(error), options);
+  }
+  if (content !== undefined) {
+    input.content = content;
+  }
 
   const ctx = buildContext(options);
 
@@ -738,6 +753,15 @@ async function handleProjectUpdate(
   if (description !== undefined) {
     input.description = description;
   }
+  let content: string | undefined;
+  try {
+    content = await resolveContentInput(options);
+  } catch (error) {
+    return emitValidationError(error instanceof Error ? error.message : String(error), options);
+  }
+  if (content !== undefined) {
+    input.content = content;
+  }
   if (options.startDate !== undefined) {
     const validation = validateIsoDate(options.startDate, "start-date", options);
     if (validation !== undefined) {
@@ -760,7 +784,7 @@ async function handleProjectUpdate(
   }
 
   if (Object.keys(input).length === 0 && !needsStatusResolution) {
-    return emitValidationError("project update requires at least one of --name, --description, --description-file, --status, --state, --lead, --start-date, --target-date.", options);
+    return emitValidationError("project update requires at least one of --name, --description, --description-file, --content, --content-file, --status, --state, --lead, --start-date, --target-date.", options);
   }
 
   const ctx = buildContext(options);
@@ -1066,7 +1090,7 @@ export async function handleProjectCommand(
   if (subcommand === "update") {
     const id = rest[0];
     if (id === undefined || id === "") {
-      return emitValidationError("usage: linearctl project update <id>", options);
+      return emitValidationError("usage: linearctl project update <id> [--name ...] [--description <text>|--description-file <path|->] [--content <text>|--content-file <path|->] [--status <name|type|id>|--state <name|type>] [--lead <user>] [--start-date <date>] [--target-date <date>] [--json]", options);
     }
     if (rest.length > 1) {
       return emitValidationError("project update accepts exactly one identifier.", options);
