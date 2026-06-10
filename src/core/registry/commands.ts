@@ -331,7 +331,7 @@ export const COMMAND_REGISTRY: readonly CommandRegistration[] = [
     optionKeys: [
       ...OPTION_GROUPS.global,
       "api-key-env", "api-key-stdin", "oauth",
-      "set-default", "remove-config", "api-url",
+      "set-default", "remove-config",
       "oauth-client-id", "callback-port", "no-browser",
     ],
     subcommands: {
