@@ -120,7 +120,7 @@ Raw GraphQL should not be used merely because it is possible. It is the fallback
 - `linearctl schema version --json`
 - `linearctl schema pull --json`
 - `linearctl schema check --json`
-- Normal commands run best-effort schema freshness checks after command output, skip help/dry-run paths, and warn on stderr when the effective schema metadata is stale. `schema pull` writes `schema.json` and `schema-meta.json`; commands prefer pulled metadata from the profile config directory when present. Configure `[schema] stale_after_days` and `auto_update = true` in the linear config to opt into automatic schema pulls (`schema.autoUpdate`).
+- Normal commands run best-effort schema freshness checks after command output, skip help/dry-run paths, cache successful or failed attempts for 24 hours, and warn on stderr when the effective schema metadata is stale. `schema pull` writes `schema.json` and `schema-meta.json`; commands prefer pulled metadata from the profile config directory when present. Configure `[schema] stale_after_days` and `auto_update = true` in the linear config to opt into automatic schema pulls (`schema.autoUpdate`).
 
 ### Auth
 - `linearctl auth status --json`

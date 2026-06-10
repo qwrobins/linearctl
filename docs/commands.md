@@ -253,7 +253,7 @@ linearctl schema pull [--output-dir <path>] --json
 linearctl schema check --json
 ```
 
-`schema pull` writes `schema.json` and `schema-meta.json`; normal commands and `schema version` prefer metadata from pulled files in the profile config directory when present. Best-effort freshness checks run after command completion, skip help and dry-run paths, and time out quickly so they do not delay command output.
+`schema pull` writes `schema.json` and `schema-meta.json`; normal commands and `schema version` prefer metadata from pulled files in the profile config directory when present. Best-effort freshness checks run after command completion, skip help and dry-run paths, cache successful or failed attempts for 24 hours, and time out quickly so they do not delay command output.
 
 See [schema-and-generated.md](schema-and-generated.md) for details.
 

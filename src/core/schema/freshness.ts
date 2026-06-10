@@ -30,6 +30,7 @@ interface FreshnessCache {
   lastBundledVersion?: string | null;
   lastLiveVersion?: string | null;
   drifted?: boolean;
+  lastAttemptStatus?: "success" | "failed";
 }
 
 const DEFAULT_STALE_AFTER_DAYS = 14;
@@ -57,6 +58,14 @@ export async function maybeWarnForStaleSchema(options: SchemaFreshnessOptions): 
     if (wasCheckedRecently(cache, now)) {
       return;
     }
+
+    await writeFreshnessCache(cacheFile, {
+      lastCheckedAt: now.toISOString(),
+      lastBundledVersion: bundledMeta.schemaVersion,
+      lastLiveVersion: cache?.lastLiveVersion ?? null,
+      drifted: cache?.drifted ?? false,
+      lastAttemptStatus: "failed"
+    });
 
     const profile = await resolveStoredProfile({
       paths: {
@@ -90,7 +99,8 @@ export async function maybeWarnForStaleSchema(options: SchemaFreshnessOptions): 
       lastCheckedAt: now.toISOString(),
       lastBundledVersion: bundledMeta.schemaVersion,
       lastLiveVersion: liveVersion,
-      drifted
+      drifted,
+      lastAttemptStatus: "success"
     });
 
     if (!drifted) {
