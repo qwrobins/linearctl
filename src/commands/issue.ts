@@ -742,7 +742,7 @@ async function handleIssueList(options: IssueCommandOptions): Promise<number> {
   }
 }
 
-async function handleIssueSearch(options: IssueCommandOptions): Promise<number> {
+async function handleIssueSearch(options: IssueCommandOptions, applyDefaultTeam = false): Promise<number> {
   const trimmedQuery = (options.query ?? options.search)?.trim();
   if (trimmedQuery === undefined || trimmedQuery === "") {
     return emitValidationError("usage: linearctl issue search [<text>|--query <text>]", options);
@@ -770,7 +770,7 @@ async function handleIssueSearch(options: IssueCommandOptions): Promise<number> 
   try {
     const profile = await ctx.resolveProfile();
     const resolverOpts = await ctx.resolverOptions();
-    const filterResult = await buildIssueFilter(options, profile.metadata.defaultTeam, resolverOpts, false);
+    const filterResult = await buildIssueFilter(options, profile.metadata.defaultTeam, resolverOpts, applyDefaultTeam);
     if (filterResult.validationError !== undefined) {
       return emitValidationError(filterResult.validationError, options);
     }
@@ -1862,7 +1862,7 @@ export async function handleIssueCommand(
       return emitValidationError("issue list does not accept positional arguments.", options);
     }
     if ((options.query ?? options.search) !== undefined) {
-      return handleIssueSearch(options);
+      return handleIssueSearch(options, true);
     }
     return handleIssueList(options);
   }

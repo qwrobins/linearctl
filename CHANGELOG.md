@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.1] - 2026-06-10
+
+### Fixed
+
+- Linear `Entity not found` GraphQL failures now map to the not-found category and exit code 4, including bulk per-item failures.
+- Leading `--version` and `--metadata curated --json` now short-circuit before every registered command by composing global option groups across the registry.
+- `issue list --search` once again applies the profile default team, while `issue search` remains workspace-wide unless `--team` is passed.
+- Cross-host file upload redirects preserve content negotiation headers such as `Content-Type` while still dropping authorization and signed storage headers.
+- Generated `api` commands only treat retry option `RangeError`s as validation errors; execution-time `RangeError`s now remain general failures.
+- `schema pull` and `schema check` responses missing introspection schema data are general failures rather than validation errors.
+
 ## [0.8.0] - 2026-06-10
 
 ### Changed

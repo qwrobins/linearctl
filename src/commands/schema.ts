@@ -114,7 +114,7 @@ async function handleSchemaPull(positionals: string[], options: SchemaCommandOpt
     }, normalizeRetryOptions(options));
 
     if (response.body.data === undefined || response.body.data.__schema === undefined) {
-      return emitValidationError("introspection response did not contain schema data.", options);
+      return emitSchemaFailure("introspection response did not contain schema data.", options);
     }
 
     const schema = response.body.data.__schema as Record<string, unknown>;
@@ -209,7 +209,7 @@ async function handleSchemaCheck(positionals: string[], options: SchemaCommandOp
     }, normalizeRetryOptions(options));
 
     if (response.body.data === undefined || response.body.data.__schema === undefined) {
-      return emitValidationError("introspection response did not contain schema data.", options);
+      return emitSchemaFailure("introspection response did not contain schema data.", options);
     }
 
     const schema = response.body.data.__schema as Record<string, unknown>;
@@ -276,6 +276,20 @@ async function handleSchemaCheck(positionals: string[], options: SchemaCommandOp
 
 function defaultSchemaOutputDir(configFile: string): string {
   return join(dirname(configFile), "schema");
+}
+
+function emitSchemaFailure(message: string, options: SchemaCommandOptions): number {
+  const error: CommandError = { category: "general", message };
+  if (options.jsonEnvelope) {
+    const envelope = failureEnvelope([error], {
+      sourceLayer: "curated",
+      ...(options.profile === undefined ? {} : { profile: options.profile })
+    });
+    process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
+  } else {
+    process.stderr.write(`Error: ${message}\n`);
+  }
+  return ExitCode.GeneralError;
 }
 
 function executeSchemaGraphQL<TData>(

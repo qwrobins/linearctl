@@ -35,6 +35,17 @@ export function mapCommandFailure(error: unknown): CommandFailure {
 
   if (error instanceof GraphQLTransportError) {
     const details = graphQLTransportDetails(error);
+    if (isGraphQLEntityNotFound(error)) {
+      return {
+        exitCode: ExitCode.NotFound,
+        error: {
+          category: "not-found",
+          message: error.message,
+          ...(details === undefined ? {} : { details })
+        }
+      };
+    }
+
     if (error.status === 401 || error.status === 403) {
       return {
         exitCode: ExitCode.AuthenticationError,
@@ -68,6 +79,16 @@ export function mapCommandFailure(error: unknown): CommandFailure {
   }
 
   if (error instanceof Error) {
+    if (/entity not found/i.test(error.message)) {
+      return {
+        exitCode: ExitCode.NotFound,
+        error: {
+          category: "not-found",
+          message: error.message
+        }
+      };
+    }
+
     return {
       exitCode: ExitCode.GeneralError,
       error: {
@@ -94,6 +115,25 @@ function graphQLTransportDetails(error: GraphQLTransportError): unknown {
     };
   }
   return error.errors;
+}
+
+function isGraphQLEntityNotFound(error: GraphQLTransportError): boolean {
+  if (/entity not found/i.test(error.message)) {
+    return true;
+  }
+
+  return error.errors?.some((graphQLError) => {
+    if (/entity not found/i.test(graphQLError.message)) {
+      return true;
+    }
+    const extensions = graphQLError.extensions;
+    if (extensions === undefined) {
+      return false;
+    }
+    return Object.values(extensions).some((value) =>
+      typeof value === "string" && /entity[_ -]?not[_ -]?found/i.test(value)
+    );
+  }) ?? false;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

@@ -225,6 +225,39 @@ describe("handleSchemaCommand", () => {
       }
     });
 
+    it("treats introspection responses without schema data as general failures", async () => {
+      const directory = await mkdtemp(join(tmpdir(), "linear-cli-schema-"));
+      const { configFile, credentialsFile } = await writeProfileFiles(directory);
+      const fetchImpl = vi.fn(async () =>
+        new Response(JSON.stringify({ data: {} }), { status: 200 })
+      ) as FetchLike;
+      const output = captureOutput();
+
+      try {
+        await expect(
+          handleSchemaCommand(["pull"], {
+            json: false,
+            jsonEnvelope: true,
+            configFile,
+            credentialsFile,
+            env: {},
+            fetchImpl
+          })
+        ).resolves.toBe(1);
+
+        const parsed = JSON.parse(output.stdout.join(""));
+        expect(parsed.ok).toBe(false);
+        expect(parsed.errors).toEqual([
+          {
+            category: "general",
+            message: "introspection response did not contain schema data."
+          }
+        ]);
+      } finally {
+        output.restore();
+      }
+    });
+
     it("returns an envelope on pull with --json-envelope", async () => {
       const directory = await mkdtemp(join(tmpdir(), "linear-cli-schema-"));
       const { configFile, credentialsFile } = await writeProfileFiles(directory);

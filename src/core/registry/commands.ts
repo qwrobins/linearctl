@@ -329,10 +329,9 @@ export const COMMAND_REGISTRY: readonly CommandRegistration[] = [
   {
     name: "auth",
     optionKeys: [
-      "help", "json", "json-envelope",
-      "config", "config-file", "credentials", "credentials-file",
-      "profile", "api-key-env", "api-key-stdin", "oauth",
-      "set-default", "remove-config", "api-url",
+      ...OPTION_GROUPS.global,
+      "api-key-env", "api-key-stdin", "oauth",
+      "set-default", "remove-config",
       "oauth-client-id", "callback-port", "no-browser",
     ],
     subcommands: {
@@ -359,10 +358,9 @@ export const COMMAND_REGISTRY: readonly CommandRegistration[] = [
   {
     name: "gql",
     optionKeys: [
-      "help", "json", "json-envelope",
-      "config", "config-file", "credentials", "credentials-file",
-      "profile", "api-url", "raw", "stdin", "file", "vars-file", "var",
-      "no-retry", "max-retries",
+      ...OPTION_GROUPS.global,
+      ...OPTION_GROUPS.retry,
+      "raw", "stdin", "file", "vars-file", "var",
     ],
     subcommands: {
       introspect: { usage: "linearctl gql introspect --json" },
@@ -384,10 +382,9 @@ export const COMMAND_REGISTRY: readonly CommandRegistration[] = [
   {
     name: "api",
     optionKeys: [
-      "help", "json", "json-envelope",
-      "config", "config-file", "credentials", "credentials-file",
-      "profile", "api-url", "id", "input-json", "input-file", "input-stdin",
-      "fields", "raw", "no-retry", "max-retries",
+      ...OPTION_GROUPS.global,
+      ...OPTION_GROUPS.retry,
+      "id", "input-json", "input-file", "input-stdin", "fields", "raw",
     ],
     subcommands: {
       "<resource> <operation>": { usage: "linearctl api <resource> <operation> [--id <id>] [--input-json <json>] [--fields <f1,f2>] [--json]" },
@@ -411,9 +408,9 @@ export const COMMAND_REGISTRY: readonly CommandRegistration[] = [
   {
     name: "schema",
     optionKeys: [
-      "help", "json", "json-envelope",
-      "config", "config-file", "credentials", "credentials-file",
-      "profile", "api-url", "output-dir", "no-retry", "max-retries",
+      ...OPTION_GROUPS.global,
+      ...OPTION_GROUPS.retry,
+      "output-dir",
     ],
     subcommands: {
       version: { usage: "linearctl schema version [--json]" },
@@ -432,8 +429,7 @@ export const COMMAND_REGISTRY: readonly CommandRegistration[] = [
   {
     name: "workspace",
     optionKeys: [
-      "help", "json", "json-envelope",
-      "config", "config-file", "credentials", "credentials-file",
+      ...OPTION_GROUPS.global,
     ],
     subcommands: {
       list: { usage: "linearctl workspace list [--json]" },
@@ -450,7 +446,8 @@ export const COMMAND_REGISTRY: readonly CommandRegistration[] = [
   {
     name: "skills",
     optionKeys: [
-      "help", "json", "json-envelope", "scope",
+      ...OPTION_GROUPS.global,
+      "scope",
     ],
     subcommands: {
       install: { usage: "linearctl skills install [--scope project|user] [--json]" },

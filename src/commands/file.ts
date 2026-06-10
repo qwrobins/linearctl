@@ -76,6 +76,12 @@ function resolveRedirectUrl(currentUrl: string, location: string | null): string
 }
 
 const MAX_FILE_REDIRECTS = 5;
+const CROSS_HOST_HEADER_ALLOWLIST = new Set([
+  "accept",
+  "accept-language",
+  "content-language",
+  "content-type"
+]);
 
 async function fetchWithHostValidatedRedirects(
   fetchImpl: FetchLike,
@@ -111,14 +117,31 @@ async function fetchWithHostValidatedRedirects(
     }
 
     if (parsedNextUrl.host !== originalHost) {
+      const safeHeaders = safeCrossHostHeaders(currentInit.headers);
       const { headers: _headers, ...rest } = currentInit;
-      currentInit = rest;
+      currentInit = safeHeaders === undefined ? rest : { ...rest, headers: safeHeaders };
     }
 
     currentUrl = nextUrl;
   }
 
   throw new Error("File request exceeded the redirect limit.");
+}
+
+function safeCrossHostHeaders(headers: HeadersInit | undefined): Record<string, string> | undefined {
+  if (headers === undefined) {
+    return undefined;
+  }
+
+  const entries = new Headers(headers).entries();
+  const safe: Record<string, string> = {};
+  for (const [key, value] of entries) {
+    if (CROSS_HOST_HEADER_ALLOWLIST.has(key.toLowerCase())) {
+      safe[key] = value;
+    }
+  }
+
+  return Object.keys(safe).length === 0 ? undefined : safe;
 }
 
 const FILE_UPLOAD_MUTATION = `
