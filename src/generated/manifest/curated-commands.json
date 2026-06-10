@@ -1,69 +1,5 @@
 [
   {
-    "commandPath": "linearctl auth login",
-    "layer": "curated",
-    "resource": "auth",
-    "operation": "login",
-    "stability": "stable",
-    "preferredForAgents": true,
-    "safety": "safe",
-    "inputMode": "flags",
-    "outputShape": "object",
-    "supportedOutputModes": ["human", "json", "json-envelope"]
-  },
-  {
-    "commandPath": "linearctl auth logout",
-    "layer": "curated",
-    "resource": "auth",
-    "operation": "logout",
-    "stability": "stable",
-    "preferredForAgents": true,
-    "safety": "confirmation-required",
-    "inputMode": "flags",
-    "outputShape": "object",
-    "supportedOutputModes": ["human", "json", "json-envelope"]
-  },
-  {
-    "commandPath": "linearctl auth status",
-    "layer": "curated",
-    "resource": "auth",
-    "operation": "status",
-    "stability": "stable",
-    "preferredForAgents": true,
-    "safety": "safe",
-    "inputMode": "none",
-    "outputShape": "object",
-    "supportedOutputModes": ["human", "json", "json-envelope"]
-  },
-  {
-    "commandPath": "linearctl auth switch",
-    "layer": "curated",
-    "resource": "auth",
-    "operation": "switch",
-    "stability": "stable",
-    "preferredForAgents": true,
-    "safety": "safe",
-    "inputMode": "flags",
-    "outputShape": "object",
-    "supportedOutputModes": ["human", "json", "json-envelope"]
-  },
-  {
-    "commandPath": "linearctl issue list",
-    "layer": "curated",
-    "resource": "issue",
-    "operation": "list",
-    "stability": "stable",
-    "preferredForAgents": true,
-    "safety": "safe",
-    "inputMode": "flags",
-    "outputShape": "array",
-    "supportedOutputModes": ["human", "json", "json-envelope"],
-    "fallback": {
-      "nextLayer": "generated",
-      "reason": "Use generated issue list only when curated filters cannot express the request."
-    }
-  },
-  {
     "commandPath": "linearctl issue get",
     "layer": "curated",
     "resource": "issue",
@@ -73,7 +9,27 @@
     "safety": "safe",
     "inputMode": "id",
     "outputShape": "object",
-    "supportedOutputModes": ["human", "json", "json-envelope"]
+    "supportedOutputModes": [
+      "human",
+      "json",
+      "json-envelope"
+    ]
+  },
+  {
+    "commandPath": "linearctl issue view",
+    "layer": "curated",
+    "resource": "issue",
+    "operation": "view",
+    "stability": "stable",
+    "preferredForAgents": true,
+    "safety": "safe",
+    "inputMode": "id",
+    "outputShape": "object",
+    "supportedOutputModes": [
+      "human",
+      "json",
+      "json-envelope"
+    ]
   },
   {
     "commandPath": "linearctl issue create",
@@ -85,7 +41,47 @@
     "safety": "safe",
     "inputMode": "flags",
     "outputShape": "object",
-    "supportedOutputModes": ["human", "json", "json-envelope"]
+    "supportedOutputModes": [
+      "human",
+      "json",
+      "json-envelope"
+    ]
+  },
+  {
+    "commandPath": "linearctl issue list",
+    "layer": "curated",
+    "resource": "issue",
+    "operation": "list",
+    "stability": "stable",
+    "preferredForAgents": true,
+    "safety": "safe",
+    "inputMode": "flags",
+    "outputShape": "array",
+    "supportedOutputModes": [
+      "human",
+      "json",
+      "json-envelope"
+    ],
+    "fallback": {
+      "nextLayer": "generated",
+      "reason": "Use generated issue list only when curated filters cannot express the request."
+    }
+  },
+  {
+    "commandPath": "linearctl issue search",
+    "layer": "curated",
+    "resource": "issue",
+    "operation": "search",
+    "stability": "stable",
+    "preferredForAgents": true,
+    "safety": "safe",
+    "inputMode": "flags",
+    "outputShape": "array",
+    "supportedOutputModes": [
+      "human",
+      "json",
+      "json-envelope"
+    ]
   },
   {
     "commandPath": "linearctl issue update",
@@ -97,7 +93,11 @@
     "safety": "safe",
     "inputMode": "flags",
     "outputShape": "object",
-    "supportedOutputModes": ["human", "json", "json-envelope"]
+    "supportedOutputModes": [
+      "human",
+      "json",
+      "json-envelope"
+    ]
   },
   {
     "commandPath": "linearctl issue close",
@@ -106,10 +106,14 @@
     "operation": "close",
     "stability": "stable",
     "preferredForAgents": true,
-    "safety": "confirmation-required",
-    "inputMode": "id",
+    "safety": "safe",
+    "inputMode": "flags",
     "outputShape": "object",
-    "supportedOutputModes": ["human", "json", "json-envelope"]
+    "supportedOutputModes": [
+      "human",
+      "json",
+      "json-envelope"
+    ]
   },
   {
     "commandPath": "linearctl issue delete",
@@ -121,7 +125,11 @@
     "safety": "destructive",
     "inputMode": "id",
     "outputShape": "object",
-    "supportedOutputModes": ["human", "json", "json-envelope"]
+    "supportedOutputModes": [
+      "human",
+      "json",
+      "json-envelope"
+    ]
   },
   {
     "commandPath": "linearctl issue assign",
@@ -133,7 +141,11 @@
     "safety": "safe",
     "inputMode": "flags",
     "outputShape": "object",
-    "supportedOutputModes": ["human", "json", "json-envelope"]
+    "supportedOutputModes": [
+      "human",
+      "json",
+      "json-envelope"
+    ]
   },
   {
     "commandPath": "linearctl issue comment",
@@ -145,7 +157,11 @@
     "safety": "safe",
     "inputMode": "flags",
     "outputShape": "object",
-    "supportedOutputModes": ["human", "json", "json-envelope"]
+    "supportedOutputModes": [
+      "human",
+      "json",
+      "json-envelope"
+    ]
   },
   {
     "commandPath": "linearctl issue attach-slack",
@@ -157,19 +173,91 @@
     "safety": "safe",
     "inputMode": "flags",
     "outputShape": "object",
-    "supportedOutputModes": ["human", "json", "json-envelope"]
+    "supportedOutputModes": [
+      "human",
+      "json",
+      "json-envelope"
+    ]
   },
   {
-    "commandPath": "linearctl project list",
+    "commandPath": "linearctl issue bulk-update",
     "layer": "curated",
-    "resource": "project",
-    "operation": "list",
+    "resource": "issue",
+    "operation": "bulk-update",
     "stability": "stable",
     "preferredForAgents": true,
     "safety": "safe",
     "inputMode": "flags",
-    "outputShape": "array",
-    "supportedOutputModes": ["human", "json", "json-envelope"]
+    "outputShape": "object",
+    "supportedOutputModes": [
+      "human",
+      "json",
+      "json-envelope"
+    ]
+  },
+  {
+    "commandPath": "linearctl issue bulk-close",
+    "layer": "curated",
+    "resource": "issue",
+    "operation": "bulk-close",
+    "stability": "stable",
+    "preferredForAgents": true,
+    "safety": "safe",
+    "inputMode": "flags",
+    "outputShape": "object",
+    "supportedOutputModes": [
+      "human",
+      "json",
+      "json-envelope"
+    ]
+  },
+  {
+    "commandPath": "linearctl issue bulk-archive",
+    "layer": "curated",
+    "resource": "issue",
+    "operation": "bulk-archive",
+    "stability": "stable",
+    "preferredForAgents": true,
+    "safety": "destructive",
+    "inputMode": "flags",
+    "outputShape": "object",
+    "supportedOutputModes": [
+      "human",
+      "json",
+      "json-envelope"
+    ]
+  },
+  {
+    "commandPath": "linearctl issue bulk-delete",
+    "layer": "curated",
+    "resource": "issue",
+    "operation": "bulk-delete",
+    "stability": "stable",
+    "preferredForAgents": true,
+    "safety": "confirmation-required",
+    "inputMode": "flags",
+    "outputShape": "object",
+    "supportedOutputModes": [
+      "human",
+      "json",
+      "json-envelope"
+    ]
+  },
+  {
+    "commandPath": "linearctl issue bulk-assign",
+    "layer": "curated",
+    "resource": "issue",
+    "operation": "bulk-assign",
+    "stability": "stable",
+    "preferredForAgents": true,
+    "safety": "safe",
+    "inputMode": "flags",
+    "outputShape": "object",
+    "supportedOutputModes": [
+      "human",
+      "json",
+      "json-envelope"
+    ]
   },
   {
     "commandPath": "linearctl project get",
@@ -181,7 +269,27 @@
     "safety": "safe",
     "inputMode": "id",
     "outputShape": "object",
-    "supportedOutputModes": ["human", "json", "json-envelope"]
+    "supportedOutputModes": [
+      "human",
+      "json",
+      "json-envelope"
+    ]
+  },
+  {
+    "commandPath": "linearctl project list",
+    "layer": "curated",
+    "resource": "project",
+    "operation": "list",
+    "stability": "stable",
+    "preferredForAgents": true,
+    "safety": "safe",
+    "inputMode": "flags",
+    "outputShape": "array",
+    "supportedOutputModes": [
+      "human",
+      "json",
+      "json-envelope"
+    ]
   },
   {
     "commandPath": "linearctl project create",
@@ -193,7 +301,11 @@
     "safety": "safe",
     "inputMode": "flags",
     "outputShape": "object",
-    "supportedOutputModes": ["human", "json", "json-envelope"]
+    "supportedOutputModes": [
+      "human",
+      "json",
+      "json-envelope"
+    ]
   },
   {
     "commandPath": "linearctl project update",
@@ -205,19 +317,43 @@
     "safety": "safe",
     "inputMode": "flags",
     "outputShape": "object",
-    "supportedOutputModes": ["human", "json", "json-envelope"]
+    "supportedOutputModes": [
+      "human",
+      "json",
+      "json-envelope"
+    ]
   },
   {
-    "commandPath": "linearctl cycle list",
+    "commandPath": "linearctl project create-with-issues",
     "layer": "curated",
-    "resource": "cycle",
-    "operation": "list",
+    "resource": "project",
+    "operation": "create-with-issues",
     "stability": "stable",
     "preferredForAgents": true,
     "safety": "safe",
     "inputMode": "flags",
-    "outputShape": "array",
-    "supportedOutputModes": ["human", "json", "json-envelope"]
+    "outputShape": "object",
+    "supportedOutputModes": [
+      "human",
+      "json",
+      "json-envelope"
+    ]
+  },
+  {
+    "commandPath": "linearctl project delete",
+    "layer": "curated",
+    "resource": "project",
+    "operation": "delete",
+    "stability": "stable",
+    "preferredForAgents": true,
+    "safety": "destructive",
+    "inputMode": "id",
+    "outputShape": "object",
+    "supportedOutputModes": [
+      "human",
+      "json",
+      "json-envelope"
+    ]
   },
   {
     "commandPath": "linearctl cycle get",
@@ -229,7 +365,43 @@
     "safety": "safe",
     "inputMode": "id",
     "outputShape": "object",
-    "supportedOutputModes": ["human", "json", "json-envelope"]
+    "supportedOutputModes": [
+      "human",
+      "json",
+      "json-envelope"
+    ]
+  },
+  {
+    "commandPath": "linearctl cycle list",
+    "layer": "curated",
+    "resource": "cycle",
+    "operation": "list",
+    "stability": "stable",
+    "preferredForAgents": true,
+    "safety": "safe",
+    "inputMode": "flags",
+    "outputShape": "array",
+    "supportedOutputModes": [
+      "human",
+      "json",
+      "json-envelope"
+    ]
+  },
+  {
+    "commandPath": "linearctl cycle current",
+    "layer": "curated",
+    "resource": "cycle",
+    "operation": "current",
+    "stability": "stable",
+    "preferredForAgents": true,
+    "safety": "safe",
+    "inputMode": "flags",
+    "outputShape": "object",
+    "supportedOutputModes": [
+      "human",
+      "json",
+      "json-envelope"
+    ]
   },
   {
     "commandPath": "linearctl cycle create",
@@ -241,7 +413,11 @@
     "safety": "safe",
     "inputMode": "flags",
     "outputShape": "object",
-    "supportedOutputModes": ["human", "json", "json-envelope"]
+    "supportedOutputModes": [
+      "human",
+      "json",
+      "json-envelope"
+    ]
   },
   {
     "commandPath": "linearctl cycle update",
@@ -253,19 +429,43 @@
     "safety": "safe",
     "inputMode": "flags",
     "outputShape": "object",
-    "supportedOutputModes": ["human", "json", "json-envelope"]
+    "supportedOutputModes": [
+      "human",
+      "json",
+      "json-envelope"
+    ]
   },
   {
-    "commandPath": "linearctl team list",
+    "commandPath": "linearctl cycle archive",
     "layer": "curated",
-    "resource": "team",
-    "operation": "list",
+    "resource": "cycle",
+    "operation": "archive",
     "stability": "stable",
     "preferredForAgents": true,
-    "safety": "safe",
-    "inputMode": "flags",
-    "outputShape": "array",
-    "supportedOutputModes": ["human", "json", "json-envelope"]
+    "safety": "destructive",
+    "inputMode": "id",
+    "outputShape": "object",
+    "supportedOutputModes": [
+      "human",
+      "json",
+      "json-envelope"
+    ]
+  },
+  {
+    "commandPath": "linearctl cycle delete",
+    "layer": "curated",
+    "resource": "cycle",
+    "operation": "delete",
+    "stability": "stable",
+    "preferredForAgents": true,
+    "safety": "destructive",
+    "inputMode": "id",
+    "outputShape": "object",
+    "supportedOutputModes": [
+      "human",
+      "json",
+      "json-envelope"
+    ]
   },
   {
     "commandPath": "linearctl team get",
@@ -277,7 +477,27 @@
     "safety": "safe",
     "inputMode": "id",
     "outputShape": "object",
-    "supportedOutputModes": ["human", "json", "json-envelope"]
+    "supportedOutputModes": [
+      "human",
+      "json",
+      "json-envelope"
+    ]
+  },
+  {
+    "commandPath": "linearctl team list",
+    "layer": "curated",
+    "resource": "team",
+    "operation": "list",
+    "stability": "stable",
+    "preferredForAgents": true,
+    "safety": "safe",
+    "inputMode": "flags",
+    "outputShape": "array",
+    "supportedOutputModes": [
+      "human",
+      "json",
+      "json-envelope"
+    ]
   },
   {
     "commandPath": "linearctl team members",
@@ -287,21 +507,13 @@
     "stability": "stable",
     "preferredForAgents": true,
     "safety": "safe",
-    "inputMode": "id",
-    "outputShape": "array",
-    "supportedOutputModes": ["human", "json", "json-envelope"]
-  },
-  {
-    "commandPath": "linearctl user list",
-    "layer": "curated",
-    "resource": "user",
-    "operation": "list",
-    "stability": "stable",
-    "preferredForAgents": true,
-    "safety": "safe",
     "inputMode": "flags",
     "outputShape": "array",
-    "supportedOutputModes": ["human", "json", "json-envelope"]
+    "supportedOutputModes": [
+      "human",
+      "json",
+      "json-envelope"
+    ]
   },
   {
     "commandPath": "linearctl user get",
@@ -313,7 +525,11 @@
     "safety": "safe",
     "inputMode": "id",
     "outputShape": "object",
-    "supportedOutputModes": ["human", "json", "json-envelope"]
+    "supportedOutputModes": [
+      "human",
+      "json",
+      "json-envelope"
+    ]
   },
   {
     "commandPath": "linearctl user me",
@@ -325,19 +541,27 @@
     "safety": "safe",
     "inputMode": "none",
     "outputShape": "object",
-    "supportedOutputModes": ["human", "json", "json-envelope"]
+    "supportedOutputModes": [
+      "human",
+      "json",
+      "json-envelope"
+    ]
   },
   {
-    "commandPath": "linearctl label list",
+    "commandPath": "linearctl user list",
     "layer": "curated",
-    "resource": "label",
+    "resource": "user",
     "operation": "list",
     "stability": "stable",
     "preferredForAgents": true,
     "safety": "safe",
     "inputMode": "flags",
     "outputShape": "array",
-    "supportedOutputModes": ["human", "json", "json-envelope"]
+    "supportedOutputModes": [
+      "human",
+      "json",
+      "json-envelope"
+    ]
   },
   {
     "commandPath": "linearctl label get",
@@ -349,7 +573,27 @@
     "safety": "safe",
     "inputMode": "id",
     "outputShape": "object",
-    "supportedOutputModes": ["human", "json", "json-envelope"]
+    "supportedOutputModes": [
+      "human",
+      "json",
+      "json-envelope"
+    ]
+  },
+  {
+    "commandPath": "linearctl label list",
+    "layer": "curated",
+    "resource": "label",
+    "operation": "list",
+    "stability": "stable",
+    "preferredForAgents": true,
+    "safety": "safe",
+    "inputMode": "flags",
+    "outputShape": "array",
+    "supportedOutputModes": [
+      "human",
+      "json",
+      "json-envelope"
+    ]
   },
   {
     "commandPath": "linearctl label create",
@@ -361,7 +605,171 @@
     "safety": "safe",
     "inputMode": "flags",
     "outputShape": "object",
-    "supportedOutputModes": ["human", "json", "json-envelope"]
+    "supportedOutputModes": [
+      "human",
+      "json",
+      "json-envelope"
+    ]
+  },
+  {
+    "commandPath": "linearctl label delete",
+    "layer": "curated",
+    "resource": "label",
+    "operation": "delete",
+    "stability": "stable",
+    "preferredForAgents": true,
+    "safety": "destructive",
+    "inputMode": "id",
+    "outputShape": "object",
+    "supportedOutputModes": [
+      "human",
+      "json",
+      "json-envelope"
+    ]
+  },
+  {
+    "commandPath": "linearctl state get",
+    "layer": "curated",
+    "resource": "state",
+    "operation": "get",
+    "stability": "stable",
+    "preferredForAgents": true,
+    "safety": "safe",
+    "inputMode": "id",
+    "outputShape": "object",
+    "supportedOutputModes": [
+      "human",
+      "json",
+      "json-envelope"
+    ]
+  },
+  {
+    "commandPath": "linearctl state list",
+    "layer": "curated",
+    "resource": "state",
+    "operation": "list",
+    "stability": "stable",
+    "preferredForAgents": true,
+    "safety": "safe",
+    "inputMode": "flags",
+    "outputShape": "array",
+    "supportedOutputModes": [
+      "human",
+      "json",
+      "json-envelope"
+    ]
+  },
+  {
+    "commandPath": "linearctl state create",
+    "layer": "curated",
+    "resource": "state",
+    "operation": "create",
+    "stability": "stable",
+    "preferredForAgents": true,
+    "safety": "safe",
+    "inputMode": "flags",
+    "outputShape": "object",
+    "supportedOutputModes": [
+      "human",
+      "json",
+      "json-envelope"
+    ]
+  },
+  {
+    "commandPath": "linearctl state archive",
+    "layer": "curated",
+    "resource": "state",
+    "operation": "archive",
+    "stability": "stable",
+    "preferredForAgents": true,
+    "safety": "destructive",
+    "inputMode": "id",
+    "outputShape": "object",
+    "supportedOutputModes": [
+      "human",
+      "json",
+      "json-envelope"
+    ]
+  },
+  {
+    "commandPath": "linearctl state delete",
+    "layer": "curated",
+    "resource": "state",
+    "operation": "delete",
+    "stability": "stable",
+    "preferredForAgents": true,
+    "safety": "destructive",
+    "inputMode": "id",
+    "outputShape": "object",
+    "supportedOutputModes": [
+      "human",
+      "json",
+      "json-envelope"
+    ]
+  },
+  {
+    "commandPath": "linearctl project-status list",
+    "layer": "curated",
+    "resource": "project-status",
+    "operation": "list",
+    "stability": "stable",
+    "preferredForAgents": true,
+    "safety": "safe",
+    "inputMode": "flags",
+    "outputShape": "array",
+    "supportedOutputModes": [
+      "human",
+      "json",
+      "json-envelope"
+    ]
+  },
+  {
+    "commandPath": "linearctl project-status get",
+    "layer": "curated",
+    "resource": "project-status",
+    "operation": "get",
+    "stability": "stable",
+    "preferredForAgents": true,
+    "safety": "safe",
+    "inputMode": "id",
+    "outputShape": "object",
+    "supportedOutputModes": [
+      "human",
+      "json",
+      "json-envelope"
+    ]
+  },
+  {
+    "commandPath": "linearctl project-status create",
+    "layer": "curated",
+    "resource": "project-status",
+    "operation": "create",
+    "stability": "stable",
+    "preferredForAgents": true,
+    "safety": "safe",
+    "inputMode": "flags",
+    "outputShape": "object",
+    "supportedOutputModes": [
+      "human",
+      "json",
+      "json-envelope"
+    ]
+  },
+  {
+    "commandPath": "linearctl project-status delete",
+    "layer": "curated",
+    "resource": "project-status",
+    "operation": "delete",
+    "stability": "stable",
+    "preferredForAgents": true,
+    "safety": "destructive",
+    "inputMode": "id",
+    "outputShape": "object",
+    "supportedOutputModes": [
+      "human",
+      "json",
+      "json-envelope"
+    ]
   },
   {
     "commandPath": "linearctl comment list",
@@ -373,7 +781,11 @@
     "safety": "safe",
     "inputMode": "flags",
     "outputShape": "array",
-    "supportedOutputModes": ["human", "json", "json-envelope"]
+    "supportedOutputModes": [
+      "human",
+      "json",
+      "json-envelope"
+    ]
   },
   {
     "commandPath": "linearctl comment create",
@@ -385,7 +797,11 @@
     "safety": "safe",
     "inputMode": "flags",
     "outputShape": "object",
-    "supportedOutputModes": ["human", "json", "json-envelope"]
+    "supportedOutputModes": [
+      "human",
+      "json",
+      "json-envelope"
+    ]
   },
   {
     "commandPath": "linearctl comment update",
@@ -397,7 +813,11 @@
     "safety": "safe",
     "inputMode": "flags",
     "outputShape": "object",
-    "supportedOutputModes": ["human", "json", "json-envelope"]
+    "supportedOutputModes": [
+      "human",
+      "json",
+      "json-envelope"
+    ]
   },
   {
     "commandPath": "linearctl comment delete",
@@ -409,7 +829,11 @@
     "safety": "destructive",
     "inputMode": "id",
     "outputShape": "object",
-    "supportedOutputModes": ["human", "json", "json-envelope"]
+    "supportedOutputModes": [
+      "human",
+      "json",
+      "json-envelope"
+    ]
   },
   {
     "commandPath": "linearctl attachment list",
@@ -421,7 +845,11 @@
     "safety": "safe",
     "inputMode": "flags",
     "outputShape": "array",
-    "supportedOutputModes": ["human", "json", "json-envelope"]
+    "supportedOutputModes": [
+      "human",
+      "json",
+      "json-envelope"
+    ]
   },
   {
     "commandPath": "linearctl attachment create",
@@ -433,7 +861,11 @@
     "safety": "safe",
     "inputMode": "flags",
     "outputShape": "object",
-    "supportedOutputModes": ["human", "json", "json-envelope"]
+    "supportedOutputModes": [
+      "human",
+      "json",
+      "json-envelope"
+    ]
   },
   {
     "commandPath": "linearctl attachment delete",
@@ -445,7 +877,11 @@
     "safety": "destructive",
     "inputMode": "id",
     "outputShape": "object",
-    "supportedOutputModes": ["human", "json", "json-envelope"]
+    "supportedOutputModes": [
+      "human",
+      "json",
+      "json-envelope"
+    ]
   },
   {
     "commandPath": "linearctl file upload",
@@ -457,7 +893,27 @@
     "safety": "safe",
     "inputMode": "flags",
     "outputShape": "object",
-    "supportedOutputModes": ["human", "json", "json-envelope"]
+    "supportedOutputModes": [
+      "human",
+      "json",
+      "json-envelope"
+    ]
+  },
+  {
+    "commandPath": "linearctl file url",
+    "layer": "curated",
+    "resource": "file",
+    "operation": "url",
+    "stability": "stable",
+    "preferredForAgents": true,
+    "safety": "safe",
+    "inputMode": "flags",
+    "outputShape": "object",
+    "supportedOutputModes": [
+      "human",
+      "json",
+      "json-envelope"
+    ]
   },
   {
     "commandPath": "linearctl file download",
@@ -469,31 +925,91 @@
     "safety": "safe",
     "inputMode": "flags",
     "outputShape": "object",
-    "supportedOutputModes": ["human", "json", "json-envelope"]
+    "supportedOutputModes": [
+      "human",
+      "json",
+      "json-envelope"
+    ]
   },
   {
-    "commandPath": "linearctl file url",
+    "commandPath": "linearctl auth login",
     "layer": "curated",
-    "resource": "file",
-    "operation": "url",
+    "resource": "auth",
+    "operation": "login",
     "stability": "stable",
     "preferredForAgents": true,
     "safety": "safe",
-    "inputMode": "id",
+    "inputMode": "flags",
     "outputShape": "object",
-    "supportedOutputModes": ["human", "json", "json-envelope"]
+    "supportedOutputModes": [
+      "human",
+      "json",
+      "json-envelope"
+    ]
   },
   {
-    "commandPath": "linearctl schema pull",
+    "commandPath": "linearctl auth logout",
     "layer": "curated",
-    "resource": "schema",
-    "operation": "pull",
+    "resource": "auth",
+    "operation": "logout",
+    "stability": "stable",
+    "preferredForAgents": true,
+    "safety": "destructive",
+    "inputMode": "flags",
+    "outputShape": "object",
+    "supportedOutputModes": [
+      "human",
+      "json",
+      "json-envelope"
+    ]
+  },
+  {
+    "commandPath": "linearctl auth status",
+    "layer": "curated",
+    "resource": "auth",
+    "operation": "status",
     "stability": "stable",
     "preferredForAgents": true,
     "safety": "safe",
     "inputMode": "none",
     "outputShape": "object",
-    "supportedOutputModes": ["human", "json", "json-envelope"]
+    "supportedOutputModes": [
+      "human",
+      "json",
+      "json-envelope"
+    ]
+  },
+  {
+    "commandPath": "linearctl auth switch",
+    "layer": "curated",
+    "resource": "auth",
+    "operation": "switch",
+    "stability": "stable",
+    "preferredForAgents": true,
+    "safety": "safe",
+    "inputMode": "flags",
+    "outputShape": "object",
+    "supportedOutputModes": [
+      "human",
+      "json",
+      "json-envelope"
+    ]
+  },
+  {
+    "commandPath": "linearctl auth whoami",
+    "layer": "curated",
+    "resource": "auth",
+    "operation": "whoami",
+    "stability": "stable",
+    "preferredForAgents": true,
+    "safety": "safe",
+    "inputMode": "flags",
+    "outputShape": "object",
+    "supportedOutputModes": [
+      "human",
+      "json",
+      "json-envelope"
+    ]
   },
   {
     "commandPath": "linearctl schema version",
@@ -505,7 +1021,27 @@
     "safety": "safe",
     "inputMode": "none",
     "outputShape": "object",
-    "supportedOutputModes": ["human", "json", "json-envelope"]
+    "supportedOutputModes": [
+      "human",
+      "json",
+      "json-envelope"
+    ]
+  },
+  {
+    "commandPath": "linearctl schema pull",
+    "layer": "curated",
+    "resource": "schema",
+    "operation": "pull",
+    "stability": "stable",
+    "preferredForAgents": true,
+    "safety": "safe",
+    "inputMode": "flags",
+    "outputShape": "object",
+    "supportedOutputModes": [
+      "human",
+      "json",
+      "json-envelope"
+    ]
   },
   {
     "commandPath": "linearctl schema check",
@@ -515,8 +1051,60 @@
     "stability": "stable",
     "preferredForAgents": true,
     "safety": "safe",
-    "inputMode": "none",
+    "inputMode": "flags",
     "outputShape": "object",
-    "supportedOutputModes": ["human", "json", "json-envelope"]
+    "supportedOutputModes": [
+      "human",
+      "json",
+      "json-envelope"
+    ]
+  },
+  {
+    "commandPath": "linearctl workspace list",
+    "layer": "curated",
+    "resource": "workspace",
+    "operation": "list",
+    "stability": "stable",
+    "preferredForAgents": true,
+    "safety": "safe",
+    "inputMode": "none",
+    "outputShape": "array",
+    "supportedOutputModes": [
+      "human",
+      "json",
+      "json-envelope"
+    ]
+  },
+  {
+    "commandPath": "linearctl skills install",
+    "layer": "curated",
+    "resource": "skills",
+    "operation": "install",
+    "stability": "stable",
+    "preferredForAgents": true,
+    "safety": "safe",
+    "inputMode": "flags",
+    "outputShape": "object",
+    "supportedOutputModes": [
+      "human",
+      "json",
+      "json-envelope"
+    ]
+  },
+  {
+    "commandPath": "linearctl skills list",
+    "layer": "curated",
+    "resource": "skills",
+    "operation": "list",
+    "stability": "stable",
+    "preferredForAgents": true,
+    "safety": "safe",
+    "inputMode": "none",
+    "outputShape": "array",
+    "supportedOutputModes": [
+      "human",
+      "json",
+      "json-envelope"
+    ]
   }
 ]

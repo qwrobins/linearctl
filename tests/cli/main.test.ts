@@ -96,6 +96,13 @@ describe("CLI scaffold", () => {
     expect(output).toContain("linearctl project update <id>");
   });
 
+  it("shows the real default schema pull output directory in help", async () => {
+    const { stdout: output } = await runCli(["schema", "--help"]);
+
+    expect(output).toContain("linearctl schema pull");
+    expect(output).toContain("<config-dir>/schema");
+  });
+
   it("keeps generated API help routed through the api command", async () => {
     const { stdout: output } = await runCli(["api", "--help"]);
 
@@ -180,6 +187,19 @@ describe("CLI scaffold", () => {
     const metadata = JSON.parse(output) as Array<{ commandPath: string }>;
 
     expect(metadata.some((command) => command.commandPath === "linearctl issue get")).toBe(true);
+  });
+
+  it("honors leading --metadata curated --json before positional command tokens", async () => {
+    const { stdout: output } = await runCli(["--metadata", "curated", "--json", "issue", "list"]);
+    const metadata = JSON.parse(output) as Array<{ commandPath: string }>;
+
+    expect(metadata.some((command) => command.commandPath === "linearctl issue list")).toBe(true);
+  });
+
+  it("honors leading --version before positional command tokens", async () => {
+    const { stdout: output } = await runCli(["--version", "issue", "list"]);
+
+    expect(output.trim()).toMatch(/^linearctl \d+\.\d+\.\d+/);
   });
 
   it("accepts metadata flags in alternate valid forms", async () => {

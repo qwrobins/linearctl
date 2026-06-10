@@ -7,6 +7,7 @@ import type { PaginationOptions } from "../core/pagination/pagination.js";
 import { streamPaginateGraphQL } from "../core/pagination/streaming.js";
 import { emitDryRunResult } from "../core/output/dry-run.js";
 import { resolveTeamId, resolveStateId, looksLikeId } from "../core/resolution/resolve.js";
+import { normalizeRetryOptions } from "../core/transport/retry.js";
 import { CommandContext } from "../core/runtime/command-context.js";
 
 const VALID_STATE_TYPES = ["backlog", "unstarted", "started", "completed", "canceled"] as const;
@@ -256,6 +257,7 @@ async function handleStateList(options: StateCommandOptions): Promise<number> {
       credentials: profile.credentials,
       ...(apiUrl === undefined ? {} : { apiUrl }),
       ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl }),
+      retry: normalizeRetryOptions(options),
       extractConnection: (data: unknown) => {
         const d = data as { workflowStates: { nodes: RawWorkflowState[]; pageInfo: PageInfo } };
         return d.workflowStates;

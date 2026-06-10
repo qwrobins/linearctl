@@ -99,6 +99,45 @@ describe("--dry-run", () => {
         output.restore();
       }
     });
+
+    it("resolves friendly names before emitting dry-run input", async () => {
+      const dir = await mkdtemp(join(tmpdir(), "dry-run-"));
+      const paths = await writeProfileFiles(dir);
+      const fetchImpl = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+        const body = JSON.parse(String(init?.body ?? "{}")) as { query: string };
+        if (body.query.includes("ResolveTeam")) {
+          return new Response(JSON.stringify({
+            data: { teams: { nodes: [{ id: "team-ops", key: "OPS", name: "Ops" }] } }
+          }), { status: 200 });
+        }
+        if (body.query.includes("ResolveLabel")) {
+          return new Response(JSON.stringify({
+            data: { issueLabels: { nodes: [{ id: "label-bug", name: "bug", team: { id: "team-ops", name: "Ops" } }] } }
+          }), { status: 200 });
+        }
+        throw new Error("unexpected GraphQL operation");
+      }) as unknown as FetchLike;
+      const output = captureOutput();
+
+      try {
+        const exitCode = await handleIssueCommand(["create"], {
+          ...baseOptions(paths),
+          dryRun: true,
+          title: "Test issue",
+          team: "Ops",
+          label: "bug",
+          fetchImpl
+        });
+
+        expect(exitCode).toBe(ExitCode.Success);
+        const parsed = JSON.parse(output.stdout.join(""));
+        expect(parsed.input.teamId).toBe("team-ops");
+        expect(parsed.input.labelIds).toEqual(["label-bug"]);
+        expect(fetchImpl).toHaveBeenCalledTimes(2);
+      } finally {
+        output.restore();
+      }
+    });
   });
 
   describe("issue close --dry-run", () => {

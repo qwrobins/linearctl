@@ -75,6 +75,20 @@ interface TeamNode {
   name: string;
 }
 
+function caseSensitiveExact<T>(nodes: T[], value: string, selectors: Array<(node: T) => string | null | undefined>): T[] {
+  return nodes.filter((node) => selectors.some((selector) => selector(node) === value));
+}
+
+function choosePreferred<T>(nodes: T[], preferences: Array<(items: T[]) => T[]>): T[] {
+  for (const preference of preferences) {
+    const preferred = preference(nodes);
+    if (preferred.length > 0) {
+      return preferred;
+    }
+  }
+  return nodes;
+}
+
 export async function resolveTeamId(
   nameOrKey: string,
   options: ResolverOptions
@@ -87,11 +101,15 @@ export async function resolveTeamId(
 
   const nodes = data.teams.nodes;
 
-  if (nodes.length === 1) {
-    return nodes[0]!.id;
+  const matches = choosePreferred(nodes, [
+    (items) => caseSensitiveExact(items, nameOrKey, [(team) => team.name, (team) => team.key])
+  ]);
+
+  if (matches.length === 1) {
+    return matches[0]!.id;
   }
 
-  if (nodes.length === 0) {
+  if (matches.length === 0) {
     throw new ResolutionError(
       `No team found matching "${nameOrKey}". Use a direct team ID instead.`,
       "not-found"
@@ -99,9 +117,9 @@ export async function resolveTeamId(
   }
 
   throw new ResolutionError(
-    `Ambiguous team "${nameOrKey}" — matches: ${nodes.map((t) => `${t.name} (${t.key}, ${t.id})`).join(", ")}. Use a direct team ID instead.`,
+    `Ambiguous team "${nameOrKey}" — matches: ${matches.map((t) => `${t.name} (${t.key}, ${t.id})`).join(", ")}. Use a direct team ID instead.`,
     "ambiguous",
-    nodes.map((t) => ({ id: t.id, display: `${t.name} (${t.key})` }))
+    matches.map((t) => ({ id: t.id, display: `${t.name} (${t.key})` }))
   );
 }
 
@@ -142,11 +160,16 @@ export async function resolveUserId(
 
   const nodes = data.users.nodes;
 
-  if (nodes.length === 1) {
-    return nodes[0]!.id;
+  const matches = choosePreferred(nodes, [
+    (items) => caseSensitiveExact(items, nameOrEmail, [(user) => user.email]),
+    (items) => caseSensitiveExact(items, nameOrEmail, [(user) => user.name, (user) => user.displayName])
+  ]);
+
+  if (matches.length === 1) {
+    return matches[0]!.id;
   }
 
-  if (nodes.length === 0) {
+  if (matches.length === 0) {
     throw new ResolutionError(
       `No user found matching "${nameOrEmail}". Use a direct user ID instead.`,
       "not-found"
@@ -154,9 +177,9 @@ export async function resolveUserId(
   }
 
   throw new ResolutionError(
-    `Ambiguous user "${nameOrEmail}" — matches: ${nodes.map((u) => `${u.name} (${u.displayName}, ${u.email}, ${u.id})`).join(", ")}. Use a direct user ID instead.`,
+    `Ambiguous user "${nameOrEmail}" — matches: ${matches.map((u) => `${u.name} (${u.displayName}, ${u.email}, ${u.id})`).join(", ")}. Use a direct user ID instead.`,
     "ambiguous",
-    nodes.map((u) => ({ id: u.id, display: `${u.name} (${u.displayName}, ${u.email})` }))
+    matches.map((u) => ({ id: u.id, display: `${u.name} (${u.displayName}, ${u.email})` }))
   );
 }
 
@@ -196,11 +219,17 @@ export async function resolveLabelId(
 
   const nodes = data.issueLabels.nodes;
 
-  if (nodes.length === 1) {
-    return nodes[0]!.id;
+  const teamScoped = teamId === undefined ? [] : nodes.filter((label) => label.team?.id === teamId);
+  const scopedNodes = teamScoped.length > 0 ? teamScoped : nodes;
+  const matches = choosePreferred(scopedNodes, [
+    (items) => caseSensitiveExact(items, name, [(label) => label.name])
+  ]);
+
+  if (matches.length === 1) {
+    return matches[0]!.id;
   }
 
-  if (nodes.length === 0) {
+  if (matches.length === 0) {
     throw new ResolutionError(
       `No label found matching "${name}"${teamId !== undefined ? ` in team ${teamId}` : ""}. Use a direct label ID instead.`,
       "not-found"
@@ -208,9 +237,9 @@ export async function resolveLabelId(
   }
 
   throw new ResolutionError(
-    `Ambiguous label "${name}" — matches: ${nodes.map((l) => `${l.name}${l.team !== null ? ` (team: ${l.team.name})` : ""} (${l.id})`).join(", ")}. Use a direct label ID instead.`,
+    `Ambiguous label "${name}" — matches: ${matches.map((l) => `${l.name}${l.team !== null ? ` (team: ${l.team.name})` : ""} (${l.id})`).join(", ")}. Use a direct label ID instead.`,
     "ambiguous",
-    nodes.map((l) => ({
+    matches.map((l) => ({
       id: l.id,
       display: `${l.name}${l.team !== null ? ` (team: ${l.team.name})` : ""}`
     }))

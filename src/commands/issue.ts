@@ -1,7 +1,8 @@
 import { emitValidationError } from "../core/output/validation-error.js";
 import { failureEnvelope, successEnvelope } from "../core/output/envelope.js";
-import type { PageInfo } from "../core/output/envelope.js";
+import type { CommandError, PageInfo } from "../core/output/envelope.js";
 import { ExitCode } from "../core/errors/exit-codes.js";
+import { mapCommandFailure } from "../core/errors/command-failure.js";
 import type { FetchLike } from "../core/transport/graphql.js";
 import { paginateGraphQL, validatePaginationOptions } from "../core/pagination/pagination.js";
 import type { PaginationOptions } from "../core/pagination/pagination.js";
@@ -349,7 +350,8 @@ function shouldResolveProjectIdentifier(value: string): boolean {
 async function buildIssueFilter(
   options: IssueCommandOptions,
   defaultTeam: string | undefined,
-  resolverOpts: ResolverOptions
+  resolverOpts: ResolverOptions,
+  applyDefaultTeam = true
 ): Promise<{ filter?: Record<string, unknown>; validationError?: string }> {
   if (options.filterJson !== undefined) {
     try {
@@ -365,7 +367,7 @@ async function buildIssueFilter(
 
   const filter: Record<string, unknown> = {};
   let resolvedTeamId: string | undefined;
-  const effectiveTeam = options.allTeams ? undefined : (options.team ?? defaultTeam);
+  const effectiveTeam = options.allTeams ? undefined : (options.team ?? (applyDefaultTeam ? defaultTeam : undefined));
   if (effectiveTeam !== undefined) {
     resolvedTeamId = looksLikeId(effectiveTeam) ? effectiveTeam : await resolveTeamId(effectiveTeam, resolverOpts);
     filter.team = { id: { eq: resolvedTeamId } };
@@ -572,10 +574,6 @@ async function handleIssueCreate(options: IssueCommandOptions): Promise<number> 
   }
   input.teamId = teamId;
 
-  if (options.dryRun === true) {
-    return emitDryRunResult("create", "issue", input, options);
-  }
-
   const ctx = buildContext(options);
 
   try {
@@ -613,6 +611,10 @@ async function handleIssueCreate(options: IssueCommandOptions): Promise<number> 
         }
         input.parentId = parentData.body.data.issue.id;
       }
+    }
+
+    if (options.dryRun === true) {
+      return emitDryRunResult("create", "issue", input, options);
     }
 
     const response = await ctx.graphql<{
@@ -759,12 +761,16 @@ async function handleIssueSearch(options: IssueCommandOptions): Promise<number> 
     return emitValidationError(validationError, options);
   }
 
+  if (options.orderBy !== undefined || options.orderDir !== undefined) {
+    return emitValidationError("issue search does not support --order-by or --order-dir.", options);
+  }
+
   const ctx = buildContext(options);
 
   try {
     const profile = await ctx.resolveProfile();
     const resolverOpts = await ctx.resolverOptions();
-    const filterResult = await buildIssueFilter(options, profile.metadata.defaultTeam, resolverOpts);
+    const filterResult = await buildIssueFilter(options, profile.metadata.defaultTeam, resolverOpts, false);
     if (filterResult.validationError !== undefined) {
       return emitValidationError(filterResult.validationError, options);
     }
@@ -1308,7 +1314,14 @@ async function handleIssueComment(
 
 interface BulkResult {
   succeeded: Array<{ identifier: string; [key: string]: unknown }>;
-  failed: Array<{ identifier: string; error: string }>;
+  failed: Array<{ identifier: string; error: string; category?: CommandError["category"] }>;
+}
+
+function bulkExitCode(errors: CommandError[]): number {
+  if (errors.some((error) => error.category === "authentication")) return ExitCode.AuthenticationError;
+  if (errors.some((error) => error.category === "rate-limit")) return ExitCode.RateLimitExhausted;
+  if (errors.some((error) => error.category === "not-found")) return ExitCode.NotFound;
+  return errors.length > 0 ? ExitCode.GeneralError : ExitCode.Success;
 }
 
 async function resolveIssueForDelete(
@@ -1350,22 +1363,22 @@ async function executeBulk(
       const item = await operation(id);
       result.succeeded.push(item);
     } catch (error) {
-      const message = error instanceof Error ? error.message : "operation failed";
-      result.failed.push({ identifier: id, error: message });
+      const failure = mapCommandFailure(error);
+      result.failed.push({ identifier: id, error: failure.error.message, category: failure.error.category });
     }
   }
 
-  const exitCode = result.failed.length === 0 ? ExitCode.Success : ExitCode.GeneralError;
+  const errors = result.failed.map((failure) => ({
+    category: failure.category ?? "general",
+    message: `Bulk operation failed for ${failure.identifier}: ${failure.error}`
+  })) satisfies CommandError[];
+  const exitCode = bulkExitCode(errors);
 
   if (options.jsonEnvelope) {
     if (exitCode === ExitCode.Success) {
       const envelope = successEnvelope(result, { sourceLayer: "curated" });
       process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
     } else {
-      const errors = result.failed.map((failure) => ({
-        category: "general" as const,
-        message: `Bulk operation failed for ${failure.identifier}: ${failure.error}`
-      }));
       const envelope = failureEnvelope(
         errors.length > 0 ? errors : [{ category: "general", message: "Bulk operation failed" }],
         { sourceLayer: "curated", partial: result.succeeded.length > 0 }

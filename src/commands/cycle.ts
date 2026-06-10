@@ -6,6 +6,7 @@ import { paginateGraphQL, validatePaginationOptions, type PaginationOptions } fr
 import { streamPaginateGraphQL } from "../core/pagination/streaming.js";
 import { emitDryRunResult } from "../core/output/dry-run.js";
 import { resolveTeamId, looksLikeId } from "../core/resolution/resolve.js";
+import { normalizeRetryOptions } from "../core/transport/retry.js";
 import { CommandContext } from "../core/runtime/command-context.js";
 
 export interface CycleCommandOptions {
@@ -394,6 +395,7 @@ async function handleCycleList(options: CycleCommandOptions): Promise<number> {
           : { apiUrl: profile.metadata.baseUrl }
         : { apiUrl: options.apiUrl }),
       ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl }),
+      retry: normalizeRetryOptions(options),
       extractConnection: (data: unknown) => {
         const d = data as { cycles: { nodes: RawCycle[]; pageInfo: PageInfo } };
         return d.cycles;

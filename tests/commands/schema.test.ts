@@ -611,4 +611,24 @@ describe("handleSchemaCommand", () => {
       output.restore();
     }
   });
+
+  it("emits validation envelopes for schema usage errors", async () => {
+    const output = captureOutput();
+
+    try {
+      await expect(
+        handleSchemaCommand(["version", "extra"], baseSchemaOptions("/tmp", { json: false, jsonEnvelope: true }))
+      ).resolves.toBe(5);
+
+      const parsed = JSON.parse(output.stdout.join(""));
+      expect(parsed.ok).toBe(false);
+      expect(parsed.errors[0]).toEqual({
+        category: "validation",
+        message: "schema version does not accept positional arguments."
+      });
+      expect(parsed.meta.sourceLayer).toBe("curated");
+    } finally {
+      output.restore();
+    }
+  });
 });

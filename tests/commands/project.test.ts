@@ -990,6 +990,28 @@ describe("handleProjectCommand — project list", () => {
     }
   });
 
+  it("passes --no-retry through the pagination path", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-project-"));
+    const paths = await writeProfileFiles(directory);
+    const fetchImpl = vi.fn(async () =>
+      new Response(JSON.stringify({ errors: [{ message: "Rate limited" }] }), { status: 429 })
+    ) as unknown as FetchLike;
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleProjectCommand(["list"], {
+        ...baseOptions(paths),
+        noRetry: true,
+        fetchImpl
+      });
+
+      expect(exitCode).toBe(3);
+      expect(fetchImpl).toHaveBeenCalledTimes(1);
+    } finally {
+      output.restore();
+    }
+  });
+
   it("sends project status type filter when --state is provided", async () => {
     const directory = await mkdtemp(join(tmpdir(), "linear-cli-project-"));
     const paths = await writeProfileFiles(directory);

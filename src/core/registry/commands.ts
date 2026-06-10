@@ -51,7 +51,7 @@ export const COMMAND_REGISTRY: readonly CommandRegistration[] = [
       view:           { usage: "linearctl issue view <identifier> [--json] (alias: get)" },
       create:         { usage: "linearctl issue create --title <title> --team <id> [--description <text>|--description-file <path|->] [--priority <0-4>] [--estimate <n>] [--assignee <id>] [--label <id>] [--state <id>] [--cycle <id>] [--project <id|name>] [--project-milestone <id>|--milestone <id>] [--parent <identifier>] [--json]" },
       list:           { usage: "linearctl issue list [--search <text>|--query <text>] [--state <name> ...] [--status <name>] [--assignee <id>] [--team <id>] [--label <name|id>] [--priority <0-4>] [--cycle <id>] [--project <id|name>] [--created-after <date>] [--updated-after <date>] [--completed-after <date>] [--order-by <field>] [--all-teams] [--all] [--json]" },
-      search:         { usage: "linearctl issue search [<text>|--query <text>|--search <text>] [--all] [--json]" },
+      search:         { usage: "linearctl issue search [<text>|--query <text>|--search <text>] [--team <id>] [--all] [--json]" },
       update:         { usage: "linearctl issue update <identifier> [--title <text>] [--description <text>|--description-file <path|->] [--priority <0-4>] [--estimate <n>] [--assignee <id>] [--label <name|id>] [--state <name|id>] [--cycle <id>] [--project <name|id>] [--project-milestone <id>|--milestone <id>] [--parent <identifier>] [--json]" },
       close:          { usage: "linearctl issue close <identifier> [--state <name>] [--json]" },
       delete:         { usage: "linearctl issue delete <identifier> [--json]" },
@@ -417,7 +417,7 @@ export const COMMAND_REGISTRY: readonly CommandRegistration[] = [
     ],
     subcommands: {
       version: { usage: "linearctl schema version [--json]" },
-      pull:    { usage: "linearctl schema pull [--json] [--output-dir <path>]  (default: project src/generated/manifest)" },
+      pull:    { usage: "linearctl schema pull [--json] [--output-dir <path>]  (default: <config-dir>/schema)" },
       check:   { usage: "linearctl schema check [--json]" },
     },
     handler: handleSchemaCommand,

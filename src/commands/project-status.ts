@@ -6,6 +6,7 @@ import { paginateGraphQL, validatePaginationOptions } from "../core/pagination/p
 import type { PaginationOptions } from "../core/pagination/pagination.js";
 import { streamPaginateGraphQL } from "../core/pagination/streaming.js";
 import { emitDryRunResult } from "../core/output/dry-run.js";
+import { normalizeRetryOptions } from "../core/transport/retry.js";
 import { CommandContext } from "../core/runtime/command-context.js";
 
 const VALID_STATUS_TYPES = ["backlog", "planned", "started", "paused", "completed", "canceled"] as const;
@@ -214,6 +215,7 @@ async function handleProjectStatusList(options: ProjectStatusCommandOptions): Pr
       credentials: profile.credentials,
       ...(apiUrl === undefined ? {} : { apiUrl }),
       ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl }),
+      retry: normalizeRetryOptions(options),
       extractConnection: (data: unknown) => {
         const d = data as { projectStatuses: { nodes: RawProjectStatus[]; pageInfo: PageInfo } };
         return d.projectStatuses;

@@ -1,7 +1,9 @@
 import { readFile } from "node:fs/promises";
 import { failureEnvelope, successEnvelope, formatCommandErrorHuman } from "../core/output/envelope.js";
 import type { JsonEnvelope, CommandError } from "../core/output/envelope.js";
+import { emitValidationError } from "../core/output/validation-error.js";
 import { mapCommandFailure } from "../core/errors/command-failure.js";
+import { ExitCode } from "../core/errors/exit-codes.js";
 import { executeGraphQL } from "../core/transport/graphql.js";
 import type { FetchLike, GraphQLErrorPayload } from "../core/transport/graphql.js";
 import { executeGraphQLWithRetry, normalizeRetryOptions } from "../core/transport/retry.js";
@@ -36,7 +38,7 @@ export async function handleGqlCommand(
   const [subcommand, ...rest] = positionals;
 
   if (subcommand === undefined) {
-    process.stderr.write(
+    return emitValidationError(
       "Usage: linearctl gql <subcommand> [query] (--json | --json-envelope | --raw)\n\n" +
       "Subcommands:\n" +
       "  query        Execute a GraphQL query\n" +
@@ -51,33 +53,30 @@ export async function handleGqlCommand(
       "  linearctl gql query '{ viewer { id name } }' --json\n" +
       "  linearctl gql query --file my-query.graphql --var teamId=abc123 --json\n" +
       "  linearctl gql mutation 'mutation($input: IssueUpdateInput!) { issueUpdate(id: \"xxx\", input: $input) { success } }' --var 'input={\"estimate\":2}' --json\n" +
-      "  linearctl gql introspect --json\n"
+      "  linearctl gql introspect --json",
+      { ...options, sourceLayer: "raw-graphql" }
     );
-    return 5;
   }
 
   if (subcommand !== "query" && subcommand !== "mutation" && subcommand !== "introspect") {
-    process.stderr.write(`Error: unknown gql subcommand '${subcommand}'. Expected: query, mutation, or introspect.\n`);
-    return 5;
+    return emitValidationError(`unknown gql subcommand '${subcommand}'. Expected: query, mutation, or introspect.`, { ...options, sourceLayer: "raw-graphql" });
   }
 
   const outputValidationError = validateOutputMode(options);
   if (outputValidationError !== undefined) {
-    process.stderr.write(`Error: ${outputValidationError}\n`);
-    return 5;
+    return emitValidationError(outputValidationError, { ...options, sourceLayer: "raw-graphql" });
   }
 
   try {
     const resolvedDocument = await resolveGraphQLDocument(subcommand, rest, options);
     if (resolvedDocument === undefined) {
-      return 5;
+      return ExitCode.ValidationError;
     }
     const document = normalizeGraphQLDocument(subcommand, resolvedDocument);
 
     const variables = await resolveVariables(options);
     if (subcommand === "introspect" && (Object.keys(variables).length > 0 || options.varsFile !== undefined)) {
-      process.stderr.write("Error: gql introspect does not accept --var or --vars-file input.\n");
-      return 5;
+      return emitValidationError("gql introspect does not accept --var or --vars-file input.", { ...options, sourceLayer: "raw-graphql" });
     }
 
     const profile = await resolveStoredProfile({
@@ -133,8 +132,7 @@ export async function handleGqlCommand(
       return 0;
     }
 
-    process.stderr.write("Error: one of --json, --json-envelope, or --raw is required.\n");
-    return 5;
+    return emitValidationError("one of --json, --json-envelope, or --raw is required", { ...options, sourceLayer: "raw-graphql" });
   } catch (error) {
     const failure = mapCommandFailure(error);
 
@@ -189,11 +187,11 @@ function findGraphQLOperationStart(document: string): number {
 async function resolveGraphQLDocument(
   subcommand: string,
   positionals: string[],
-  options: Pick<GqlCommandOptions, "stdin" | "file" | "stdinStream">
+  options: Pick<GqlCommandOptions, "stdin" | "file" | "stdinStream" | "jsonEnvelope">
 ): Promise<string | undefined> {
   if (subcommand === "introspect") {
     if (positionals.length > 0 || options.stdin || options.file !== undefined) {
-      process.stderr.write("Error: gql introspect does not accept inline documents, --file, or --stdin.\n");
+      emitValidationError("gql introspect does not accept inline documents, --file, or --stdin.", { ...options, sourceLayer: "raw-graphql" });
       return undefined;
     }
 
@@ -204,7 +202,7 @@ async function resolveGraphQLDocument(
   const sourceCount = [inlineQuery !== "", options.stdin, options.file !== undefined].filter(Boolean).length;
 
   if (sourceCount !== 1) {
-    process.stderr.write("Error: provide exactly one of inline query text, --file, or --stdin.\n");
+    emitValidationError("provide exactly one of inline query text, --file, or --stdin.", { ...options, sourceLayer: "raw-graphql" });
     return undefined;
   }
 
@@ -217,7 +215,7 @@ async function resolveGraphQLDocument(
   }
 
   if (isTtyInput(options.stdinStream)) {
-    process.stderr.write("Error: --stdin requires piped input.\n");
+    emitValidationError("--stdin requires piped input.", { ...options, sourceLayer: "raw-graphql" });
     return undefined;
   }
 
