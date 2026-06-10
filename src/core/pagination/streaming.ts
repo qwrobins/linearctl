@@ -1,7 +1,7 @@
 import type { PageInfo } from "../output/envelope.js";
 import type { ProfileCredentials } from "../auth/credentials.js";
 import type { FetchLike } from "../transport/graphql.js";
-import { executeGraphQL } from "../transport/graphql.js";
+import { executeGraphQL, GraphQLTransportError } from "../transport/graphql.js";
 import { buildPaginationVariables } from "./pagination.js";
 import type { PaginationOptions } from "./pagination.js";
 
@@ -53,7 +53,17 @@ export async function streamPaginateGraphQL<TNode>(
     });
 
     if (Array.isArray(response.body.errors) && response.body.errors.length > 0) {
-      throw new Error(response.body.errors[0]?.message ?? "Linear GraphQL request failed");
+      throw new GraphQLTransportError(
+        response.body.errors[0]?.message ?? "Linear GraphQL request failed",
+        "graphql",
+        undefined,
+        response.body.errors,
+        {
+          totalItems,
+          endCursor: lastPageInfo.endCursor ?? null,
+          pageInfo: lastPageInfo
+        }
+      );
     }
 
     if (response.body.data === undefined) {

@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.14] - 2026-06-09
+
+### Added
+
+- `project create` and `project create-with-issues` now apply `--start-date`, `--target-date`, `--status`/`--state`, `--lead`, and long-form `--content` fields to `ProjectCreateInput`.
+- Curated command metadata is now derived from the command registry so agent discovery covers every curated subcommand, including destructive safety annotations.
+
+### Fixed
+
+- Parse-level validation failures now emit failure envelopes when `--json-envelope` is requested.
+- Options placed before a command are validated against that command's option set instead of the global catalog.
+- Pagination helpers preserve GraphQL transport error typing so list/streaming failures map to the documented error contract.
+- Generated `api` commands use the shared command error mapper, including Linear `userPresentableMessage` details.
+- Schema freshness checks run after command completion with a timeout, skip help and dry-run paths, and compare against pulled schema metadata when present.
+- Schema fingerprints now include type signatures, not just type and field names.
+
 ## [0.6.13] - 2026-06-09
 
 ### Fixed

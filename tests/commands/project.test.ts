@@ -499,6 +499,45 @@ describe("handleProjectCommand — project create", () => {
     }
   });
 
+  it("passes dates and status through when creating a project", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-project-"));
+    const paths = await writeProfileFiles(directory);
+    const createdProject = makeRawProject({ name: "New project" });
+    const statusId = "10000000-0000-0000-0000-000000000001";
+    const calls: Array<{ query: string; variables?: Record<string, unknown> }> = [];
+    const fetchImpl = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body ?? "{}")) as { query: string; variables?: Record<string, unknown> };
+      calls.push(body);
+
+      return new Response(JSON.stringify({
+        data: { projectCreate: { success: true, project: createdProject } }
+      }), { status: 200 });
+    }) as FetchLike;
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleProjectCommand(["create"], {
+        ...baseOptions(paths),
+        name: "New project",
+        startDate: "2026-07-01",
+        targetDate: "2026-09-30",
+        status: statusId,
+        fetchImpl
+      });
+
+      expect(exitCode).toBe(0);
+      const createCall = calls.find((call) => call.query.includes("ProjectCreate"));
+      expect(createCall?.variables?.input).toEqual({
+        name: "New project",
+        startDate: "2026-07-01",
+        targetDate: "2026-09-30",
+        statusId
+      });
+    } finally {
+      output.restore();
+    }
+  });
+
   it("returns exit code 5 when --name is missing", async () => {
     const directory = await mkdtemp(join(tmpdir(), "linear-cli-project-"));
     const paths = await writeProfileFiles(directory);
@@ -814,6 +853,44 @@ describe("handleProjectCommand — project create-with-issues", () => {
       expect(parsed.resource).toBe("project");
       expect(parsed.input.project.name).toBe("Dry Run Project");
       expect(parsed.input.issues).toHaveLength(1);
+    } finally {
+      output.restore();
+    }
+  });
+
+  it("includes full project fields in create-with-issues dry-run input", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-project-"));
+    const paths = await writeProfileFiles(directory);
+    const output = captureOutput();
+    const statusId = "10000000-0000-0000-0000-000000000001";
+    const leadId = "20000000-0000-0000-0000-000000000001";
+
+    try {
+      const exitCode = await handleProjectCommand(["create-with-issues"], {
+        ...baseOptions(paths),
+        name: "Dry Run Project",
+        team: TEAM_UUID,
+        content: "Project plan",
+        lead: leadId,
+        startDate: "2026-07-01",
+        targetDate: "2026-09-30",
+        status: statusId,
+        dryRun: true,
+        issuesJson: '[{"title":"T1"}]'
+      });
+
+      expect(exitCode).toBe(0);
+      const parsed = JSON.parse(output.stdout.join(""));
+      expect(parsed.input.project).toMatchObject({
+        name: "Dry Run Project",
+        teamIds: [TEAM_UUID],
+        content: "Project plan",
+        leadId,
+        startDate: "2026-07-01",
+        targetDate: "2026-09-30",
+        statusId
+      });
+      expect(parsed.input.issues[0].teamId).toBe(TEAM_UUID);
     } finally {
       output.restore();
     }

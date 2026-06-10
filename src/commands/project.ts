@@ -683,6 +683,20 @@ async function handleProjectCreate(options: ProjectCommandOptions): Promise<numb
   if (content !== undefined) {
     input.content = content;
   }
+  if (options.startDate !== undefined) {
+    const validation = validateIsoDate(options.startDate, "start-date", options);
+    if (validation !== undefined) {
+      return validation;
+    }
+    input.startDate = options.startDate;
+  }
+  if (options.targetDate !== undefined) {
+    const validation = validateIsoDate(options.targetDate, "target-date", options);
+    if (validation !== undefined) {
+      return validation;
+    }
+    input.targetDate = options.targetDate;
+  }
 
   const ctx = buildContext(options);
 
@@ -697,6 +711,19 @@ async function handleProjectCreate(options: ProjectCommandOptions): Promise<numb
     if (options.lead !== undefined) {
       const resolverOpts = await ctx.resolverOptions();
       input.leadId = looksLikeId(options.lead) ? options.lead : await resolveUserId(options.lead, resolverOpts);
+    }
+
+    const statusValue = options.status ?? options.state;
+    if (statusValue !== undefined) {
+      if (looksLikeId(statusValue)) {
+        input.statusId = statusValue;
+      } else {
+        const result = await resolveStatusId(statusValue, ctx);
+        if ("error" in result) {
+          return ctx.emitFailure([{ category: "general", message: result.error }]);
+        }
+        input.statusId = result.statusId;
+      }
     }
 
     if (options.dryRun === true) {
@@ -885,8 +912,37 @@ async function handleProjectCreateWithIssues(options: ProjectCommandOptions): Pr
     name: options.name
   };
 
-  if (options.description !== undefined) {
-    projectInput.description = options.description;
+  let description: string | undefined;
+  try {
+    description = await resolveDescriptionInput(options);
+  } catch (error) {
+    return emitValidationError(error instanceof Error ? error.message : String(error), options);
+  }
+  if (description !== undefined) {
+    projectInput.description = description;
+  }
+  let content: string | undefined;
+  try {
+    content = await resolveContentInput(options);
+  } catch (error) {
+    return emitValidationError(error instanceof Error ? error.message : String(error), options);
+  }
+  if (content !== undefined) {
+    projectInput.content = content;
+  }
+  if (options.startDate !== undefined) {
+    const validation = validateIsoDate(options.startDate, "start-date", options);
+    if (validation !== undefined) {
+      return validation;
+    }
+    projectInput.startDate = options.startDate;
+  }
+  if (options.targetDate !== undefined) {
+    const validation = validateIsoDate(options.targetDate, "target-date", options);
+    if (validation !== undefined) {
+      return validation;
+    }
+    projectInput.targetDate = options.targetDate;
   }
 
   const ctx = buildContext(options);
@@ -895,6 +951,23 @@ async function handleProjectCreateWithIssues(options: ProjectCommandOptions): Pr
     const resolverOpts = await ctx.resolverOptions();
     const teamId = looksLikeId(options.team) ? options.team : await resolveTeamId(options.team, resolverOpts);
     projectInput.teamIds = [teamId];
+
+    if (options.lead !== undefined) {
+      projectInput.leadId = looksLikeId(options.lead) ? options.lead : await resolveUserId(options.lead, resolverOpts);
+    }
+
+    const statusValue = options.status ?? options.state;
+    if (statusValue !== undefined) {
+      if (looksLikeId(statusValue)) {
+        projectInput.statusId = statusValue;
+      } else {
+        const result = await resolveStatusId(statusValue, ctx);
+        if ("error" in result) {
+          return ctx.emitFailure([{ category: "general", message: result.error }]);
+        }
+        projectInput.statusId = result.statusId;
+      }
+    }
 
     if (options.dryRun === true) {
       return emitDryRunResult("create-with-issues", "project", {

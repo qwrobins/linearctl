@@ -579,6 +579,34 @@ describe("handleApiCommand", () => {
       expect(parsed.data.id).toBe("issue-1");
       expect(parsed.meta.sourceLayer).toBe("generated");
     });
+
+    it("uses shared GraphQL error mapping for generated failures", async () => {
+      const manifestPath = await writeManifest(tmpDir);
+      const paths = await writeProfileFiles(tmpDir);
+      const fetchImpl = makeFetch({
+        errors: [
+          {
+            message: "Argument Validation Error",
+            extensions: {
+              userPresentableMessage: "title must be shorter than or equal to 255 characters"
+            }
+          }
+        ]
+      });
+
+      const result = await handleApiCommand(["issue", "create"], {
+        ...baseOptions(paths, manifestPath),
+        jsonEnvelope: true,
+        inputJson: '{"title":"too long"}',
+        fetchImpl
+      });
+
+      expect(result).toBe(1);
+      const parsed = JSON.parse(output.stdout.join(""));
+      expect(parsed.ok).toBe(false);
+      expect(parsed.errors[0].message).toBe("title must be shorter than or equal to 255 characters");
+      expect(parsed.meta.sourceLayer).toBe("generated");
+    });
   });
 
   describe("input validation", () => {

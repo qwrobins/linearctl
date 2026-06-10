@@ -1,5 +1,4 @@
 import { join, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
 import { mapCommandFailure } from "../core/errors/command-failure.js";
 import { ExitCode } from "../core/errors/exit-codes.js";
 import { failureEnvelope, successEnvelope } from "../core/output/envelope.js";
@@ -11,7 +10,7 @@ import { executeGraphQLWithRetry, normalizeRetryOptions, type RetryOptions } fro
 import { INTROSPECTION_QUERY } from "../core/schema/introspection-query.js";
 import {
   computeSchemaFingerprint,
-  loadBundledSchemaMetadata,
+  loadPreferredSchemaMetadata,
   loadSchemaFile,
   schemaVersionOutput,
   writeSchemaMetadata,
@@ -58,13 +57,13 @@ export async function handleSchemaCommand(
   return ExitCode.ValidationError;
 }
 
-function handleSchemaVersion(positionals: string[], options: SchemaCommandOptions): number {
+async function handleSchemaVersion(positionals: string[], options: SchemaCommandOptions): Promise<number> {
   if (positionals.length > 0) {
     process.stderr.write("Error: schema version does not accept positional arguments.\n");
     return ExitCode.ValidationError;
   }
 
-  const meta = loadBundledSchemaMetadata();
+  const meta = await loadPreferredSchemaMetadata(options.configFile);
   const output = schemaVersionOutput(meta);
 
   if (options.jsonEnvelope) {
@@ -125,7 +124,7 @@ async function handleSchemaPull(positionals: string[], options: SchemaCommandOpt
     const schemaVersion = extractSchemaVersion(schema);
     const pulledAt = new Date().toISOString();
 
-    const outputDir = options.outputDir ?? defaultSchemaOutputDir();
+    const outputDir = options.outputDir ?? defaultSchemaOutputDir(options.configFile);
 
     const meta: SchemaMetadata = {
       schemaVersion,
@@ -190,7 +189,7 @@ async function handleSchemaCheck(positionals: string[], options: SchemaCommandOp
   }
 
   try {
-    const bundledMeta = loadBundledSchemaMetadata();
+    const bundledMeta = await loadPreferredSchemaMetadata(options.configFile);
     const bundledVersion = bundledMeta.schemaVersion;
 
     const profile = await resolveStoredProfile({
@@ -225,7 +224,7 @@ async function handleSchemaCheck(positionals: string[], options: SchemaCommandOp
     // Compute structural diff when drift is detected
     let diff: SchemaDiff | null = null;
     if (drifted) {
-      const bundledSchemaPath = join(defaultSchemaOutputDir(), "schema.json");
+      const bundledSchemaPath = join(defaultSchemaOutputDir(options.configFile), "schema.json");
       try {
         const bundledSchema = await loadSchemaFile(bundledSchemaPath);
         diff = diffSchemas(bundledSchema, response.body.data);
@@ -280,16 +279,8 @@ async function handleSchemaCheck(positionals: string[], options: SchemaCommandOp
   }
 }
 
-function defaultSchemaOutputDir(): string {
-  // In compiled binaries, import.meta.url resolves to a virtual path.
-  // Fall back to ~/.config/linear/schema/ for end users.
-  const thisDir = dirname(fileURLToPath(import.meta.url));
-  if (thisDir.startsWith("/$bunfs") || thisDir.startsWith("/$")) {
-    const home = process.env.HOME ?? process.env.USERPROFILE ?? ".";
-    return join(home, ".config", "linear", "schema");
-  }
-  // Development: write to src/generated/manifest/ regardless of CWD.
-  return join(thisDir, "..", "generated", "manifest");
+function defaultSchemaOutputDir(configFile: string): string {
+  return join(dirname(configFile), "schema");
 }
 
 function executeSchemaGraphQL<TData>(

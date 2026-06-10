@@ -1,6 +1,11 @@
+import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+  computeSchemaFingerprint,
   loadBundledSchemaMetadata,
+  loadPreferredSchemaMetadata,
   parseSchemaMetadata,
   schemaVersionOutput
 } from "../../../src/core/schema/schema-meta.js";
@@ -71,5 +76,58 @@ describe("loadBundledSchemaMetadata", () => {
     expect(meta).toHaveProperty("schemaVersion");
     expect(meta).toHaveProperty("bundledAt");
     expect(meta).toHaveProperty("source");
+  });
+});
+
+describe("loadPreferredSchemaMetadata", () => {
+  it("prefers pulled schema metadata next to the config file", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-schema-meta-"));
+    await writeFile(join(directory, "config"), "", "utf8");
+    await mkdir(join(directory, "schema"));
+    await writeFile(
+      join(directory, "schema", "schema-meta.json"),
+      JSON.stringify({
+        schemaVersion: "introspect-local",
+        bundledAt: "2099-01-01T00:00:00Z",
+        source: "introspection"
+      }),
+      "utf8"
+    );
+
+    const meta = await loadPreferredSchemaMetadata(join(directory, "config"));
+    expect(meta.schemaVersion).toBe("introspect-local");
+  });
+});
+
+describe("computeSchemaFingerprint", () => {
+  it("changes when field type signatures change", () => {
+    const nullable = {
+      types: [
+        {
+          name: "Query",
+          fields: [
+            { name: "viewer", type: { kind: "SCALAR", name: "String" } }
+          ]
+        }
+      ]
+    };
+    const nonNull = {
+      types: [
+        {
+          name: "Query",
+          fields: [
+            {
+              name: "viewer",
+              type: {
+                kind: "NON_NULL",
+                ofType: { kind: "SCALAR", name: "String" }
+              }
+            }
+          ]
+        }
+      ]
+    };
+
+    expect(computeSchemaFingerprint(nullable)).not.toBe(computeSchemaFingerprint(nonNull));
   });
 });

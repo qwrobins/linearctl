@@ -76,9 +76,12 @@ Bulk operations report partial success. Check the response for per-item results.
 linearctl project get <name|id> --json             # supports exact, unique prefix, or unique substring names
 linearctl project list [--query <text>|--search <text>|--name <text>] [--team <name|key|id>] [--state <status-type> ...] [--all-teams] --json
 linearctl project create --name <name> [--description <text>|--description-file <path|->] \
-  [--content <text>|--content-file <path|->] [--team <name|key|id>] [--lead <user-id|email|"me">] --json
+  [--content <text>|--content-file <path|->] [--team <name|key|id>] [--lead <user-id|email|"me">] \
+  [--status <id|name|type>|--state <name|type>] [--start-date <YYYY-MM-DD>] [--target-date <YYYY-MM-DD>] --json
 linearctl project create-with-issues --name <name> --team <name|key|id> \
-  --issues-json '[{"title":"...","teamId":"..."}]' [--description <text>] --json
+  --issues-json '[{"title":"...","teamId":"..."}]' [--description <text>|--description-file <path|->] \
+  [--content <text>|--content-file <path|->] [--lead <user-id|email|"me">] \
+  [--status <id|name|type>|--state <name|type>] [--start-date <YYYY-MM-DD>] [--target-date <YYYY-MM-DD>] --json
 linearctl project update <id> [--name <text>] [--description <text>|--description-file <path|->] \
   [--content <text>|--content-file <path|->] \
   [--status <id|name|type>|--state <name|type>] [--lead <user-id|email|"me">] \
@@ -88,7 +91,7 @@ linearctl project delete <id> --json              # [destructive]
 
 `project list --json` includes portfolio fields such as `progress`, `health`, `description`, `updatedAt`, `currentProgress`, a normalized `milestones` array with `name`, `targetDate`, `progress`, and `status`, and milestone pagination metadata (`milestonesPageInfo`, `milestonesTruncated`) so clients can detect truncation. Human output also shows progress, health, description, updated time, and milestone summaries.
 
-For `project update`, `--status` accepts a status name, status type, or status ID. `--state` remains supported as an alias for compatibility.
+For `project create`, `project create-with-issues`, and `project update`, `--status` accepts a status name, status type, or status ID. `--state` remains supported as an alias for compatibility.
 
 For issue and project create/update descriptions, use `--description-file <path>` to read markdown from a file, or `--description-file -` to read from stdin explicitly. `--description` and `--description-file` are mutually exclusive. For long-form project bodies, use `--content` or `--content-file` the same way.
 
@@ -236,6 +239,8 @@ linearctl schema pull [--output-dir <path>] --json
 # Check for schema drift between bundled and live
 linearctl schema check --json
 ```
+
+`schema pull` writes `schema.json` and `schema-meta.json`; normal commands and `schema version` prefer metadata from pulled files in the profile config directory when present. Best-effort freshness checks run after command completion, skip help and dry-run paths, and time out quickly so they do not delay command output.
 
 See [schema-and-generated.md](schema-and-generated.md) for details.
 

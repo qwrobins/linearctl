@@ -6,6 +6,8 @@ import { generateCommandHelp, generateTopLevelHelp } from "../core/registry/help
 import type { CommandRegistration, ParsedCliArguments } from "../core/registry/types.js";
 import { curatedCommandMetadata, defaultLinearConfigPaths, ExitCode } from "../index.js";
 import { maybeWarnForStaleSchema } from "../core/schema/freshness.js";
+import { failureEnvelope } from "../core/output/envelope.js";
+import type { FetchLike } from "../core/transport/graphql.js";
 import packageJson from "../../package.json" with { type: "json" };
 
 interface MainRuntime {
@@ -13,7 +15,8 @@ interface MainRuntime {
   stdin: NodeJS.ReadableStream;
   stdout: NodeJS.WriteStream | Pick<NodeJS.WriteStream, "write">;
   stderr: NodeJS.WriteStream | Pick<NodeJS.WriteStream, "write">;
-  fetchImpl?: typeof fetch;
+  fetchImpl?: FetchLike;
+  schemaFreshnessTimeoutMs?: number;
 }
 
 function defaultRuntime(): MainRuntime {
@@ -42,9 +45,9 @@ function printCuratedMetadata(stdout: MainRuntime["stdout"]): void {
  */
 function parseCliArguments(argv: string[]): ParsedCliArguments {
   const [leadingOptionArgs, commandAndArgs] = splitArgvAtFirstPositional(argv);
-  const topLevel = parseCliOptionSet(leadingOptionArgs, OPTION_CATALOG);
 
   if (commandAndArgs.length === 0) {
+    const topLevel = parseCliOptionSet(leadingOptionArgs, OPTION_CATALOG);
     return toParsedCliArguments(topLevel.values, topLevel.positionals);
   }
 
@@ -55,11 +58,13 @@ function parseCliArguments(argv: string[]): ParsedCliArguments {
   const registration = findCommand(command);
   if (registration !== undefined) {
     const commandOptions = buildOptionDefinitions(registration.optionKeys);
+    const topLevel = parseCliOptionSet(leadingOptionArgs, commandOptions);
     const commandParse = parseCliOptionSet(subcommandArgv, commandOptions);
     return mergeParsedCliArguments(topLevel.values, commandParse.values, [command, ...commandParse.positionals]);
   }
 
   // Unknown command — return with positionals for the error path
+  const topLevel = parseCliOptionSet(leadingOptionArgs, OPTION_CATALOG);
   return toParsedCliArguments(topLevel.values, commandAndArgs);
 }
 
@@ -135,7 +140,8 @@ function mergeParsedCliArguments(
     {
       ...topLevelValues,
       ...commandValues,
-      var: mergeStringArrays(topLevelValues.var, commandValues.var)
+      var: mergeStringArrays(topLevelValues.var, commandValues.var),
+      state: mergeStringArrays(topLevelValues.state, commandValues.state)
     },
     positionals
   );
@@ -299,6 +305,14 @@ export async function main(argv: string[], runtime: MainRuntime = defaultRuntime
     args = parseCliArguments(argv);
   } catch (error) {
     const message = error instanceof Error ? error.message : "invalid arguments";
+    if (hasRawFlag(argv, "json-envelope")) {
+      const envelope = failureEnvelope(
+        [{ category: "validation", message }],
+        { sourceLayer: sourceLayerFromArgv(argv) }
+      );
+      runtime.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
+      return ExitCode.ValidationError;
+    }
     runtime.stderr.write(`Error: ${message}\n`);
     return ExitCode.ValidationError;
   }
@@ -348,19 +362,11 @@ export async function main(argv: string[], runtime: MainRuntime = defaultRuntime
         if (runtime.fetchImpl !== undefined && options !== null && typeof options === "object") {
           (options as Record<string, unknown>).fetchImpl = runtime.fetchImpl;
         }
-        void maybeWarnForStaleSchema({
-          commandName,
-          ...(args.profile === undefined ? {} : { profile: args.profile }),
-          configFile: args.configFile,
-          credentialsFile: args.credentialsFile,
-          ...(args.apiUrl === undefined ? {} : { apiUrl: args.apiUrl }),
-          env: runtime.env,
-          ...(runtime.fetchImpl === undefined ? {} : { fetchImpl: runtime.fetchImpl })
-        }).catch((error) => {
-          const message = error instanceof Error ? error.message : "schema freshness check failed";
-          runtime.stderr.write(`Warning: ${message}\n`);
-        });
-        return await registration.handler(args.positionals.slice(1), options);
+        const exitCode = await registration.handler(args.positionals.slice(1), options);
+        if (!args.help && !args.dryRun) {
+          await runSchemaFreshnessCheck(commandName, args, runtime);
+        }
+        return exitCode;
       } catch (error) {
         const message = error instanceof Error ? error.message : "command failed";
         runtime.stderr.write(`Error: ${message}\n`);
@@ -377,6 +383,74 @@ export async function main(argv: string[], runtime: MainRuntime = defaultRuntime
   const unknown = commandName ?? args.positionals.join(" ");
   runtime.stderr.write(`Error: unknown command '${unknown}'. Run 'linearctl --help' for available commands.\n`);
   return ExitCode.ValidationError;
+}
+
+function hasRawFlag(argv: string[], flagName: string): boolean {
+  return argv.some((arg) => arg === `--${flagName}` || arg.startsWith(`--${flagName}=`));
+}
+
+function sourceLayerFromArgv(argv: string[]): "curated" | "generated" | "raw-graphql" {
+  const [, positionals] = splitArgvAtFirstPositional(argv);
+  const commandName = positionals[0];
+  if (commandName === "api") {
+    return "generated";
+  }
+  if (commandName === "gql") {
+    return "raw-graphql";
+  }
+  return "curated";
+}
+
+async function runSchemaFreshnessCheck(
+  commandName: string,
+  args: ParsedCliArguments,
+  runtime: MainRuntime
+): Promise<void> {
+  const timeoutMs = runtime.schemaFreshnessTimeoutMs ?? 500;
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+
+  try {
+    const fetchImpl = withTimeout(runtime.fetchImpl ?? fetch, timeoutMs);
+    await Promise.race([
+      maybeWarnForStaleSchema({
+        commandName,
+        ...(args.profile === undefined ? {} : { profile: args.profile }),
+        configFile: args.configFile,
+        credentialsFile: args.credentialsFile,
+        ...(args.apiUrl === undefined ? {} : { apiUrl: args.apiUrl }),
+        env: runtime.env,
+        fetchImpl
+      }),
+      new Promise<void>((resolve) => {
+        timeout = setTimeout(resolve, timeoutMs);
+      })
+    ]);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "schema freshness check failed";
+    runtime.stderr.write(`Warning: ${message}\n`);
+  } finally {
+    if (timeout !== undefined) {
+      clearTimeout(timeout);
+    }
+  }
+}
+
+function withTimeout(fetchImpl: FetchLike, timeoutMs: number): FetchLike {
+  return async (input: string | URL | Request, init?: RequestInit) => {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => {
+      controller.abort();
+    }, timeoutMs);
+
+    try {
+      return await fetchImpl(input, {
+        ...init,
+        signal: init?.signal ?? controller.signal
+      });
+    } finally {
+      clearTimeout(timeout);
+    }
+  };
 }
 
 if (import.meta.main) {
