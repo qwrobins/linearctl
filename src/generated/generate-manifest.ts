@@ -428,4 +428,6 @@ async function main(): Promise<void> {
   process.stdout.write(`Generated ${manifest.length} API command entries → ${outputPath}\n`);
 }
 
-main();
+if (import.meta.main === true) {
+  await main();
+}
