@@ -189,6 +189,28 @@ describe("CLI scaffold", () => {
     expect(metadata.some((command) => command.commandPath === "linearctl issue get")).toBe(true);
   });
 
+  it("rejects curated metadata without JSON output", async () => {
+    await expect(runCli(["--metadata", "curated"])).rejects.toMatchObject({
+      code: 5,
+      stderr: expect.stringContaining("--metadata curated requires --json")
+    });
+  });
+
+  it("rejects mutually exclusive JSON and JSONL output modes", async () => {
+    await expect(runCli(["issue", "list", "--json", "--jsonl"])).rejects.toMatchObject({
+      code: 5,
+      stderr: expect.stringContaining("--json and --jsonl are mutually exclusive")
+    });
+  });
+
+  it("requires an explicit pagination bound for JSONL output", async () => {
+    const result = await runMainWithThrowingFetch(["issue", "list", "--jsonl"]);
+
+    expect(result.code).toBe(5);
+    expect(result.stderr).toContain("--jsonl requires --all or --max");
+    expect(result.fetchImpl).not.toHaveBeenCalled();
+  });
+
   it("returns validation errors for malformed arguments", async () => {
     await expect(runCli(["--metadata"])).rejects.toMatchObject({
       code: 5,

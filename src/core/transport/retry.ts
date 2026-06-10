@@ -53,21 +53,18 @@ export async function executeGraphQLWithRetry<TData>(
   throw new Error("retry loop exhausted unexpectedly");
 }
 
-export function normalizeRetryOptions(input: RetryOptionInput): RetryOptions | undefined {
-  if (input.noRetry === true || input.maxRetries !== undefined) {
-    if (
-      input.maxRetries !== undefined &&
-      (!Number.isFinite(input.maxRetries) || !Number.isInteger(input.maxRetries) || input.maxRetries < 0)
-    ) {
-      throw new RangeError("maxRetries must be a finite integer greater than or equal to 0");
-    }
-
-    return {
-      ...(input.noRetry === true ? { noRetry: true } : {}),
-      ...(input.maxRetries !== undefined ? { maxRetries: input.maxRetries } : {}),
-    };
+export function normalizeRetryOptions(input: RetryOptionInput): RetryOptions {
+  if (
+    input.maxRetries !== undefined &&
+    (!Number.isFinite(input.maxRetries) || !Number.isInteger(input.maxRetries) || input.maxRetries < 0)
+  ) {
+    throw new RangeError("maxRetries must be a finite integer greater than or equal to 0");
   }
-  return undefined;
+
+  return {
+    ...(input.noRetry === true ? { noRetry: true } : {}),
+    ...(input.maxRetries !== undefined ? { maxRetries: input.maxRetries } : {}),
+  };
 }
 
 function isRetryableError(error: unknown): boolean {
@@ -80,6 +77,20 @@ function isRetryableError(error: unknown): boolean {
 }
 
 function extractRetryAfterMs(error: unknown): number | undefined {
+  if (error instanceof GraphQLTransportError) {
+    const headerValue = error.headers?.get("retry-after");
+    if (headerValue !== undefined && headerValue !== null) {
+      const parsed = Number(headerValue);
+      if (Number.isFinite(parsed) && parsed >= 0) {
+        return parsed * 1000;
+      }
+      const dateMs = Date.parse(headerValue);
+      if (Number.isFinite(dateMs)) {
+        return Math.max(0, dateMs - Date.now());
+      }
+    }
+  }
+
   // If the error includes a Retry-After hint from extensions, use it.
   if (error instanceof GraphQLTransportError && Array.isArray(error.errors)) {
     for (const graphqlError of error.errors) {

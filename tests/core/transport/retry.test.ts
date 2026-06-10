@@ -13,10 +13,10 @@ function successResponse(data: unknown) {
   return new Response(JSON.stringify({ data }), { status: 200 });
 }
 
-function rateLimitResponse() {
+function rateLimitResponse(headers?: HeadersInit) {
   return new Response(
     JSON.stringify({ errors: [{ message: "Rate limited" }] }),
-    { status: 429 }
+    { status: 429, ...(headers === undefined ? {} : { headers }) }
   );
 }
 
@@ -131,11 +131,68 @@ describe("executeGraphQLWithRetry", () => {
 
     expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
+
+  it("honors HTTP Retry-After headers", async () => {
+    const stderrSpy = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    const sleeps: number[] = [];
+    try {
+      let callCount = 0;
+      const fetchImpl = vi.fn(async () => {
+        callCount++;
+        if (callCount === 1) {
+          return rateLimitResponse({ "Retry-After": "2" });
+        }
+        return successResponse({ viewer: { id: "1" } });
+      }) as FetchLike;
+
+      await executeGraphQLWithRetry({
+        query: "query { viewer { id } }",
+        credentials: mockCredentials(),
+        fetchImpl,
+        retry: { maxRetries: 1 },
+        sleepImpl: async (ms) => { sleeps.push(ms); }
+      });
+
+      expect(sleeps).toEqual([2000]);
+    } finally {
+      stderrSpy.mockRestore();
+    }
+  });
+
+  it("honors HTTP-date Retry-After headers", async () => {
+    const stderrSpy = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    const sleeps: number[] = [];
+    const retryAt = new Date(Date.now() + 10_000);
+    try {
+      let callCount = 0;
+      const fetchImpl = vi.fn(async () => {
+        callCount++;
+        if (callCount === 1) {
+          return rateLimitResponse({ "Retry-After": retryAt.toUTCString() });
+        }
+        return successResponse({ viewer: { id: "1" } });
+      }) as FetchLike;
+
+      await executeGraphQLWithRetry({
+        query: "query { viewer { id } }",
+        credentials: mockCredentials(),
+        fetchImpl,
+        retry: { maxRetries: 1 },
+        sleepImpl: async (ms) => { sleeps.push(ms); }
+      });
+
+      expect(sleeps).toHaveLength(1);
+      expect(sleeps[0]).toBeGreaterThanOrEqual(9000);
+      expect(sleeps[0]).toBeLessThanOrEqual(10_000);
+    } finally {
+      stderrSpy.mockRestore();
+    }
+  });
 });
 
 describe("normalizeRetryOptions", () => {
-  it("returns undefined when no retry options are set", () => {
-    expect(normalizeRetryOptions({})).toBeUndefined();
+  it("returns default-on retry options when no retry flags are set", () => {
+    expect(normalizeRetryOptions({})).toEqual({});
   });
 
   it("preserves noRetry and valid maxRetries values", () => {

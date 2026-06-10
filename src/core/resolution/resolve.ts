@@ -1,11 +1,12 @@
-import { requestGraphQL } from "../transport/graphql.js";
+import { executeGraphQLWithRetry, type RetryOptions } from "../transport/retry.js";
 import type { ProfileCredentials } from "../auth/credentials.js";
-import type { FetchLike } from "../transport/graphql.js";
+import { GraphQLTransportError, type FetchLike, type GraphQLResponse } from "../transport/graphql.js";
 
 export interface ResolverOptions {
   credentials: ProfileCredentials;
   apiUrl?: string;
   fetchImpl?: FetchLike;
+  retry?: RetryOptions;
 }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -24,6 +25,37 @@ export class ResolutionError extends Error {
     super(message);
     this.name = "ResolutionError";
   }
+}
+
+async function requestResolverGraphQL<TData>(
+  options: ResolverOptions,
+  query: string,
+  variables?: Record<string, unknown>
+): Promise<TData> {
+  const response = await executeGraphQLWithRetry<TData>({
+    query,
+    ...(variables === undefined ? {} : { variables }),
+    credentials: options.credentials,
+    ...(options.apiUrl === undefined ? {} : { apiUrl: options.apiUrl }),
+    ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl }),
+    ...(options.retry === undefined ? {} : { retry: options.retry })
+  });
+
+  const body = response.body as GraphQLResponse<TData>;
+  if (Array.isArray(body.errors) && body.errors.length > 0) {
+    throw new GraphQLTransportError(
+      body.errors[0]?.message ?? "Linear GraphQL request returned errors",
+      "graphql",
+      undefined,
+      body.errors
+    );
+  }
+
+  if (body.data === undefined) {
+    throw new GraphQLTransportError("Linear GraphQL response was missing data", "invalid-response", response.status);
+  }
+
+  return body.data;
 }
 
 // ---------------------------------------------------------------------------
@@ -47,13 +79,11 @@ export async function resolveTeamId(
   nameOrKey: string,
   options: ResolverOptions
 ): Promise<string> {
-  const data = await requestGraphQL<{ teams: { nodes: TeamNode[] } }>({
-    query: TEAM_RESOLVE_QUERY,
-    variables: { name: nameOrKey },
-    credentials: options.credentials,
-    ...(options.apiUrl === undefined ? {} : { apiUrl: options.apiUrl }),
-    ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl })
-  });
+  const data = await requestResolverGraphQL<{ teams: { nodes: TeamNode[] } }>(
+    options,
+    TEAM_RESOLVE_QUERY,
+    { name: nameOrKey }
+  );
 
   const nodes = data.teams.nodes;
 
@@ -100,22 +130,15 @@ export async function resolveUserId(
   options: ResolverOptions
 ): Promise<string> {
   if (nameOrEmail.toLowerCase() === "me") {
-    const data = await requestGraphQL<{ viewer: { id: string } }>({
-      query: VIEWER_QUERY,
-      credentials: options.credentials,
-      ...(options.apiUrl === undefined ? {} : { apiUrl: options.apiUrl }),
-      ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl })
-    });
+    const data = await requestResolverGraphQL<{ viewer: { id: string } }>(options, VIEWER_QUERY);
     return data.viewer.id;
   }
 
-  const data = await requestGraphQL<{ users: { nodes: UserNode[] } }>({
-    query: USER_RESOLVE_QUERY,
-    variables: { value: nameOrEmail },
-    credentials: options.credentials,
-    ...(options.apiUrl === undefined ? {} : { apiUrl: options.apiUrl }),
-    ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl })
-  });
+  const data = await requestResolverGraphQL<{ users: { nodes: UserNode[] } }>(
+    options,
+    USER_RESOLVE_QUERY,
+    { value: nameOrEmail }
+  );
 
   const nodes = data.users.nodes;
 
@@ -165,13 +188,11 @@ export async function resolveLabelId(
       ? { and: [nameFilter, { team: { id: { eq: teamId } } }] }
       : nameFilter;
 
-  const data = await requestGraphQL<{ issueLabels: { nodes: LabelNode[] } }>({
-    query: LABEL_RESOLVE_QUERY,
-    variables: { filter },
-    credentials: options.credentials,
-    ...(options.apiUrl === undefined ? {} : { apiUrl: options.apiUrl }),
-    ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl })
-  });
+  const data = await requestResolverGraphQL<{ issueLabels: { nodes: LabelNode[] } }>(
+    options,
+    LABEL_RESOLVE_QUERY,
+    { filter }
+  );
 
   const nodes = data.issueLabels.nodes;
 
@@ -218,15 +239,9 @@ export async function resolveStateId(
   teamId: string,
   options: ResolverOptions
 ): Promise<string> {
-  const data = await requestGraphQL<{
+  const data = await requestResolverGraphQL<{
     team: { states: { nodes: StateNode[] } } | null;
-  }>({
-    query: STATE_RESOLVE_QUERY,
-    variables: { teamId },
-    credentials: options.credentials,
-    ...(options.apiUrl === undefined ? {} : { apiUrl: options.apiUrl }),
-    ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl })
-  });
+  }>(options, STATE_RESOLVE_QUERY, { teamId });
 
   if (data.team === null) {
     throw new ResolutionError(
@@ -302,17 +317,15 @@ export async function resolveProjectId(
   let after: string | undefined;
 
   for (;;) {
-    const data = await requestGraphQL<{ projects: ProjectConnection }>({
-      query: PROJECT_RESOLVE_QUERY,
-      variables: {
+    const data = await requestResolverGraphQL<{ projects: ProjectConnection }>(
+      options,
+      PROJECT_RESOLVE_QUERY,
+      {
         ...(filter === undefined ? {} : { filter }),
         first: 100,
         ...(after === undefined ? {} : { after })
-      },
-      credentials: options.credentials,
-      ...(options.apiUrl === undefined ? {} : { apiUrl: options.apiUrl }),
-      ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl })
-    });
+      }
+    );
 
     nodes.push(...data.projects.nodes);
     if (!data.projects.pageInfo.hasNextPage || data.projects.pageInfo.endCursor === null) {

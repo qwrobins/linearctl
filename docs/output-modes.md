@@ -61,10 +61,10 @@ Use `--json-envelope` when you need:
 
 ## --jsonl
 
-Streaming output. One JSON object per line. Auto-paginates through all results.
+Streaming output. One JSON object per line. Requires an explicit pagination bound with `--all` or `--max <n>`.
 
 ```bash
-linearctl issue list --team INF --jsonl
+linearctl issue list --team INF --max 100 --jsonl
 ```
 
 ```json
@@ -72,7 +72,7 @@ linearctl issue list --team INF --jsonl
 {"id":"def","identifier":"INF-2","title":"Second issue",...}
 ```
 
-Use `--jsonl` for large result sets where you want to process items as they arrive. Combine with `--max` to cap results.
+Use `--jsonl --max <n>` for bounded streams, or `--jsonl --all` only when you intentionally want every result.
 
 ## --raw
 

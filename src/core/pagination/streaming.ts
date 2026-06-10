@@ -1,7 +1,8 @@
 import type { PageInfo } from "../output/envelope.js";
 import type { ProfileCredentials } from "../auth/credentials.js";
 import type { FetchLike } from "../transport/graphql.js";
-import { executeGraphQL, GraphQLTransportError } from "../transport/graphql.js";
+import { GraphQLTransportError } from "../transport/graphql.js";
+import { executeGraphQLWithRetry, type RetryOptions } from "../transport/retry.js";
 import { buildPaginationVariables } from "./pagination.js";
 import type { PaginationOptions } from "./pagination.js";
 
@@ -14,6 +15,8 @@ export interface StreamPaginateGraphQLInput<TNode> {
   credentials: Pick<ProfileCredentials, "type"> & Partial<ProfileCredentials>;
   apiUrl?: string;
   fetchImpl?: FetchLike;
+  retry?: RetryOptions;
+  sleepImpl?: (ms: number) => Promise<void>;
   extractConnection: (data: unknown) => { nodes: TNode[]; pageInfo: PageInfo };
   onItem: (item: TNode) => void;
 }
@@ -44,12 +47,14 @@ export async function streamPaginateGraphQL<TNode>(
       ...(cursor === undefined ? {} : { after: cursor })
     };
 
-    const response = await executeGraphQL<unknown>({
+    const response = await executeGraphQLWithRetry<unknown>({
       query,
       variables,
       credentials,
       ...(apiUrl === undefined ? {} : { apiUrl }),
-      ...(fetchImpl === undefined ? {} : { fetchImpl })
+      ...(fetchImpl === undefined ? {} : { fetchImpl }),
+      ...(input.retry === undefined ? {} : { retry: input.retry }),
+      ...(input.sleepImpl === undefined ? {} : { sleepImpl: input.sleepImpl })
     });
 
     if (Array.isArray(response.body.errors) && response.body.errors.length > 0) {

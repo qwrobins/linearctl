@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] - 2026-06-10
+
+### Added
+
+- Added `issue bulk-archive` for the previous bulk archiving behavior.
+- Retry is now default-on for GraphQL rate limits, honors HTTP `Retry-After`, and applies to command execution, pagination, and name resolution.
+
+### Changed
+
+- **Breaking:** `issue bulk-close` now transitions issues to a completed workflow state, matching `issue close`; use `issue bulk-archive` to archive issues.
+- **Breaking:** Bulk operations with any failed item now exit non-zero. `--json-envelope` responses use `ok: false`, populate `errors[]`, include per-item `data.succeeded`/`data.failed`, and set `meta.partial: true` when some items succeeded.
+- **Breaking:** `issue list --search` composes with the same filters as `issue list` instead of silently discarding filters.
+- **Breaking:** `--metadata curated` now requires `--json`, `--json --jsonl` is rejected, and `--jsonl` requires an explicit `--all` or `--max <n>` bound.
+
 ## [0.6.14] - 2026-06-09
 
 ### Added

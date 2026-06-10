@@ -42,7 +42,7 @@ Do not rely on the default profile in agent sessions. Do not guess profile names
 - Add filters before paginating. Fetching all issues in a workspace is expensive.
 - Use `--max` to cap results. Treat 200 as the soft cap for large enumerations.
 - Do not use `--all` without `--max` unless the user explicitly asked for everything.
-- Use `--jsonl` for streaming large result sets (auto-paginates, one object per line).
+- Use `--jsonl --max <n>` for bounded streaming results, or `--jsonl --all` only when you intentionally want every result.
 
 ```bash
 # Good: filtered and bounded

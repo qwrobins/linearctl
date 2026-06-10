@@ -178,6 +178,43 @@ describe("paginateGraphQL", () => {
     expect(fetchImpl).toHaveBeenCalledTimes(2);
   });
 
+  it("retries a 429 mid-sequence and preserves pagination progress", async () => {
+    const stderrSpy = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    const page1Nodes = [{ id: "1" }];
+    const page1Info: PageInfo = { hasNextPage: true, endCursor: "cursor1" };
+    const page2Nodes = [{ id: "2" }];
+    const page2Info: PageInfo = { hasNextPage: false, endCursor: "cursor2" };
+    let callCount = 0;
+    const fetchImpl = vi.fn(async () => {
+      callCount++;
+      if (callCount === 1) return makeGraphQLResponse(page1Nodes, page1Info);
+      if (callCount === 2) {
+        return new Response(JSON.stringify({ errors: [{ message: "Rate limited" }] }), {
+          status: 429,
+          headers: { "Retry-After": "0" }
+        });
+      }
+      return makeGraphQLResponse(page2Nodes, page2Info);
+    }) as FetchLike;
+
+    try {
+      const result = await paginateGraphQL({
+        query: "query ($first: Int, $after: String) { issues { nodes { id } pageInfo { hasNextPage endCursor } } }",
+        options: { all: true },
+        credentials,
+        fetchImpl,
+        retry: { maxRetries: 1 },
+        sleepImpl: async () => {},
+        extractConnection: extractIssuesConnection
+      });
+
+      expect(result.items).toEqual([{ id: "1" }, { id: "2" }]);
+      expect(fetchImpl).toHaveBeenCalledTimes(3);
+    } finally {
+      stderrSpy.mockRestore();
+    }
+  });
+
   it("stops at --max items", async () => {
     const page1Nodes = [{ id: "1" }, { id: "2" }, { id: "3" }];
     const page1Info: PageInfo = { hasNextPage: true, endCursor: "cursor3" };

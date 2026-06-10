@@ -205,6 +205,9 @@ function toParsedCliArguments(values: Record<string, unknown>, positionals: stri
   if (jsonl && jsonEnvelope) {
     throw new Error("--jsonl and --json-envelope are mutually exclusive");
   }
+  if (json && jsonl) {
+    throw new Error("--json and --jsonl are mutually exclusive");
+  }
 
   return {
     help,
@@ -347,9 +350,19 @@ export async function main(argv: string[], runtime: MainRuntime = defaultRuntime
     return ExitCode.ValidationError;
   }
 
+  if (args.metadata === "curated" && !args.json) {
+    runtime.stderr.write("Error: --metadata curated requires --json\n");
+    return ExitCode.ValidationError;
+  }
+
   if (args.metadata === "curated" && args.json) {
     printCuratedMetadata(runtime.stdout);
     return ExitCode.Success;
+  }
+
+  if (args.jsonl && args.all !== true && args.max === undefined) {
+    runtime.stderr.write("Error: --jsonl requires --all or --max <n>\n");
+    return ExitCode.ValidationError;
   }
 
   // Registry-driven dispatch
