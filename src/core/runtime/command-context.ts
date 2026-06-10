@@ -8,7 +8,7 @@
 
 import { resolveStoredProfile } from "../auth/runtime.js";
 import type { ResolvedProfile } from "../auth/profile-resolution.js";
-import { executeGraphQL, type ExecutedGraphQLResponse, type FetchLike, type GraphQLErrorPayload } from "../transport/graphql.js";
+import { type ExecutedGraphQLResponse, type FetchLike, type GraphQLErrorPayload } from "../transport/graphql.js";
 import { executeGraphQLWithRetry, type RetryOptions } from "../transport/retry.js";
 import { failureEnvelope, successEnvelope, formatCommandErrorHuman, type CommandSourceLayer, type PageInfo, type CommandError } from "../output/envelope.js";
 import { mapCommandFailure, type CommandFailure } from "../errors/command-failure.js";
@@ -73,6 +73,7 @@ export class CommandContext {
       credentials: profile.credentials,
       ...this.apiUrlOption(profile),
       ...(this.options.fetchImpl === undefined ? {} : { fetchImpl: this.options.fetchImpl }),
+      ...(this.options.retry === undefined ? {} : { retry: this.options.retry }),
     };
   }
 
@@ -93,14 +94,10 @@ export class CommandContext {
       ...(this.options.fetchImpl === undefined ? {} : { fetchImpl: this.options.fetchImpl }),
     };
 
-    if (this.options.retry !== undefined) {
-      return executeGraphQLWithRetry<TData>({
-        ...input,
-        retry: this.options.retry,
-      });
-    }
-
-    return executeGraphQL<TData>(input);
+    return executeGraphQLWithRetry<TData>({
+      ...input,
+      ...(this.options.retry === undefined ? {} : { retry: this.options.retry }),
+    });
   }
 
   /** Emit a success result in the appropriate output format. */

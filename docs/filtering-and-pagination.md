@@ -30,7 +30,7 @@ linearctl issue list --team INF --json
 linearctl issue list --team INF --all --max 50 --json
 
 # Stream all issues as JSONL
-linearctl issue list --team INF --jsonl
+linearctl issue list --team INF --all --jsonl
 
 # Resume from a cursor (from pageInfo in --json-envelope)
 linearctl issue list --team INF --after "abc123" --json
@@ -41,7 +41,7 @@ linearctl issue list --team INF --after "abc123" --json
 - Always add filters before broad pagination. Fetching all issues in a workspace without filters is expensive and slow.
 - Use `--max` to set an upper bound. The default soft cap is 200 for large enumerations.
 - Do not use `--all` without `--max` unless you explicitly need everything.
-- Prefer `--jsonl` for large result sets -- it streams results as they arrive.
+- Prefer `--jsonl --max <n>` for large bounded result sets, or `--jsonl --all` only when you intentionally want every result.
 
 ## Filtering
 

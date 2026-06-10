@@ -58,8 +58,11 @@ linearctl issue bulk-update --ids <id1,id2,...> [--state <id>] [--assignee <id>]
   [--priority <0-4>] [--estimate <n>] [--label <id>] [--cycle <id>] \
   [--project-milestone <id>|--milestone <id>] --json
 
-# Bulk close multiple issues
-linearctl issue bulk-close --ids <id1,id2,...> --json
+# Bulk close multiple issues by transitioning them to a completed workflow state
+linearctl issue bulk-close --ids <id1,id2,...> [--state <name|id>] --json
+
+# Bulk archive multiple issues
+linearctl issue bulk-archive --ids <id1,id2,...> --json
 
 # Bulk delete multiple issues
 linearctl issue bulk-delete --ids <id1,id2,...> --yes|--confirm --json
@@ -68,7 +71,7 @@ linearctl issue bulk-delete --ids <id1,id2,...> --yes|--confirm --json
 linearctl issue bulk-assign --ids <id1,id2,...> --assignee <id> --json
 ```
 
-Bulk operations report partial success. Check the response for per-item results.
+Bulk operations fail the command when any item fails. With `--json-envelope`, partial failures return `ok: false`, populate `errors[]`, include per-item `data.succeeded` and `data.failed`, and set `meta.partial: true` when at least one item succeeded.
 
 ## Project
 

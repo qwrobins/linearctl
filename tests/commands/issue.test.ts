@@ -955,6 +955,56 @@ describe("handleIssueCommand — issue search", () => {
     }
   });
 
+  it("composes issue list --search with other filters", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-issue-"));
+    const paths = await writeProfileFiles(directory);
+    const fetchSpy = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body ?? "{}")) as { query: string; variables?: Record<string, unknown> };
+
+      if (body.query.includes("ResolveTeam")) {
+        return new Response(JSON.stringify({
+          data: { teams: { nodes: [{ id: "team-1", key: "INF", name: "Infrastructure" }] } }
+        }), { status: 200 });
+      }
+
+      return new Response(JSON.stringify({
+        data: {
+          searchIssues: {
+            nodes: [makeRawIssue()],
+            pageInfo: { hasNextPage: false, endCursor: null }
+          }
+        }
+      }), { status: 200 });
+    });
+    const fetchImpl = fetchSpy as unknown as FetchLike;
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleIssueCommand(["list"], {
+        ...baseOptions(paths),
+        search: "db sidecar",
+        team: "INF",
+        state: "In Progress",
+        priority: "2",
+        fetchImpl
+      });
+
+      expect(exitCode).toBe(0);
+      const searchCall = (fetchSpy as ReturnType<typeof vi.fn>).mock.calls.find((call) =>
+        String(call[1]?.body).includes("searchIssues")
+      );
+      const callBody = JSON.parse(String(searchCall?.[1]?.body));
+      expect(callBody.variables.term).toBe("db sidecar");
+      expect(callBody.variables.filter).toMatchObject({
+        team: { id: { eq: "team-1" } },
+        state: { name: { eq: "In Progress" } },
+        priority: { eq: 2 }
+      });
+    } finally {
+      output.restore();
+    }
+  });
+
   it("rejects mixed positional and flag-based search terms", async () => {
     const directory = await mkdtemp(join(tmpdir(), "linear-cli-issue-"));
     const paths = await writeProfileFiles(directory);
@@ -1460,7 +1510,7 @@ describe("handleIssueCommand — issue bulk-update", () => {
     }
   });
 
-  it("reports partial success when some fail", async () => {
+  it("returns non-zero for partial success when some fail", async () => {
     const directory = await mkdtemp(join(tmpdir(), "linear-cli-issue-"));
     const paths = await writeProfileFiles(directory);
     let callCount = 0;
@@ -1487,12 +1537,57 @@ describe("handleIssueCommand — issue bulk-update", () => {
         fetchImpl
       });
 
-      expect(exitCode).toBe(0);
+      expect(exitCode).toBe(1);
       const parsed = JSON.parse(output.stdout.join(""));
       expect(parsed.succeeded).toHaveLength(1);
       expect(parsed.succeeded[0].identifier).toBe("INF-2975");
       expect(parsed.failed).toHaveLength(1);
       expect(parsed.failed[0].identifier).toBe("NONEXISTENT-1");
+    } finally {
+      output.restore();
+    }
+  });
+
+  it("emits failure envelopes for partial bulk failures", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-issue-"));
+    const paths = await writeProfileFiles(directory);
+    let callCount = 0;
+    const fetchImpl = vi.fn(async () => {
+      callCount++;
+      if (callCount === 1) {
+        return new Response(JSON.stringify({
+          data: { issueUpdate: { success: true, issue: makeRawIssue({ identifier: "INF-2975" }) } }
+        }), { status: 200 });
+      }
+      return new Response(JSON.stringify({
+        data: { issueUpdate: { success: false, issue: null } },
+        errors: [{ message: "Issue not found" }]
+      }), { status: 200 });
+    }) as unknown as FetchLike;
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleIssueCommand(["bulk-update"], {
+        ...baseOptions(paths),
+        json: false,
+        jsonEnvelope: true,
+        ids: "INF-2975,NONEXISTENT-1",
+        priority: "1",
+        fetchImpl
+      });
+
+      expect(exitCode).toBe(1);
+      const envelope = JSON.parse(output.stdout.join(""));
+      expect(envelope.ok).toBe(false);
+      expect(envelope.data.succeeded).toHaveLength(1);
+      expect(envelope.data.failed).toEqual([{ identifier: "NONEXISTENT-1", error: "Issue not found" }]);
+      expect(envelope.errors).toEqual([
+        {
+          category: "general",
+          message: "Bulk operation failed for NONEXISTENT-1: Issue not found"
+        }
+      ]);
+      expect(envelope.meta.partial).toBe(true);
     } finally {
       output.restore();
     }
@@ -1576,6 +1671,68 @@ describe("handleIssueCommand — issue bulk-update", () => {
 });
 
 describe("handleIssueCommand — issue bulk-close", () => {
+  it("transitions multiple issues to a completed state", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-issue-"));
+    const paths = await writeProfileFiles(directory);
+    const fetchImpl = vi.fn(async (_url, init) => {
+      const request = JSON.parse(String(init?.body ?? "{}"));
+      const query = String(request.query);
+      if (query.includes("IssueTeam")) {
+        return new Response(JSON.stringify({
+          data: { issue: { team: { id: "team-1" } } }
+        }), { status: 200 });
+      }
+      if (query.includes("CompletedStates")) {
+        return new Response(JSON.stringify({
+          data: {
+            workflowStates: {
+              nodes: [{ id: "state-done", name: "Done", type: "completed", position: 1 }]
+            }
+          }
+        }), { status: 200 });
+      }
+      if (query.includes("issueUpdate")) {
+        return new Response(JSON.stringify({
+          data: {
+            issueUpdate: {
+              success: true,
+              issue: makeRawIssue({
+                identifier: request.variables.id,
+                state: { id: "state-done", name: "Done", type: "completed" }
+              })
+            }
+          }
+        }), { status: 200 });
+      }
+      return new Response(JSON.stringify({
+        data: null,
+        errors: [{ message: "unexpected GraphQL operation" }]
+      }), { status: 200 });
+    }) as unknown as FetchLike;
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleIssueCommand(["bulk-close"], {
+        ...baseOptions(paths),
+        ids: "INF-2975,INF-2976",
+        fetchImpl
+      });
+
+      expect(exitCode).toBe(0);
+      const parsed = JSON.parse(output.stdout.join(""));
+      expect(parsed.succeeded).toHaveLength(2);
+      expect(parsed.succeeded[0]).toMatchObject({ closed: true, state: "Done" });
+      expect(parsed.succeeded[1]).toMatchObject({ closed: true, state: "Done" });
+      const calls = (fetchImpl as ReturnType<typeof vi.fn>).mock.calls;
+      expect(calls.some((call) => String(call[1]?.body).includes("issueArchive"))).toBe(false);
+      expect(calls.some((call) => String(call[1]?.body).includes("issueUpdate"))).toBe(true);
+    } finally {
+      output.restore();
+    }
+  });
+});
+
+describe("handleIssueCommand — issue bulk-archive", () => {
   it("archives multiple issues", async () => {
     const directory = await mkdtemp(join(tmpdir(), "linear-cli-issue-"));
     const paths = await writeProfileFiles(directory);
@@ -1587,7 +1744,7 @@ describe("handleIssueCommand — issue bulk-close", () => {
     const output = captureOutput();
 
     try {
-      const exitCode = await handleIssueCommand(["bulk-close"], {
+      const exitCode = await handleIssueCommand(["bulk-archive"], {
         ...baseOptions(paths),
         ids: "INF-2975,INF-2976",
         fetchImpl

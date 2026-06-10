@@ -24,6 +24,7 @@ export interface OutputMeta {
   complexity?: unknown;
   schemaVersion?: string;
   sourceLayer: CommandSourceLayer;
+  partial?: boolean;
 }
 
 export interface JsonEnvelope<TData> {

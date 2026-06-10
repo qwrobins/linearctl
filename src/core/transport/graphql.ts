@@ -36,7 +36,8 @@ export class GraphQLTransportError extends Error {
     readonly kind: "http" | "graphql" | "invalid-response",
     readonly status?: number,
     readonly errors?: GraphQLErrorPayload[],
-    readonly details?: unknown
+    readonly details?: unknown,
+    readonly headers?: Headers
   ) {
     super(message);
     this.name = "GraphQLTransportError";
@@ -76,7 +77,9 @@ export async function executeGraphQL<TData>(input: GraphQLRequestInput): Promise
       `Linear GraphQL request failed with HTTP ${response.status}`,
       "http",
       response.status,
-      responseBody?.errors
+      responseBody?.errors,
+      undefined,
+      response.headers
     );
   }
 

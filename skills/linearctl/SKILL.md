@@ -34,7 +34,7 @@ Raw GraphQL should not be used merely because it is possible. It is the fallback
 
 ### Issues
 - `linearctl issue get <identifier> --json` / `linearctl issue view <identifier> --json` — fetch a single issue by identifier (e.g. INF-2975) or UUID
-- `linearctl issue list [--search <text>|--query <text>] [--state <name> ...] [--status <name>] [--assignee <name|displayName|email|"me"|id>] [--team <id>] [--label <name|id>] [--priority <0-4>] [--cycle <id>] [--project <name|id>] [--created-after <date>] [--updated-after <date>] [--completed-after <date>] [--order-by <field>] [--all-teams] [--all] [--max <n>|--limit <n>] [--json]` — list issues with filters; repeated `--state` values are unioned; `--status` aliases `--state`; `--search`/`--query` routes to full-text search
+- `linearctl issue list [--search <text>|--query <text>] [--state <name> ...] [--status <name>] [--assignee <name|displayName|email|"me"|id>] [--team <id>] [--label <name|id>] [--priority <0-4>] [--cycle <id>] [--project <name|id>] [--created-after <date>] [--updated-after <date>] [--completed-after <date>] [--order-by <field>] [--all-teams] [--all] [--max <n>|--limit <n>] [--json]` — list issues with filters; repeated `--state` values are unioned; `--status` aliases `--state`; `--search`/`--query` routes to full-text search and composes with the other filters
 - `linearctl issue search [<text>|--query <text>] [--all] --json` — full-text search across issues
 - `linearctl issue create --title <title> --team <id> [--description <text>|--description-file <path|->] [--priority <0-4>] [--estimate <n>] [--assignee <id>] [--label <id>] [--state <id>] [--cycle <id>] [--project <name|id>] [--project-milestone <id>|--milestone <id>] --json` — create an issue
 - `linearctl issue update <identifier> [--title <text>] [--description <text>|--description-file <path|->] [--priority <0-4>] [--estimate <n>] [--assignee <id>] [--label <name|id>] [--state <id>] [--cycle <id>] [--project <name|id>] [--project-milestone <id>|--milestone <id>] --json` — update an issue
@@ -46,7 +46,8 @@ Raw GraphQL should not be used merely because it is possible. It is the fallback
 
 ### Bulk operations
 - `linearctl issue bulk-update --ids <id1,id2,...> [--state <id>] [--assignee <id>] [--priority <0-4>] [--estimate <n>] [--label <id>] [--cycle <id>] [--project-milestone <id>|--milestone <id>] --json`
-- `linearctl issue bulk-close --ids <id1,id2,...> --json`
+- `linearctl issue bulk-close --ids <id1,id2,...> [--state <name|id>] --json` — transition issues to a completed/canceled workflow state, matching `issue close`
+- `linearctl issue bulk-archive --ids <id1,id2,...> --json` — archive multiple issues
 - `linearctl issue bulk-delete --ids <id1,id2,...> --yes|--confirm --json` — delete/trash multiple issues; `--confirm` is accepted as an alias for `--yes`
 - `linearctl issue bulk-assign --ids <id1,id2,...> --assignee <id> --json`
 
@@ -145,8 +146,10 @@ When no curated command exists, use `linearctl api <resource> <operation>`:
 - Use `--json` when parsing output programmatically
 - Use `--json-envelope` only when metadata (pagination, rate limits, complexity) is needed
 - Parse-level validation errors also emit failure envelopes when `--json-envelope` is set
-- Use `--jsonl` for streaming large list results (one JSON object per line, auto-paginates)
+- Use `--jsonl --all` for streaming all list results, or `--jsonl --max <n>` to stream a bounded set; `--jsonl` no longer implies `--all`
 - Do not parse human-readable default output
+- Bulk operations fail non-zero when any item fails. With `--json-envelope`, partial failures return `ok: false`, populate `errors[]`, include per-item `data.succeeded`/`data.failed`, and set `meta.partial: true` when some items succeeded.
+- GraphQL retry is default-on for rate limits (`--max-retries` defaults to 3); pass `--no-retry` to disable it.
 
 ## Default team
 
