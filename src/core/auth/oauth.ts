@@ -80,6 +80,20 @@ export class OAuthTokenError extends Error {
   }
 }
 
+function parseTokenError(text: string): string | undefined {
+  try {
+    const parsed = JSON.parse(text);
+    return typeof parsed.error === "string" ? parsed.error : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function tokenErrorMessage(operation: "exchange" | "refresh", status: number, errorCode: string | undefined): string {
+  const label = operation === "exchange" ? "Token exchange" : "Token refresh";
+  return `${label} failed with HTTP ${status}${errorCode === undefined ? "" : ` (${errorCode})`}`;
+}
+
 export async function exchangeCode(params: ExchangeCodeParams): Promise<TokenResponse> {
   const fetchImpl = params.fetchImpl ?? fetch;
   const response = await fetchImpl(LINEAR_TOKEN_URL, {
@@ -96,15 +110,9 @@ export async function exchangeCode(params: ExchangeCodeParams): Promise<TokenRes
 
   if (!response.ok) {
     const text = await response.text();
-    let errorCode: string | undefined;
-    try {
-      const parsed = JSON.parse(text);
-      errorCode = typeof parsed.error === "string" ? parsed.error : undefined;
-    } catch {
-      // ignore parse failure
-    }
+    const errorCode = parseTokenError(text);
     throw new OAuthTokenError(
-      `Token exchange failed with HTTP ${response.status}: ${text}`,
+      tokenErrorMessage("exchange", response.status, errorCode),
       response.status,
       errorCode
     );
@@ -127,15 +135,9 @@ export async function refreshAccessToken(params: RefreshTokenParams): Promise<To
 
   if (!response.ok) {
     const text = await response.text();
-    let errorCode: string | undefined;
-    try {
-      const parsed = JSON.parse(text);
-      errorCode = typeof parsed.error === "string" ? parsed.error : undefined;
-    } catch {
-      // ignore parse failure
-    }
+    const errorCode = parseTokenError(text);
     throw new OAuthTokenError(
-      `Token refresh failed with HTTP ${response.status}: ${text}`,
+      tokenErrorMessage("refresh", response.status, errorCode),
       response.status,
       errorCode
     );

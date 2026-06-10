@@ -59,6 +59,56 @@ function contentTypeFromExtension(filename: string): string {
   return CONTENT_TYPE_MAP[ext] ?? "application/octet-stream";
 }
 
+function isRedirectStatus(status: number): boolean {
+  return status === 301 || status === 302 || status === 303 || status === 307 || status === 308;
+}
+
+function resolveRedirectUrl(currentUrl: string, location: string | null): string | undefined {
+  if (location === null || location.trim() === "") {
+    return undefined;
+  }
+
+  try {
+    return new URL(location, currentUrl).toString();
+  } catch {
+    return undefined;
+  }
+}
+
+async function fetchWithHostValidatedRedirects(
+  fetchImpl: FetchLike,
+  url: string,
+  init: RequestInit
+): Promise<Response> {
+  let currentUrl = url;
+  const originalHost = new URL(url).host;
+
+  for (let redirectCount = 0; redirectCount < 5; redirectCount++) {
+    const response = await fetchImpl(currentUrl, {
+      ...init,
+      redirect: "manual"
+    });
+
+    if (!isRedirectStatus(response.status)) {
+      return response;
+    }
+
+    const nextUrl = resolveRedirectUrl(currentUrl, response.headers.get("location"));
+    if (nextUrl === undefined) {
+      throw new Error(`File request redirected without a valid Location header.`);
+    }
+
+    const parsedNextUrl = new URL(nextUrl);
+    if ((parsedNextUrl.protocol !== "https:" && parsedNextUrl.protocol !== "http:") || parsedNextUrl.host !== originalHost) {
+      throw new Error(`File request redirected to unexpected host: ${parsedNextUrl.host}`);
+    }
+
+    currentUrl = nextUrl;
+  }
+
+  throw new Error("File request exceeded the redirect limit.");
+}
+
 const FILE_UPLOAD_MUTATION = `
 mutation FileUpload($contentType: String!, $filename: String!, $size: Int!) {
   fileUpload(contentType: $contentType, filename: $filename, size: $size) {
@@ -210,7 +260,7 @@ async function handleFileUpload(
       putHeaders["Content-Type"] = contentType;
     }
 
-    const putResponse = await fetchImpl(uploadUrl, {
+    const putResponse = await fetchWithHostValidatedRedirects(fetchImpl, uploadUrl, {
       method: "PUT",
       headers: putHeaders,
       body: new Uint8Array(fileBytes)
@@ -347,7 +397,7 @@ async function handleFileDownload(
     const profile = await ctx.resolveProfile();
     const fetchImpl = options.fetchImpl ?? fetch;
 
-    const response = await fetchImpl(downloadUrl, {
+    const response = await fetchWithHostValidatedRedirects(fetchImpl, downloadUrl, {
       method: "GET",
       headers: {
         authorization: authorizationHeader(profile.credentials)

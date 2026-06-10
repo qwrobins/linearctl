@@ -373,22 +373,67 @@ async function buildIssueFilter(
 
   const stateValue = options.state ?? options.status;
   const stateValues = options.states ?? (stateValue === undefined ? [] : [stateValue]);
-  if (stateValues.length === 1) {
-    const state = stateValues[0]!;
-    filter.state = looksLikeId(state) ? { id: { eq: state } } : { name: { eq: state } };
-  } else if (stateValues.length > 1) {
-    filter.or = stateValues.map((state) => ({
-      state: looksLikeId(state) ? { id: { eq: state } } : { name: { eq: state } }
-    }));
+
+  const stateFilterPromise = (async (): Promise<Record<string, unknown> | undefined> => {
+    const buildStateFilter = async (state: string): Promise<Record<string, unknown>> => {
+      if (looksLikeId(state)) {
+        return { id: { eq: state } };
+      }
+      if (resolvedTeamId === undefined) {
+        return { name: { eqIgnoreCase: state } };
+      }
+      return { id: { eq: await resolveStateId(state, resolvedTeamId, resolverOpts) } };
+    };
+
+    if (stateValues.length === 1) {
+      return { state: await buildStateFilter(stateValues[0]!) };
+    }
+    if (stateValues.length > 1) {
+      const stateFilters = await Promise.all(stateValues.map(buildStateFilter));
+      return { or: stateFilters.map((state) => ({ state })) };
+    }
+    return undefined;
+  })();
+
+  const assigneeFilterPromise = options.assignee === undefined
+    ? Promise.resolve(undefined)
+    : (async (): Promise<Record<string, unknown>> => {
+        const assigneeId = looksLikeId(options.assignee!)
+          ? options.assignee!
+          : await resolveUserId(options.assignee!, resolverOpts);
+        return { assignee: { id: { eq: assigneeId } } };
+      })();
+
+  const labelFilterPromise = options.label === undefined
+    ? Promise.resolve(undefined)
+    : (async (): Promise<Record<string, unknown>> => {
+        const labelId = looksLikeId(options.label!)
+          ? options.label!
+          : await resolveLabelId(options.label!, resolvedTeamId, resolverOpts);
+        return { labels: { some: { id: { eq: labelId } } } };
+      })();
+
+  const projectFilterPromise = options.project === undefined
+    ? Promise.resolve(undefined)
+    : (async (): Promise<Record<string, unknown>> => {
+        const projectId = looksLikeId(options.project!)
+          ? options.project!
+          : await resolveProjectId(options.project!, resolvedTeamId, resolverOpts);
+        return { project: { id: { eq: projectId } } };
+      })();
+
+  const resolvedFilters = await Promise.all([
+    stateFilterPromise,
+    assigneeFilterPromise,
+    labelFilterPromise,
+    projectFilterPromise
+  ]);
+  for (const resolvedFilter of resolvedFilters) {
+    if (resolvedFilter !== undefined) {
+      Object.assign(filter, resolvedFilter);
+    }
   }
-  if (options.assignee !== undefined) {
-    const assigneeId = looksLikeId(options.assignee) ? options.assignee : await resolveUserId(options.assignee, resolverOpts);
-    filter.assignee = { id: { eq: assigneeId } };
-  }
-  if (options.label !== undefined) {
-    const labelId = looksLikeId(options.label) ? options.label : await resolveLabelId(options.label, resolvedTeamId, resolverOpts);
-    filter.labels = { some: { id: { eq: labelId } } };
-  }
+
   if (options.priority !== undefined) {
     const parsed = Number(options.priority);
     if (!Number.isInteger(parsed)) {
@@ -398,12 +443,6 @@ async function buildIssueFilter(
   }
   if (options.cycle !== undefined) {
     filter.cycle = { id: { eq: options.cycle } };
-  }
-  if (options.project !== undefined) {
-    const projectId = looksLikeId(options.project)
-      ? options.project
-      : await resolveProjectId(options.project, resolvedTeamId, resolverOpts);
-    filter.project = { id: { eq: projectId } };
   }
   if (options.createdAfter !== undefined) {
     filter.createdAt = { gte: options.createdAfter };

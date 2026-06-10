@@ -248,7 +248,7 @@ describe("handleProjectCommand — project get", () => {
 
       if (body.query.includes("ResolveProject")) {
         expect(body.variables).toMatchObject({ first: 100 });
-        expect(body.variables?.filter).toBeUndefined();
+        expect(body.variables?.filter).toEqual({ name: { containsIgnoreCase: "GCP Hardening & GitOps" } });
         return new Response(JSON.stringify({
           data: {
             projects: {

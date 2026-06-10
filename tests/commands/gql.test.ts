@@ -184,6 +184,38 @@ describe("handleGqlCommand", () => {
     }
   });
 
+  it("preserves whitespace in --var values", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-gql-"));
+    const { configFile, credentialsFile } = await writeProfileFiles(directory);
+    const fetchSpy = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
+      new Response(JSON.stringify({ data: { commentCreate: { success: true } } }), { status: 200 })
+    );
+    const fetchImpl = fetchSpy as unknown as FetchLike;
+    const output = captureOutput();
+
+    try {
+      await expect(
+        handleGqlCommand(["mutation", "mutation ($body: String!) { commentCreate(input: { body: $body }) { success } }"], {
+          json: true,
+          jsonEnvelope: false,
+          raw: false,
+          stdin: false,
+          vars: ["body=  leading and trailing  "],
+          configFile,
+          credentialsFile,
+          env: {},
+          stdinStream: Readable.from([]),
+          fetchImpl
+        })
+      ).resolves.toBe(0);
+
+      const request = JSON.parse(String(fetchSpy.mock.calls[0]?.[1]?.body));
+      expect(request.variables.body).toBe("  leading and trailing  ");
+    } finally {
+      output.restore();
+    }
+  });
+
   it("rejects gql introspect document input flags", async () => {
     const directory = await mkdtemp(join(tmpdir(), "linear-cli-gql-"));
     const { configFile, credentialsFile } = await writeProfileFiles(directory);

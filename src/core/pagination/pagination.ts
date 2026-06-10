@@ -40,7 +40,7 @@ export function validatePaginationOptions(options: PaginationOptions): string | 
 }
 
 export function buildPaginationVariables(options: PaginationOptions): { first: number; after?: string } {
-  let first = options.pageSize ?? DEFAULT_PAGE_SIZE;
+  let first = options.pageSize ?? (options.max !== undefined || options.all === true ? MAX_PAGE_SIZE : DEFAULT_PAGE_SIZE);
 
   if (options.max !== undefined && options.max < first) {
     first = options.max;

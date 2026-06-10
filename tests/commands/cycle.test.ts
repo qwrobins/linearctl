@@ -287,3 +287,63 @@ describe("handleCycleCommand — cycle update", () => {
     }
   });
 });
+
+describe("handleCycleCommand — cycle delete", () => {
+  it("reports that delete archives the cycle", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-cycle-"));
+    const paths = await writeProfileFiles(directory);
+    const fetchImpl = makeFetch({
+      data: { cycleArchive: { success: true } }
+    });
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleCycleCommand(["delete", "cycle-uuid-1"], {
+        ...baseOptions(paths),
+        fetchImpl
+      });
+
+      expect(exitCode).toBe(0);
+      const parsed = JSON.parse(output.stdout.join(""));
+      expect(parsed).toMatchObject({
+        id: "cycle-uuid-1",
+        archived: true,
+        requestedAction: "delete",
+        performedAction: "archive"
+      });
+      expect(parsed.note).toContain("Linear does not support cycle deletion");
+    } finally {
+      output.restore();
+    }
+  });
+
+  it("includes archive aliasing in dry-run output", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-cycle-"));
+    const paths = await writeProfileFiles(directory);
+    const fetchImpl = vi.fn(async () => {
+      throw new Error("dry-run should not call Linear");
+    }) as unknown as FetchLike;
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleCycleCommand(["delete", "cycle-uuid-1"], {
+        ...baseOptions(paths),
+        dryRun: true,
+        fetchImpl
+      });
+
+      expect(exitCode).toBe(0);
+      expect(fetchImpl).not.toHaveBeenCalled();
+      const parsed = JSON.parse(output.stdout.join(""));
+      expect(parsed.action).toBe("delete");
+      expect(parsed.input).toMatchObject({
+        id: "cycle-uuid-1",
+        requestedAction: "delete",
+        performedAction: "archive"
+      });
+      expect(parsed.input.note).toContain("Linear does not support cycle deletion");
+    } finally {
+      output.restore();
+    }
+  });
+});
