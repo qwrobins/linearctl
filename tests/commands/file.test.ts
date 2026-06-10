@@ -413,6 +413,49 @@ describe("handleFileCommand — file download", () => {
     }
   });
 
+  it("follows exactly five same-host download redirects", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-file-"));
+    const paths = await writeProfileFiles(directory);
+    const outputPath = join(directory, "downloaded.png");
+    const fileContent = Buffer.from("downloaded-after-redirects");
+
+    const fetchImpl = vi.fn(async (_url: string | URL | Request, _init?: RequestInit) => {
+      const callNumber = (fetchImpl as ReturnType<typeof vi.fn>).mock.calls.length;
+      if (callNumber <= 5) {
+        return new Response("", {
+          status: 302,
+          headers: { location: `https://uploads.linear.app/step-${callNumber}` }
+        });
+      }
+      return new Response(fileContent, { status: 200 });
+    }) as FetchLike;
+
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleFileCommand(
+        ["download", "https://uploads.linear.app/some-file.png"],
+        {
+          ...baseOptions(paths),
+          fetchImpl,
+          output: outputPath
+        }
+      );
+
+      expect(exitCode).toBe(0);
+      expect(fetchImpl).toHaveBeenCalledTimes(6);
+      for (const call of (fetchImpl as ReturnType<typeof vi.fn>).mock.calls) {
+        const init = call[1]!;
+        expect(init.redirect).toBe("manual");
+        expect((init.headers as Record<string, string>).authorization).toBe("lin_api_work");
+      }
+      const written = await readFile(outputPath);
+      expect(written.toString()).toBe("downloaded-after-redirects");
+    } finally {
+      output.restore();
+    }
+  });
+
   it("rejects non-Linear URLs", async () => {
     const directory = await mkdtemp(join(tmpdir(), "linear-cli-file-"));
     const paths = await writeProfileFiles(directory);

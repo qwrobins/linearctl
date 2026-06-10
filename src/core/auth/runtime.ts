@@ -151,11 +151,19 @@ async function recoverConcurrentOAuthRefresh(
     return undefined;
   }
 
-  const tokenResponse = await refreshAccessToken({
-    refreshToken: latestOAuthCreds.refreshToken,
-    clientId: latestOAuthCreds.oauthClientId,
-    ...(input.fetchImpl === undefined ? {} : { fetchImpl: input.fetchImpl })
-  });
+  let tokenResponse;
+  try {
+    tokenResponse = await refreshAccessToken({
+      refreshToken: latestOAuthCreds.refreshToken,
+      clientId: latestOAuthCreds.oauthClientId,
+      ...(input.fetchImpl === undefined ? {} : { fetchImpl: input.fetchImpl })
+    });
+  } catch (error) {
+    if (error instanceof OAuthTokenError) {
+      return undefined;
+    }
+    throw error;
+  }
   const refreshedCredentials = {
     ...latestOAuthCreds,
     accessToken: tokenResponse.access_token,

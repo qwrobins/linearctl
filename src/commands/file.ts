@@ -75,6 +75,8 @@ function resolveRedirectUrl(currentUrl: string, location: string | null): string
   }
 }
 
+const MAX_FILE_REDIRECTS = 5;
+
 async function fetchWithHostValidatedRedirects(
   fetchImpl: FetchLike,
   url: string,
@@ -83,7 +85,7 @@ async function fetchWithHostValidatedRedirects(
   let currentUrl = url;
   const originalHost = new URL(url).host;
 
-  for (let redirectCount = 0; redirectCount < 5; redirectCount++) {
+  for (let redirectCount = 0; redirectCount <= MAX_FILE_REDIRECTS; redirectCount++) {
     const response = await fetchImpl(currentUrl, {
       ...init,
       redirect: "manual"
@@ -91,6 +93,10 @@ async function fetchWithHostValidatedRedirects(
 
     if (!isRedirectStatus(response.status)) {
       return response;
+    }
+
+    if (redirectCount === MAX_FILE_REDIRECTS) {
+      throw new Error("File request exceeded the redirect limit.");
     }
 
     const nextUrl = resolveRedirectUrl(currentUrl, response.headers.get("location"));
