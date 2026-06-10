@@ -98,6 +98,8 @@ function makeRawIssue(overrides?: Partial<Record<string, unknown>>) {
     url: "https://linear.app/team/issue/INF-2975",
     createdAt: "2026-04-09T10:00:00Z",
     updatedAt: "2026-04-09T11:00:00Z",
+    trashed: false,
+    archivedAt: null,
     ...overrides
   };
 }
@@ -162,6 +164,32 @@ describe("handleIssueCommand — issue get", () => {
       expect(parsed.state).toEqual({ id: "state-1", name: "In Progress", type: "started" });
       expect(parsed.team).toEqual({ id: "team-1", key: "INF", name: "Infrastructure" });
       expect(parsed.parent).toBeNull();
+      expect(parsed.trashed).toBe(false);
+      expect(parsed.archivedAt).toBeNull();
+    } finally {
+      output.restore();
+    }
+  });
+
+  it("includes trashed and archivedAt for a soft-deleted issue", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-issue-"));
+    const paths = await writeProfileFiles(directory);
+    const archivedAt = "2026-06-10T05:51:19.109Z";
+    const fetchImpl = makeFetch({
+      data: { issue: makeRawIssue({ trashed: true, archivedAt }) }
+    });
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleIssueCommand(["get", "INF-2975"], {
+        ...baseOptions(paths),
+        fetchImpl
+      });
+
+      expect(exitCode).toBe(0);
+      const parsed = JSON.parse(output.stdout.join(""));
+      expect(parsed.trashed).toBe(true);
+      expect(parsed.archivedAt).toBe(archivedAt);
     } finally {
       output.restore();
     }
@@ -1409,6 +1437,49 @@ describe("handleIssueCommand — issue update", () => {
   });
 });
 
+describe("handleIssueCommand — missing issue taxonomy", () => {
+  const missingIssueError = {
+    message: "Could not find referenced Issue",
+    extensions: {
+      code: "INPUT_ERROR",
+      statusCode: 400,
+      userError: true
+    }
+  };
+
+  it.each([
+    ["get", ["get", "00000000-0000-0000-0000-000000000999"], {}],
+    ["update", ["update", "00000000-0000-0000-0000-000000000999"], { title: "Updated title" }],
+    ["delete", ["delete", "00000000-0000-0000-0000-000000000999"], {}]
+  ] as const)("%s maps missing issue GraphQL errors to not-found", async (_name, positionals, extraOptions) => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-issue-"));
+    const paths = await writeProfileFiles(directory);
+    const fetchImpl = makeFetch({
+      data: null,
+      errors: [missingIssueError]
+    });
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleIssueCommand([...positionals], {
+        ...baseOptions(paths),
+        ...extraOptions,
+        json: false,
+        jsonEnvelope: true,
+        fetchImpl
+      });
+
+      expect(exitCode).toBe(4);
+      const envelope = JSON.parse(output.stdout.join(""));
+      expect(envelope.ok).toBe(false);
+      expect(envelope.errors[0].category).toBe("not-found");
+      expect(envelope.errors[0].message).toBe("Could not find referenced Issue");
+    } finally {
+      output.restore();
+    }
+  });
+});
+
 describe("handleIssueCommand — issue close", () => {
   it("transitions issue to completed state", async () => {
     const directory = await mkdtemp(join(tmpdir(), "linear-cli-issue-"));
@@ -1712,13 +1783,13 @@ describe("handleIssueCommand — issue bulk-update", () => {
         fetchImpl
       });
 
-      expect(exitCode).toBe(1);
+      expect(exitCode).toBe(4);
       const parsed = JSON.parse(output.stdout.join(""));
       expect(parsed.succeeded).toHaveLength(1);
       expect(parsed.succeeded[0].identifier).toBe("INF-2975");
       expect(parsed.failed).toHaveLength(1);
       expect(parsed.failed[0].identifier).toBe("NONEXISTENT-1");
-      expect(parsed.failed[0].category).toBe("general");
+      expect(parsed.failed[0].category).toBe("not-found");
     } finally {
       output.restore();
     }
@@ -1752,14 +1823,14 @@ describe("handleIssueCommand — issue bulk-update", () => {
         fetchImpl
       });
 
-      expect(exitCode).toBe(1);
+      expect(exitCode).toBe(4);
       const envelope = JSON.parse(output.stdout.join(""));
       expect(envelope.ok).toBe(false);
       expect(envelope.data.succeeded).toHaveLength(1);
-      expect(envelope.data.failed).toEqual([{ identifier: "NONEXISTENT-1", error: "Issue not found", category: "general" }]);
+      expect(envelope.data.failed).toEqual([{ identifier: "NONEXISTENT-1", error: "Issue not found", category: "not-found" }]);
       expect(envelope.errors).toEqual([
         {
-          category: "general",
+          category: "not-found",
           message: "Bulk operation failed for NONEXISTENT-1: Issue not found"
         }
       ]);

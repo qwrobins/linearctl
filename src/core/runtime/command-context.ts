@@ -11,7 +11,7 @@ import type { ResolvedProfile } from "../auth/profile-resolution.js";
 import { type ExecutedGraphQLResponse, type FetchLike, type GraphQLErrorPayload } from "../transport/graphql.js";
 import { executeGraphQLWithRetry, type RetryOptions } from "../transport/retry.js";
 import { failureEnvelope, successEnvelope, formatCommandErrorHuman, type CommandSourceLayer, type PageInfo, type CommandError } from "../output/envelope.js";
-import { mapCommandFailure, type CommandFailure } from "../errors/command-failure.js";
+import { mapCommandFailure, mapGraphQLErrorPayload, type CommandFailure } from "../errors/command-failure.js";
 import { ExitCode } from "../errors/exit-codes.js";
 import type { ResolverOptions } from "../resolution/resolve.js";
 
@@ -114,6 +114,7 @@ export class CommandContext {
 
   /** Emit a failure result in the appropriate output format. */
   emitFailure(errors: CommandError[], exitCode: number = ExitCode.GeneralError): number {
+    const resolvedExitCode = exitCode === ExitCode.GeneralError ? exitCodeForErrors(errors) : exitCode;
     const profileName = this._profile?.name ?? this.options.profile;
     if (this.options.jsonEnvelope) {
       const envelope = failureEnvelope(errors, { sourceLayer: this.layer, ...(profileName ? { profile: profileName } : {}) });
@@ -121,7 +122,7 @@ export class CommandContext {
     } else {
       process.stderr.write(`${formatCommandErrorHuman(errors[0] ?? { category: "general", message: "command failed" })}\n`);
     }
-    return exitCode;
+    return resolvedExitCode;
   }
 
   /** Map a caught error into a structured failure and emit it. */
@@ -142,14 +143,7 @@ export class CommandContext {
 
   /** Map GraphQL error payloads to CommandError format. */
   mapGraphQLErrors(errors: GraphQLErrorPayload[] | undefined): CommandError[] {
-    return (errors ?? []).map((error) => ({
-      category: "general" as const,
-      message: extractUserMessage(error),
-      details: {
-        ...(error.path === undefined ? {} : { path: error.path }),
-        ...(error.extensions === undefined ? {} : { extensions: error.extensions }),
-      },
-    }));
+    return (errors ?? []).map((error) => mapGraphQLErrorPayload(error).error);
   }
 
   /** Output mode flags for custom output handling */
@@ -179,35 +173,9 @@ export function createCommandContext(options: CommandContextOptions): CommandCon
   return new CommandContext(options);
 }
 
-/**
- * Extract a human-readable message from a GraphQL error payload.
- * Linear API validation errors include a `userPresentableMessage` in extensions
- * that is more specific than the generic top-level message (e.g., "description
- * must be shorter than or equal to 255 characters" vs "Argument Validation Error").
- */
-function extractUserMessage(error: GraphQLErrorPayload): string {
-  const ext = error.extensions;
-  if (ext === undefined) return error.message;
-
-  if (typeof ext.userPresentableMessage === "string") {
-    return ext.userPresentableMessage;
-  }
-
-  const validationErrors = ext.validationErrors;
-  if (Array.isArray(validationErrors) && validationErrors.length > 0) {
-    const messages: string[] = [];
-    for (const ve of validationErrors) {
-      if (typeof ve === "object" && ve !== null && "constraints" in ve) {
-        const constraints = (ve as { constraints: Record<string, string> }).constraints;
-        if (typeof constraints === "object" && constraints !== null) {
-          messages.push(...Object.values(constraints));
-        }
-      }
-    }
-    if (messages.length > 0) {
-      return messages.join("; ");
-    }
-  }
-
-  return error.message;
+function exitCodeForErrors(errors: CommandError[]): number {
+  if (errors.some((error) => error.category === "authentication")) return ExitCode.AuthenticationError;
+  if (errors.some((error) => error.category === "rate-limit")) return ExitCode.RateLimitExhausted;
+  if (errors.some((error) => error.category === "not-found")) return ExitCode.NotFound;
+  return ExitCode.GeneralError;
 }

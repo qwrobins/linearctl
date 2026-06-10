@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.2] - 2026-06-10
+
+### Fixed
+
+- Inline GraphQL errors now use the same taxonomy as caught transport errors, so missing referenced issues consistently report `category: "not-found"` and exit code 4 across `issue get`, `issue update`, `issue delete`, and bulk operations.
+- `issue get` / `issue view` JSON now includes `trashed` and `archivedAt`, and human output marks trashed/archived issues so delete-then-verify workflows can distinguish soft-deleted issues from live ones.
+- `comment list --issue <identifier>` now reports not-found when a human-readable parent issue identifier does not resolve, instead of silently returning an empty list.
+
 ## [0.8.1] - 2026-06-10
 
 ### Fixed
