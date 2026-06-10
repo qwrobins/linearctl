@@ -381,8 +381,17 @@ export async function handleApiCommand(
     sourceLayer: "generated"
   });
 
+  let retry;
   try {
-    const retry = normalizeRetryOptions(options);
+    retry = normalizeRetryOptions(options);
+  } catch (error) {
+    if (error instanceof RangeError) {
+      return emitValidationError(error.message, { ...options, sourceLayer: "generated" });
+    }
+    return fallbackCtx.emitCaughtError(error);
+  }
+
+  try {
     const ctx = createCommandContext({
       json: options.json,
       jsonEnvelope: options.jsonEnvelope,
@@ -424,9 +433,6 @@ export async function handleApiCommand(
 
     return ExitCode.Success;
   } catch (error) {
-    if (error instanceof RangeError) {
-      return emitValidationError(error.message, { ...options, sourceLayer: "generated" });
-    }
     return fallbackCtx.emitCaughtError(error);
   }
 }

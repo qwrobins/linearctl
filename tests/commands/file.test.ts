@@ -151,13 +151,16 @@ describe("handleFileCommand — file upload", () => {
 
       if (callIndex === 2) {
         expect((init?.headers as Record<string, string>)["x-amz-acl"]).toBe("public-read");
+        expect((init?.headers as Record<string, string>)["Content-Type"]).toBe("image/png");
         return new Response("", {
           status: 307,
           headers: { location: "https://cdn.example.com/put-here" }
         });
       }
 
-      expect(init?.headers).toBeUndefined();
+      const redirectedHeaders = init?.headers as Record<string, string>;
+      expect(redirectedHeaders["content-type"]).toBe("image/png");
+      expect(redirectedHeaders["x-amz-acl"]).toBeUndefined();
       return new Response("", {
         status: 200
       });

@@ -649,6 +649,31 @@ describe("handleApiCommand", () => {
       expect(parsed.errors[0].message).toContain("maxRetries");
       expect(parsed.meta.sourceLayer).toBe("generated");
     });
+
+    it("does not recategorize execution RangeError failures as validation", async () => {
+      const manifestPath = await writeManifest(tmpDir);
+      const paths = await writeProfileFiles(tmpDir);
+      const fetchImpl = vi.fn(async () => {
+        throw new RangeError("serializer exploded");
+      }) as unknown as FetchLike;
+
+      const result = await handleApiCommand(["issue", "get"], {
+        ...baseOptions(paths, manifestPath),
+        json: false,
+        jsonEnvelope: true,
+        id: "issue-1",
+        fetchImpl
+      });
+
+      expect(result).toBe(1);
+      const parsed = JSON.parse(output.stdout.join(""));
+      expect(parsed.ok).toBe(false);
+      expect(parsed.errors[0]).toEqual({
+        category: "general",
+        message: "serializer exploded"
+      });
+      expect(parsed.meta.sourceLayer).toBe("generated");
+    });
   });
 
   describe("input validation", () => {

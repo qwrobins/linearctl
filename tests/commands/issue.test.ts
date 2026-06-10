@@ -8,6 +8,8 @@ import { writeCredentialsFile } from "../../src/core/auth/credentials.js";
 import { writeLinearConfigFile } from "../../src/core/config/config-file.js";
 import type { FetchLike } from "../../src/core/transport/graphql.js";
 
+const DEFAULT_TEAM_ID = "00000000-0000-0000-0000-00000000d001";
+
 function captureOutput() {
   const stdout: string[] = [];
   const stderr: string[] = [];
@@ -61,7 +63,7 @@ async function writeDefaultTeamProfileFiles(directory: string): Promise<{ config
     defaultProfile: "work",
     profiles: {
       work: {
-        defaultTeam: "team-default"
+        defaultTeam: DEFAULT_TEAM_ID
       }
     }
   });
@@ -1087,6 +1089,35 @@ describe("handleIssueCommand — issue search", () => {
     }
   });
 
+  it("applies the profile default team when issue list uses --search", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-issue-"));
+    const paths = await writeDefaultTeamProfileFiles(directory);
+    const fetchImpl = makeFetch({
+      data: {
+        searchIssues: {
+          nodes: [makeRawIssue()],
+          pageInfo: { hasNextPage: false, endCursor: null }
+        }
+      }
+    });
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleIssueCommand(["list"], {
+        ...baseOptions(paths),
+        search: "db sidecar",
+        fetchImpl
+      });
+
+      expect(exitCode).toBe(0);
+      const callBody = JSON.parse(String((fetchImpl as ReturnType<typeof vi.fn>).mock.calls[0]?.[1]?.body));
+      expect(callBody.variables.term).toBe("db sidecar");
+      expect(callBody.variables.filter).toEqual({ team: { id: { eq: DEFAULT_TEAM_ID } } });
+    } finally {
+      output.restore();
+    }
+  });
+
   it("composes issue list --search with other filters", async () => {
     const directory = await mkdtemp(join(tmpdir(), "linear-cli-issue-"));
     const paths = await writeProfileFiles(directory);
@@ -1773,6 +1804,41 @@ describe("handleIssueCommand — issue bulk-update", () => {
         {
           category: "rate-limit",
           message: "Bulk operation failed for INF-2976: Linear GraphQL request failed with HTTP 429"
+        }
+      ]);
+    } finally {
+      output.restore();
+    }
+  });
+
+  it("classifies Linear entity-not-found bulk item errors as not-found", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-issue-"));
+    const paths = await writeProfileFiles(directory);
+    const fetchImpl = vi.fn(async () =>
+      new Response(JSON.stringify({
+        data: { issueUpdate: { success: false, issue: null } },
+        errors: [{ message: "Entity not found: Issue" }]
+      }), { status: 200 })
+    ) as unknown as FetchLike;
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleIssueCommand(["bulk-update"], {
+        ...baseOptions(paths),
+        json: false,
+        jsonEnvelope: true,
+        ids: "INF-999999",
+        priority: "3",
+        fetchImpl
+      });
+
+      expect(exitCode).toBe(4);
+      const envelope = JSON.parse(output.stdout.join(""));
+      expect(envelope.data.failed).toEqual([{ identifier: "INF-999999", error: "Entity not found: Issue", category: "not-found" }]);
+      expect(envelope.errors).toEqual([
+        {
+          category: "not-found",
+          message: "Bulk operation failed for INF-999999: Entity not found: Issue"
         }
       ]);
     } finally {

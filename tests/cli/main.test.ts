@@ -6,6 +6,7 @@ import { promisify } from "node:util";
 import { Readable } from "node:stream";
 import { describe, expect, it, vi } from "vitest";
 import { main } from "../../src/cli/main.js";
+import { COMMAND_REGISTRY } from "../../src/core/registry/commands.js";
 
 const CLI_PATH = "src/cli/main.ts";
 const execFileAsync = promisify(execFile);
@@ -200,6 +201,22 @@ describe("CLI scaffold", () => {
     const { stdout: output } = await runCli(["--version", "issue", "list"]);
 
     expect(output.trim()).toMatch(/^linearctl \d+\.\d+\.\d+/);
+  });
+
+  it("honors leading global early-exit flags before every registered command", async () => {
+    for (const command of COMMAND_REGISTRY) {
+      const version = await runMainWithThrowingFetch(["--version", command.name]);
+      expect(version.code, command.name).toBe(0);
+      expect(version.stdout, command.name).toMatch(/^linearctl \d+\.\d+\.\d+/);
+      expect(version.stderr, command.name).toBe("");
+      expect(version.fetchImpl, command.name).not.toHaveBeenCalled();
+
+      const metadata = await runMainWithThrowingFetch(["--metadata", "curated", "--json", command.name]);
+      expect(metadata.code, command.name).toBe(0);
+      expect(JSON.parse(metadata.stdout), command.name).toEqual(expect.any(Array));
+      expect(metadata.stderr, command.name).toBe("");
+      expect(metadata.fetchImpl, command.name).not.toHaveBeenCalled();
+    }
   });
 
   it("accepts metadata flags in alternate valid forms", async () => {
