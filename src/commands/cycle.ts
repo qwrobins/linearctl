@@ -153,9 +153,23 @@ interface RawCycle {
   updatedAt: string;
 }
 
-async function handleCycleArchive(id: string, options: CycleCommandOptions): Promise<number> {
+const CYCLE_DELETE_ALIAS_NOTE = "Linear does not support cycle deletion; cycle delete archives the cycle instead.";
+
+async function handleCycleArchive(
+  id: string,
+  options: CycleCommandOptions,
+  invokedAs: "archive" | "delete" = "archive"
+): Promise<number> {
   if (options.dryRun === true) {
-    return emitDryRunResult("archive", "cycle", { id }, options);
+    const input = invokedAs === "delete"
+      ? {
+          id,
+          requestedAction: "delete",
+          performedAction: "archive",
+          note: CYCLE_DELETE_ALIAS_NOTE
+        }
+      : { id };
+    return emitDryRunResult(invokedAs, "cycle", input, options);
   }
 
   const ctx = buildContext(options);
@@ -171,13 +185,25 @@ async function handleCycleArchive(id: string, options: CycleCommandOptions): Pro
       return ctx.emitFailure(errors.length > 0 ? errors : [{ category: "general", message: "Cycle archive failed" }]);
     }
 
-    const result = { id, archived: true };
+    const result = invokedAs === "delete"
+      ? {
+          id,
+          archived: true,
+          requestedAction: "delete",
+          performedAction: "archive",
+          note: CYCLE_DELETE_ALIAS_NOTE
+        }
+      : { id, archived: true };
     if (options.jsonEnvelope) {
       return ctx.emitSuccess(result);
     } else if (options.json) {
       process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     } else {
-      process.stdout.write(`Archived cycle ${id}\n`);
+      process.stdout.write(
+        invokedAs === "delete"
+          ? `Linear does not support cycle deletion; archived cycle ${id} instead.\n`
+          : `Archived cycle ${id}\n`
+      );
     }
     return ExitCode.Success;
   } catch (error) {
@@ -636,7 +662,7 @@ export async function handleCycleCommand(
     if (rest.length > 1) {
       return emitValidationError(`cycle ${subcommand} accepts exactly one identifier.`, options);
     }
-    return handleCycleArchive(id, options);
+    return handleCycleArchive(id, options, subcommand);
   }
 
   return emitValidationError("unsupported cycle command. Try linearctl cycle get, list, current, create, update, archive, or delete.", options);

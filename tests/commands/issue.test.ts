@@ -725,8 +725,8 @@ describe("handleIssueCommand — issue list", () => {
       expect(exitCode).toBe(0);
       const callBody = JSON.parse(String((fetchSpy as ReturnType<typeof vi.fn>).mock.calls[0]?.[1]?.body));
       expect(callBody.variables.filter.or).toEqual([
-        { state: { name: { eq: "In Progress" } } },
-        { state: { name: { eq: "Block/Waiting" } } }
+        { state: { name: { eqIgnoreCase: "In Progress" } } },
+        { state: { name: { eqIgnoreCase: "Block/Waiting" } } }
       ]);
     } finally {
       output.restore();
@@ -748,7 +748,12 @@ describe("handleIssueCommand — issue list", () => {
       if (body.query.includes("ResolveProject")) {
         expect(body.variables).toMatchObject({
           first: 100,
-          filter: { accessibleTeams: { some: { id: { eq: "team-1" } } } }
+          filter: {
+            and: [
+              { name: { containsIgnoreCase: "GCP Hardening & GitOps" } },
+              { accessibleTeams: { some: { id: { eq: "team-1" } } } }
+            ]
+          }
         });
         return new Response(JSON.stringify({
           data: {
@@ -827,7 +832,7 @@ describe("handleIssueCommand — issue list", () => {
       const callBody = JSON.parse(String((fetchSpy as ReturnType<typeof vi.fn>).mock.calls[0]?.[1]?.body));
       expect(callBody.variables.filter.cycle).toEqual({ id: { eq: "cycle-uuid-1" } });
       expect(callBody.variables.filter.project).toEqual({ id: { eq: "00000000-0000-0000-0000-000000000001" } });
-      expect(callBody.variables.filter.state).toEqual({ name: { eq: "In Progress" } });
+      expect(callBody.variables.filter.state).toEqual({ name: { eqIgnoreCase: "In Progress" } });
     } finally {
       output.restore();
     }
@@ -858,7 +863,60 @@ describe("handleIssueCommand — issue list", () => {
 
       expect(exitCode).toBe(0);
       const callBody = JSON.parse(String((fetchSpy as ReturnType<typeof vi.fn>).mock.calls[0]?.[1]?.body));
-      expect(callBody.variables.filter.state).toEqual({ name: { eq: "Backlog" } });
+      expect(callBody.variables.filter.state).toEqual({ name: { eqIgnoreCase: "Backlog" } });
+    } finally {
+      output.restore();
+    }
+  });
+
+  it("resolves --state list filters through the workflow state resolver", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-issue-"));
+    const paths = await writeProfileFiles(directory);
+    const fetchSpy = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body ?? "{}")) as { query: string; variables?: Record<string, unknown> };
+
+      if (body.query.includes("ResolveTeam")) {
+        return new Response(JSON.stringify({
+          data: { teams: { nodes: [{ id: "team-1", key: "INF", name: "Infrastructure" }] } }
+        }), { status: 200 });
+      }
+
+      if (body.query.includes("ResolveState")) {
+        return new Response(JSON.stringify({
+          data: {
+            team: {
+              states: {
+                nodes: [{ id: "state-done", name: "Done", type: "completed" }]
+              }
+            }
+          }
+        }), { status: 200 });
+      }
+
+      return new Response(JSON.stringify({
+        data: {
+          issues: {
+            nodes: [makeRawIssue({ state: { id: "state-done", name: "Done", type: "completed" } })],
+            pageInfo: { hasNextPage: false, endCursor: null }
+          }
+        }
+      }), { status: 200 });
+    });
+    const fetchImpl = fetchSpy as unknown as FetchLike;
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleIssueCommand(["list"], {
+        ...baseOptions(paths),
+        team: "inf",
+        state: "done",
+        fetchImpl
+      });
+
+      expect(exitCode).toBe(0);
+      const issueCall = fetchSpy.mock.calls.find((call) => String(call[1]?.body).includes("IssueList"));
+      const request = JSON.parse(String(issueCall?.[1]?.body));
+      expect(request.variables.filter.state).toEqual({ id: { eq: "state-done" } });
     } finally {
       output.restore();
     }
@@ -967,6 +1025,18 @@ describe("handleIssueCommand — issue search", () => {
         }), { status: 200 });
       }
 
+      if (body.query.includes("ResolveState")) {
+        return new Response(JSON.stringify({
+          data: {
+            team: {
+              states: {
+                nodes: [{ id: "state-progress", name: "In Progress", type: "started" }]
+              }
+            }
+          }
+        }), { status: 200 });
+      }
+
       return new Response(JSON.stringify({
         data: {
           searchIssues: {
@@ -997,7 +1067,7 @@ describe("handleIssueCommand — issue search", () => {
       expect(callBody.variables.term).toBe("db sidecar");
       expect(callBody.variables.filter).toMatchObject({
         team: { id: { eq: "team-1" } },
-        state: { name: { eq: "In Progress" } },
+        state: { id: { eq: "state-progress" } },
         priority: { eq: 2 }
       });
     } finally {

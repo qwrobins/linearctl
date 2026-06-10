@@ -73,6 +73,8 @@ linearctl issue bulk-assign --ids <id1,id2,...> --assignee <id> --json
 
 Bulk operations fail the command when any item fails. With `--json-envelope`, partial failures return `ok: false`, populate `errors[]`, include per-item `data.succeeded` and `data.failed`, and set `meta.partial: true` when at least one item succeeded.
 
+Friendly names for teams, users, labels, workflow states, and projects resolve case-insensitively. When `issue list --state <name>` has a team scope from `--team` or the profile default team, it resolves the state name to an ID before filtering; without a team scope, it falls back to a case-insensitive state-name filter.
+
 ## Project
 
 ```bash
@@ -110,9 +112,13 @@ linearctl cycle list [--team <name|key|id>] --json
 linearctl cycle current [--team <name|key|id>] --json
 linearctl cycle create --team <name|key|id> [--name <text>] [--starts-at <date>] [--ends-at <date>] --json
 linearctl cycle update <id> [--name <text>] [--starts-at <date>] [--ends-at <date>] --json
+linearctl cycle archive <id> --json
+linearctl cycle delete <id> --json
 ```
 
 `cycle get` and `cycle current` JSON include sprint reporting fields such as `progress`, derived `scopeCount`, `completedScopeCount`, `inProgressScopeCount`, `startedScopeCount`, issue counts, history arrays, and uncompleted issues captured on close.
+
+Linear does not expose hard deletion for cycles. `cycle delete` is an alias for archive and reports `requestedAction: "delete"` with `performedAction: "archive"` in JSON and dry-run output.
 
 ## Team
 
@@ -196,6 +202,8 @@ linearctl file url <attachment-id> [--expires-in <seconds>] --json
 linearctl file download <url> [--output <path>] --json
 ```
 
+File upload and download requests use manual redirect handling. Redirects are followed only when they stay on the original host, so signed upload headers and Linear authorization are not reattached to a different host.
+
 ## Auth
 
 ```bash
@@ -221,6 +229,8 @@ linearctl auth switch <profile>
 # Remove a profile [destructive with --remove-config]
 linearctl auth logout --profile <name> [--remove-config]
 ```
+
+OAuth token refresh re-reads credentials after an `invalid_grant` response so concurrent CLI invocations can tolerate one process refreshing the token before another finishes.
 
 See [auth-and-profiles.md](auth-and-profiles.md) for details.
 

@@ -103,6 +103,10 @@ describe("buildPaginationVariables", () => {
     expect(buildPaginationVariables({ max: 200, pageSize: 50 })).toEqual({ first: 50 });
   });
 
+  it("uses the maximum page size for large bounded autopagination by default", () => {
+    expect(buildPaginationVariables({ max: 1000 })).toEqual({ first: 250 });
+  });
+
   it("passes through after cursor", () => {
     expect(buildPaginationVariables({ after: "abc123" })).toEqual({ first: 50, after: "abc123" });
   });

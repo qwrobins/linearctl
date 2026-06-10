@@ -64,7 +64,7 @@ async function requestResolverGraphQL<TData>(
 
 const TEAM_RESOLVE_QUERY = `
 query ResolveTeam($name: String!) {
-  teams(filter: { or: [{ name: { eq: $name } }, { key: { eq: $name } }] }) {
+  teams(filter: { or: [{ name: { eqIgnoreCase: $name } }, { key: { eqIgnoreCase: $name } }] }) {
     nodes { id key name }
   }
 }`;
@@ -113,7 +113,7 @@ const VIEWER_QUERY = `query ResolveViewer { viewer { id } }`;
 
 const USER_RESOLVE_QUERY = `
 query ResolveUser($value: String!) {
-  users(filter: { or: [{ email: { eq: $value } }, { name: { eq: $value } }, { displayName: { eq: $value } }] }) {
+  users(filter: { or: [{ email: { eqIgnoreCase: $value } }, { name: { eqIgnoreCase: $value } }, { displayName: { eqIgnoreCase: $value } }] }) {
     nodes { id name displayName email }
   }
 }`;
@@ -182,10 +182,10 @@ export async function resolveLabelId(
   teamId: string | undefined,
   options: ResolverOptions
 ): Promise<string> {
-  const nameFilter: Record<string, unknown> = { name: { eq: name } };
+  const nameFilter: Record<string, unknown> = { name: { eqIgnoreCase: name } };
   const filter =
     teamId !== undefined
-      ? { and: [nameFilter, { team: { id: { eq: teamId } } }] }
+      ? { and: [nameFilter, { or: [{ team: { id: { eq: teamId } } }, { team: { null: true } }] }] }
       : nameFilter;
 
   const data = await requestResolverGraphQL<{ issueLabels: { nodes: LabelNode[] } }>(
@@ -224,7 +224,7 @@ export async function resolveLabelId(
 const STATE_RESOLVE_QUERY = `
 query ResolveState($teamId: String!) {
   team(id: $teamId) {
-    states { nodes { id name type } }
+    states(first: 250) { nodes { id name type } }
   }
 }`;
 
@@ -310,8 +310,8 @@ export async function resolveProjectId(
 ): Promise<string> {
   const filter =
     teamId !== undefined
-      ? { accessibleTeams: { some: { id: { eq: teamId } } } }
-      : undefined;
+      ? { and: [{ name: { containsIgnoreCase: name } }, { accessibleTeams: { some: { id: { eq: teamId } } } }] }
+      : { name: { containsIgnoreCase: name } };
 
   const nodes: ProjectNode[] = [];
   let after: string | undefined;

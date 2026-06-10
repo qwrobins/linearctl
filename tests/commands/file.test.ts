@@ -113,8 +113,59 @@ describe("handleFileCommand — file upload", () => {
       expect(parsed.fileName).toBe("screenshot.png");
       expect(parsed.size).toBe(14); // "fake-png-bytes".length
       expect(parsed.attachment).toBeUndefined();
+      expect((fetchImpl as ReturnType<typeof vi.fn>).mock.calls[1]![1]!.redirect).toBe("manual");
       const putHeaders = (fetchImpl as ReturnType<typeof vi.fn>).mock.calls[1]![1]!.headers as Record<string, string>;
       expect(putHeaders["Content-Type"]).toBe("image/png");
+    } finally {
+      output.restore();
+    }
+  });
+
+  it("rejects upload redirects to a different host before reusing signed headers", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-file-"));
+    const paths = await writeProfileFiles(directory);
+    const testFile = join(directory, "screenshot.png");
+    await writeFile(testFile, Buffer.from("fake-png-bytes"));
+
+    let callIndex = 0;
+    const fetchImpl = vi.fn(async () => {
+      callIndex++;
+
+      if (callIndex === 1) {
+        return new Response(
+          JSON.stringify({
+            data: {
+              fileUpload: {
+                success: true,
+                uploadFile: {
+                  uploadUrl: "https://storage.example.com/put-here",
+                  assetUrl: "https://uploads.linear.app/asset-123.png",
+                  headers: [{ key: "x-amz-acl", value: "public-read" }]
+                }
+              }
+            }
+          }),
+          { status: 200 }
+        );
+      }
+
+      return new Response("", {
+        status: 307,
+        headers: { location: "https://evil.example.com/put-here" }
+      });
+    }) as FetchLike;
+
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleFileCommand(["upload", testFile], {
+        ...baseOptions(paths),
+        fetchImpl
+      });
+
+      expect(exitCode).toBe(1);
+      expect(output.stderr.join("")).toContain("redirected to unexpected host");
+      expect(fetchImpl).toHaveBeenCalledTimes(2);
     } finally {
       output.restore();
     }
@@ -321,6 +372,85 @@ describe("handleFileCommand — file download", () => {
 
       const written = await readFile(outputPath);
       expect(written.toString()).toBe("downloaded-file-content");
+      expect((fetchImpl as ReturnType<typeof vi.fn>).mock.calls[0]![1]!.redirect).toBe("manual");
+    } finally {
+      output.restore();
+    }
+  });
+
+  it("rejects download redirects to a different host before reattaching auth", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-file-"));
+    const paths = await writeProfileFiles(directory);
+    const outputPath = join(directory, "downloaded.png");
+
+    const fetchImpl = vi.fn(async () =>
+      new Response("", {
+        status: 302,
+        headers: { location: "https://evil.example.com/file.png" }
+      })
+    ) as FetchLike;
+
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleFileCommand(
+        ["download", "https://uploads.linear.app/some-file.png"],
+        {
+          ...baseOptions(paths),
+          fetchImpl,
+          output: outputPath
+        }
+      );
+
+      expect(exitCode).toBe(1);
+      expect(output.stderr.join("")).toContain("redirected to unexpected host");
+      const requestInit = (fetchImpl as ReturnType<typeof vi.fn>).mock.calls[0]![1]!;
+      expect(requestInit.redirect).toBe("manual");
+      expect((requestInit.headers as Record<string, string>).authorization).toBe("lin_api_work");
+      expect(fetchImpl).toHaveBeenCalledTimes(1);
+    } finally {
+      output.restore();
+    }
+  });
+
+  it("follows exactly five same-host download redirects", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-file-"));
+    const paths = await writeProfileFiles(directory);
+    const outputPath = join(directory, "downloaded.png");
+    const fileContent = Buffer.from("downloaded-after-redirects");
+
+    const fetchImpl = vi.fn(async (_url: string | URL | Request, _init?: RequestInit) => {
+      const callNumber = (fetchImpl as ReturnType<typeof vi.fn>).mock.calls.length;
+      if (callNumber <= 5) {
+        return new Response("", {
+          status: 302,
+          headers: { location: `https://uploads.linear.app/step-${callNumber}` }
+        });
+      }
+      return new Response(fileContent, { status: 200 });
+    }) as FetchLike;
+
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleFileCommand(
+        ["download", "https://uploads.linear.app/some-file.png"],
+        {
+          ...baseOptions(paths),
+          fetchImpl,
+          output: outputPath
+        }
+      );
+
+      expect(exitCode).toBe(0);
+      expect(fetchImpl).toHaveBeenCalledTimes(6);
+      for (const call of (fetchImpl as ReturnType<typeof vi.fn>).mock.calls) {
+        const init = call[1]!;
+        expect(init.redirect).toBe("manual");
+        expect((init.headers as Record<string, string>).authorization).toBe("lin_api_work");
+      }
+      const written = await readFile(outputPath);
+      expect(written.toString()).toBe("downloaded-after-redirects");
     } finally {
       output.restore();
     }

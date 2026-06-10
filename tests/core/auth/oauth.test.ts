@@ -161,6 +161,8 @@ describe("exchangeCode", () => {
       expect(error).toBeInstanceOf(OAuthTokenError);
       expect((error as OAuthTokenError).errorCode).toBe("invalid_grant");
       expect((error as OAuthTokenError).statusCode).toBe(400);
+      expect((error as OAuthTokenError).message).toBe("Token exchange failed with HTTP 400 (invalid_grant)");
+      expect((error as OAuthTokenError).message).not.toContain("{");
     }
   });
 });
@@ -211,6 +213,6 @@ describe("refreshAccessToken", () => {
         clientId: "client-123",
         fetchImpl: mockFetch
       })
-    ).rejects.toThrow(OAuthTokenError);
+    ).rejects.toThrow("Token refresh failed with HTTP 401 (invalid_grant)");
   });
 });

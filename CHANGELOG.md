@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.1] - 2026-06-10
+
+### Changed
+
+- Friendly name resolution for teams, users, labels, states, and projects is case-insensitive. `issue list --state` now uses workflow state resolution when a team scope is available, and team-scoped label resolution includes workspace labels.
+- `cycle delete` now explicitly reports that Linear archives cycles instead of deleting them, including dry-run and JSON output.
+- File upload and download requests now use manual redirect handling and reject redirects to a different host before reusing signed upload headers or Linear authorization.
+- OAuth token refresh tolerates concurrent credential rotation by re-reading credentials after `invalid_grant`, and token refresh errors no longer include raw response bodies.
+- Autopagination defaults to the maximum page size for bounded `--all`/`--max` requests when `--page-size` is omitted.
+
+### Fixed
+
+- `gql --var key=value` preserves leading and trailing whitespace in `value`.
+- Project name resolution now uses server-side `containsIgnoreCase` filtering before client-side exact/prefix/substring disambiguation.
+
 ## [0.7.0] - 2026-06-10
 
 ### Added

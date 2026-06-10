@@ -34,7 +34,7 @@ Raw GraphQL should not be used merely because it is possible. It is the fallback
 
 ### Issues
 - `linearctl issue get <identifier> --json` / `linearctl issue view <identifier> --json` — fetch a single issue by identifier (e.g. INF-2975) or UUID
-- `linearctl issue list [--search <text>|--query <text>] [--state <name> ...] [--status <name>] [--assignee <name|displayName|email|"me"|id>] [--team <id>] [--label <name|id>] [--priority <0-4>] [--cycle <id>] [--project <name|id>] [--created-after <date>] [--updated-after <date>] [--completed-after <date>] [--order-by <field>] [--all-teams] [--all] [--max <n>|--limit <n>] [--json]` — list issues with filters; repeated `--state` values are unioned; `--status` aliases `--state`; `--search`/`--query` routes to full-text search and composes with the other filters
+- `linearctl issue list [--search <text>|--query <text>] [--state <name> ...] [--status <name>] [--assignee <name|displayName|email|"me"|id>] [--team <id|key|name>] [--label <name|id>] [--priority <0-4>] [--cycle <id>] [--project <name|id>] [--created-after <date>] [--updated-after <date>] [--completed-after <date>] [--order-by <field>] [--all-teams] [--all] [--max <n>|--limit <n>] [--json]` — list issues with filters; repeated `--state` values are unioned; `--status` aliases `--state`; `--search`/`--query` routes to full-text search and composes with the other filters; friendly names resolve case-insensitively
 - `linearctl issue search [<text>|--query <text>] [--all] --json` — full-text search across issues
 - `linearctl issue create --title <title> --team <id> [--description <text>|--description-file <path|->] [--priority <0-4>] [--estimate <n>] [--assignee <id>] [--label <id>] [--state <id>] [--cycle <id>] [--project <name|id>] [--project-milestone <id>|--milestone <id>] --json` — create an issue
 - `linearctl issue update <identifier> [--title <text>] [--description <text>|--description-file <path|->] [--priority <0-4>] [--estimate <n>] [--assignee <id>] [--label <name|id>] [--state <id>] [--cycle <id>] [--project <name|id>] [--project-milestone <id>|--milestone <id>] --json` — update an issue
@@ -71,6 +71,8 @@ Raw GraphQL should not be used merely because it is possible. It is the fallback
 - `linearctl cycle current [--team <id>] --json` — get the currently active cycle for a team; includes progress/scope fields
 - `linearctl cycle create --team <id> [--name <text>] [--starts-at <date>] [--ends-at <date>] --json`
 - `linearctl cycle update <id> [--name <text>] [--starts-at <date>] [--ends-at <date>] --json`
+- `linearctl cycle archive <id> --json`
+- `linearctl cycle delete <id> --json` — Linear does not hard-delete cycles; this archives the cycle and reports `requestedAction: "delete"` / `performedAction: "archive"` in JSON and dry-run output
 
 ### Teams
 - `linearctl team get <id-or-key> [--set-default] --json` — fetch team; --set-default saves as profile default
@@ -103,6 +105,7 @@ Raw GraphQL should not be used merely because it is possible. It is the fallback
 - `linearctl file upload <path> [--issue <id>] --json`
 - `linearctl file url <attachment-id> [--expires-in <seconds>] --json`
 - `linearctl file download <url> [--output <path>] --json`
+- Upload/download use manual redirect handling and reject redirects to a different host before reusing signed upload headers or Linear authorization.
 
 ### Workflow states
 - `linearctl state list [--team <id>] [--all-teams] --json` — list issue workflow states for a team
@@ -126,6 +129,7 @@ Raw GraphQL should not be used merely because it is possible. It is the fallback
 - `linearctl auth logout --profile <name>`
 - `linearctl auth switch <profile>`
 - `linearctl auth whoami --json`
+- OAuth refresh tolerates concurrent CLI invocations by re-reading credentials after `invalid_grant`; token errors omit raw response bodies.
 
 ### Workspace
 - `linearctl workspace list --json`

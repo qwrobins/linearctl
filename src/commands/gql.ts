@@ -236,7 +236,7 @@ async function resolveVariables(options: Pick<GqlCommandOptions, "varsFile" | "v
       throw new Error(`invalid --var assignment "${assignment}"`);
     }
 
-    const rawValue = assignment.slice(separatorIndex + 1).trim();
+    const rawValue = assignment.slice(separatorIndex + 1);
     accumulator[key] = parseVariableValue(rawValue);
     return accumulator;
   }, {});

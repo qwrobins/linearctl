@@ -63,6 +63,10 @@ describe("resolveTeamId", () => {
 
     const result = await resolveTeamId("INF", makeOptions(fetchImpl));
     expect(result).toBe("team-uuid-1");
+
+    const call = (fetchImpl as ReturnType<typeof vi.fn>).mock.calls[0] as [string, RequestInit];
+    const body = JSON.parse(call[1].body as string) as { query: string };
+    expect(body.query).toContain("eqIgnoreCase");
   });
 
   it("throws on ambiguous match with candidates", async () => {
@@ -160,7 +164,7 @@ describe("resolveUserId", () => {
 
     const call = (fetchImpl as ReturnType<typeof vi.fn>).mock.calls[0] as [string, RequestInit];
     const body = JSON.parse(call[1].body as string) as { query: string };
-    expect(body.query).toContain("{ displayName: { eq: $value } }");
+    expect(body.query).toContain("{ displayName: { eqIgnoreCase: $value } }");
   });
 
   it("throws on not-found", async () => {
@@ -220,10 +224,14 @@ describe("resolveLabelId", () => {
     const result = await resolveLabelId("bug", "team-1", makeOptions(fetchImpl));
     expect(result).toBe("label-uuid-2");
 
-    // Verify the filter includes team scoping
     const call = (fetchImpl as ReturnType<typeof vi.fn>).mock.calls[0] as [string, RequestInit];
     const body = JSON.parse(call[1].body as string) as { variables: { filter: unknown } };
-    expect(body.variables.filter).toHaveProperty("and");
+    expect(body.variables.filter).toEqual({
+      and: [
+        { name: { eqIgnoreCase: "bug" } },
+        { or: [{ team: { id: { eq: "team-1" } } }, { team: { null: true } }] }
+      ]
+    });
   });
 
   it("throws on not-found", async () => {
@@ -281,6 +289,10 @@ describe("resolveStateId", () => {
 
     const result = await resolveStateId("In Progress", "team-uuid-1", makeOptions(fetchImpl));
     expect(result).toBe("state-2");
+
+    const call = (fetchImpl as ReturnType<typeof vi.fn>).mock.calls[0] as [string, RequestInit];
+    const body = JSON.parse(call[1].body as string) as { query: string };
+    expect(body.query).toContain("states(first: 250)");
   });
 
   it("resolves case-insensitively", async () => {
@@ -366,7 +378,10 @@ describe("resolveProjectId", () => {
     const call = (fetchImpl as ReturnType<typeof vi.fn>).mock.calls[0] as [string, RequestInit];
     const body = JSON.parse(call[1].body as string) as { variables: Record<string, unknown> };
     expect(body.variables.filter).toEqual({
-      accessibleTeams: { some: { id: { eq: "team-1" } } }
+      and: [
+        { name: { containsIgnoreCase: "sidecar" } },
+        { accessibleTeams: { some: { id: { eq: "team-1" } } } }
+      ]
     });
   });
 
@@ -400,6 +415,6 @@ describe("resolveProjectId", () => {
 
     const secondCall = (fetchImpl as ReturnType<typeof vi.fn>).mock.calls[1] as [string, RequestInit];
     const body = JSON.parse(secondCall[1].body as string) as { variables: Record<string, unknown> };
-    expect(body.variables.filter).toBeUndefined();
+    expect(body.variables.filter).toEqual({ name: { containsIgnoreCase: "UAT-cwi" } });
   });
 });
