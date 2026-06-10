@@ -93,6 +93,11 @@ query CommentList($first: Int!, $after: String, $issueId: ID!) {
 }
 ${CURATED_COMMENT_FRAGMENT}`;
 
+const COMMENT_LIST_ISSUE_LOOKUP_QUERY = `
+query CommentListIssueLookup($id: String!) {
+  issue(id: $id) { id }
+}`;
+
 const COMMENT_CREATE_MUTATION = `
 mutation CommentCreate($input: CommentCreateInput!) {
   commentCreate(input: $input) {
@@ -176,11 +181,26 @@ async function handleCommentList(options: CommentCommandOptions): Promise<number
   const ctx = buildContext(options);
 
   try {
+    let issueId = options.issue;
+    if (looksLikeIssueIdentifier(options.issue)) {
+      const issueResponse = await ctx.graphql<{ issue: { id: string } | null }>(
+        COMMENT_LIST_ISSUE_LOOKUP_QUERY,
+        { id: options.issue }
+      );
+      if (ctx.hasErrors(issueResponse.body.errors)) {
+        return ctx.emitFailure(ctx.mapGraphQLErrors(issueResponse.body.errors));
+      }
+      if (issueResponse.body.data?.issue?.id === undefined) {
+        return ctx.emitNotFound(`Issue "${options.issue}" not found.`);
+      }
+      issueId = issueResponse.body.data.issue.id;
+    }
+
     const profile = await ctx.resolveProfile();
 
     const commonPaginateInput = {
       query: COMMENT_LIST_QUERY,
-      variables: { issueId: options.issue },
+      variables: { issueId },
       credentials: profile.credentials,
       ...(options.apiUrl === undefined
         ? profile.metadata.baseUrl === undefined
@@ -409,6 +429,10 @@ export async function handleCommentCommand(
   }
 
   return emitValidationError("unsupported comment command. Try linearctl comment list, create, update, or delete.", options);
+}
+
+function looksLikeIssueIdentifier(value: string): boolean {
+  return /^[A-Z][A-Z0-9]+-\d+$/.test(value);
 }
 
 function hasErrors(errors: GraphQLErrorPayload[] | undefined): boolean {

@@ -50,6 +50,8 @@ linearctl issue attach-slack <identifier> --url <slack-url> [--sync] [--title <t
 linearctl issue comment <identifier> --body <text> --json
 ```
 
+`issue get` / `issue view` returns soft-deleted Linear issues when the API can still read them. JSON output includes `trashed` and `archivedAt`; human output prints `Trashed: true` and `Archived: <timestamp>` when applicable. A missing referenced issue returns exit 4 with `category: "not-found"` in `--json-envelope`.
+
 ### Bulk operations
 
 ```bash
@@ -180,6 +182,8 @@ linearctl comment create --issue <id> --body <text> --json
 linearctl comment update <id> --body <text> --json
 linearctl comment delete <id> --json              # [destructive]
 ```
+
+When `--issue` is a human-readable issue identifier such as `INF-123`, `comment list` first verifies that the parent issue exists and returns exit 4 / `category: "not-found"` if it does not.
 
 ## Attachment
 

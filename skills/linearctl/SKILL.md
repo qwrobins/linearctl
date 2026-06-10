@@ -33,7 +33,7 @@ Raw GraphQL should not be used merely because it is possible. It is the fallback
 ## Available curated commands
 
 ### Issues
-- `linearctl issue get <identifier> --json` / `linearctl issue view <identifier> --json` — fetch a single issue by identifier (e.g. INF-2975) or UUID
+- `linearctl issue get <identifier> --json` / `linearctl issue view <identifier> --json` — fetch a single issue by identifier (e.g. INF-2975) or UUID; JSON includes `trashed` and `archivedAt`, so delete verification must check those fields instead of assuming exit 0 means live
 - `linearctl issue list [--search <text>|--query <text>] [--state <name> ...] [--status <name>] [--assignee <name|displayName|email|"me"|id>] [--team <id|key|name>] [--label <name|id>] [--priority <0-4>] [--cycle <id>] [--project <name|id>] [--created-after <date>] [--updated-after <date>] [--completed-after <date>] [--order-by <field>] [--all-teams] [--all] [--max <n>|--limit <n>] [--json]` — list issues with filters; repeated `--state` values are unioned; `--status` aliases `--state`; `--search`/`--query` routes to full-text search and composes with the other filters; friendly names resolve case-insensitively
 - `linearctl issue search [<text>|--query <text>] [--team <id|key|name>] [--all] --json` — full-text search across issues; profile default teams are not applied, so pass `--team` to scope explicitly
 - `linearctl issue create --title <title> --team <id> [--description <text>|--description-file <path|->] [--priority <0-4>] [--estimate <n>] [--assignee <id>] [--label <id>] [--state <id>] [--cycle <id>] [--project <name|id>] [--project-milestone <id>|--milestone <id>] --json` — create an issue
@@ -91,7 +91,7 @@ Raw GraphQL should not be used merely because it is possible. It is the fallback
 - `linearctl label delete <id> --json`
 
 ### Comments
-- `linearctl comment list --issue <id> --json`
+- `linearctl comment list --issue <id> --json` — with human-readable issue identifiers, a missing parent issue returns exit 4 / `category: "not-found"` instead of an empty list
 - `linearctl comment create --issue <id> --body <text> --json`
 - `linearctl comment update <id> --body <text> --json`
 - `linearctl comment delete <id> --json`
@@ -213,6 +213,8 @@ Use `--dry-run` on any mutating command to preview what would happen without exe
 | 4 | Not found | Verify identifier/ID |
 | 5 | Validation error | Check flags and input |
 | 6 | Schema drift | Fall back to `linearctl gql`, update CLI |
+
+Missing referenced Linear entities, including issues reported by inline GraphQL errors such as `Could not find referenced Issue`, map to exit 4 / `category: "not-found"` consistently across curated get, update, delete, comment-list parent lookup, and bulk paths.
 
 ## Anti-patterns
 

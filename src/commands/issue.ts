@@ -123,6 +123,8 @@ fragment CuratedIssue on Issue {
   parent { id identifier title }
   labels { nodes { id name } }
   url
+  trashed
+  archivedAt
   createdAt
   updatedAt
 }`;
@@ -144,6 +146,8 @@ fragment CuratedIssueSearchResult on IssueSearchResult {
   parent { id identifier title }
   labels { nodes { id name } }
   url
+  trashed
+  archivedAt
   createdAt
   updatedAt
 }`;
@@ -273,6 +277,8 @@ interface RawIssue {
   parent: { id: string; identifier: string; title: string } | null;
   labels: { nodes: Array<{ id: string; name: string }> };
   url: string;
+  trashed: boolean | null;
+  archivedAt: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -293,6 +299,8 @@ export interface NormalizedIssue {
   parent: { id: string; identifier: string; title: string } | null;
   labels: Array<{ id: string; name: string }>;
   url: string;
+  trashed: boolean | null;
+  archivedAt: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -314,6 +322,8 @@ export function normalizeIssue(raw: RawIssue): NormalizedIssue {
     parent: raw.parent,
     labels: raw.labels.nodes,
     url: raw.url,
+    trashed: raw.trashed,
+    archivedAt: raw.archivedAt,
     createdAt: raw.createdAt,
     updatedAt: raw.updatedAt
   };
@@ -336,6 +346,12 @@ function printHumanIssue(issue: NormalizedIssue): void {
   }
   if (issue.project !== null) {
     process.stdout.write(`  Project:  ${issue.project.name}\n`);
+  }
+  if (issue.trashed === true) {
+    process.stdout.write("  Trashed: true\n");
+  }
+  if (issue.archivedAt !== null) {
+    process.stdout.write(`  Archived: ${issue.archivedAt}\n`);
   }
   if (issue.labels.length > 0) {
     process.stdout.write(`  Labels:   ${issue.labels.map((l) => l.name).join(", ")}\n`);
