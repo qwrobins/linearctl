@@ -4,6 +4,14 @@ import { executeGraphQL, GraphQLTransportError } from "./graphql.js";
 export interface RetryOptions {
   noRetry?: boolean;
   maxRetries?: number;
+  onRetryDelay?: (event: RetryDelayEvent) => void;
+}
+
+export interface RetryDelayEvent {
+  delayMs: number;
+  attempt: number;
+  maxRetries: number;
+  source: "retry-after" | "backoff";
 }
 
 export interface RetryOptionInput {
@@ -40,10 +48,13 @@ export async function executeGraphQLWithRetry<TData>(
       }
 
       const retryAfter = extractRetryAfterMs(error);
-      const delay = retryAfter ?? computeBackoffDelay(attempt);
+      const source = retryAfter === undefined ? "backoff" : "retry-after";
+      const delay = retryAfter === undefined ? computeBackoffDelay(attempt) : Math.min(retryAfter, MAX_DELAY_MS);
+      input.retry?.onRetryDelay?.({ delayMs: delay, attempt: attempt + 1, maxRetries, source });
 
+      const retrySource = source === "retry-after" ? " from Retry-After" : "";
       process.stderr.write(
-        `Warning: rate limited, retrying in ${Math.round(delay / 1000)}s (attempt ${attempt + 1}/${maxRetries})...\n`
+        `Warning: rate limited, retrying in ${Math.round(delay / 1000)}s${retrySource} (attempt ${attempt + 1}/${maxRetries})...\n`
       );
 
       await (input.sleepImpl ?? sleep)(delay);

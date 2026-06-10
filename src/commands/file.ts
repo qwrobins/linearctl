@@ -84,10 +84,11 @@ async function fetchWithHostValidatedRedirects(
 ): Promise<Response> {
   let currentUrl = url;
   const originalHost = new URL(url).host;
+  let currentInit: RequestInit = init;
 
   for (let redirectCount = 0; redirectCount <= MAX_FILE_REDIRECTS; redirectCount++) {
     const response = await fetchImpl(currentUrl, {
-      ...init,
+      ...currentInit,
       redirect: "manual"
     });
 
@@ -105,8 +106,13 @@ async function fetchWithHostValidatedRedirects(
     }
 
     const parsedNextUrl = new URL(nextUrl);
-    if ((parsedNextUrl.protocol !== "https:" && parsedNextUrl.protocol !== "http:") || parsedNextUrl.host !== originalHost) {
-      throw new Error(`File request redirected to unexpected host: ${parsedNextUrl.host}`);
+    if (parsedNextUrl.protocol !== "https:" && parsedNextUrl.protocol !== "http:") {
+      throw new Error(`File request redirected to unsupported protocol: ${parsedNextUrl.protocol}`);
+    }
+
+    if (parsedNextUrl.host !== originalHost) {
+      const { headers: _headers, ...rest } = currentInit;
+      currentInit = rest;
     }
 
     currentUrl = nextUrl;

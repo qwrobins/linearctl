@@ -1,6 +1,7 @@
 import { join, dirname } from "node:path";
 import { mapCommandFailure } from "../core/errors/command-failure.js";
 import { ExitCode } from "../core/errors/exit-codes.js";
+import { emitValidationError } from "../core/output/validation-error.js";
 import { failureEnvelope, successEnvelope } from "../core/output/envelope.js";
 import type { CommandError } from "../core/output/envelope.js";
 import { resolveStoredProfile } from "../core/auth/runtime.js";
@@ -53,14 +54,12 @@ export async function handleSchemaCommand(
     return handleSchemaCheck(rest, options);
   }
 
-  process.stderr.write("Error: unsupported schema command. Try linearctl schema version, linearctl schema pull, or linearctl schema check.\n");
-  return ExitCode.ValidationError;
+  return emitValidationError("unsupported schema command. Try linearctl schema version, linearctl schema pull, or linearctl schema check.", options);
 }
 
 async function handleSchemaVersion(positionals: string[], options: SchemaCommandOptions): Promise<number> {
   if (positionals.length > 0) {
-    process.stderr.write("Error: schema version does not accept positional arguments.\n");
-    return ExitCode.ValidationError;
+    return emitValidationError("schema version does not accept positional arguments.", options);
   }
 
   const meta = await loadPreferredSchemaMetadata(options.configFile);
@@ -90,8 +89,7 @@ async function handleSchemaVersion(positionals: string[], options: SchemaCommand
 
 async function handleSchemaPull(positionals: string[], options: SchemaCommandOptions): Promise<number> {
   if (positionals.length > 0) {
-    process.stderr.write("Error: schema pull does not accept positional arguments.\n");
-    return ExitCode.ValidationError;
+    return emitValidationError("schema pull does not accept positional arguments.", options);
   }
 
   try {
@@ -116,8 +114,7 @@ async function handleSchemaPull(positionals: string[], options: SchemaCommandOpt
     }, normalizeRetryOptions(options));
 
     if (response.body.data === undefined || response.body.data.__schema === undefined) {
-      process.stderr.write("Error: introspection response did not contain schema data.\n");
-      return ExitCode.GeneralError;
+      return emitValidationError("introspection response did not contain schema data.", options);
     }
 
     const schema = response.body.data.__schema as Record<string, unknown>;
@@ -184,8 +181,7 @@ async function handleSchemaPull(positionals: string[], options: SchemaCommandOpt
 
 async function handleSchemaCheck(positionals: string[], options: SchemaCommandOptions): Promise<number> {
   if (positionals.length > 0) {
-    process.stderr.write("Error: schema check does not accept positional arguments.\n");
-    return ExitCode.ValidationError;
+    return emitValidationError("schema check does not accept positional arguments.", options);
   }
 
   try {
@@ -213,8 +209,7 @@ async function handleSchemaCheck(positionals: string[], options: SchemaCommandOp
     }, normalizeRetryOptions(options));
 
     if (response.body.data === undefined || response.body.data.__schema === undefined) {
-      process.stderr.write("Error: introspection response did not contain schema data.\n");
-      return ExitCode.GeneralError;
+      return emitValidationError("introspection response did not contain schema data.", options);
     }
 
     const schema = response.body.data.__schema as Record<string, unknown>;

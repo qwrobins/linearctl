@@ -12,6 +12,7 @@ import { emitDryRunResult } from "../core/output/dry-run.js";
 import { resolveContentInput, resolveDescriptionInput } from "../core/io/text-input.js";
 import { resolveProjectId, resolveTeamId, resolveUserId, looksLikeId } from "../core/resolution/resolve.js";
 import type { ResolverOptions } from "../core/resolution/resolve.js";
+import { normalizeRetryOptions } from "../core/transport/retry.js";
 import { CommandContext } from "../core/runtime/command-context.js";
 import { runTwoStepWorkflow } from "../core/runtime/workflow.js";
 
@@ -616,6 +617,7 @@ async function handleProjectList(options: ProjectCommandOptions): Promise<number
           : { apiUrl: profile.metadata.baseUrl }
         : { apiUrl: options.apiUrl }),
       ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl }),
+      retry: normalizeRetryOptions(options),
       extractConnection: (data: unknown) => {
         const d = data as { projects: { nodes: RawProject[]; pageInfo: PageInfo } };
         return d.projects;

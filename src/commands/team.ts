@@ -7,6 +7,7 @@ import { setProfileMetadata, writeLinearConfigFile } from "../core/config/config
 import { paginateGraphQL, validatePaginationOptions } from "../core/pagination/pagination.js";
 import type { PaginationOptions } from "../core/pagination/pagination.js";
 import { streamPaginateGraphQL } from "../core/pagination/streaming.js";
+import { normalizeRetryOptions } from "../core/transport/retry.js";
 import { CommandContext } from "../core/runtime/command-context.js";
 import { resolveTeamId, looksLikeId, ResolutionError } from "../core/resolution/resolve.js";
 
@@ -263,6 +264,7 @@ async function handleTeamList(options: TeamCommandOptions): Promise<number> {
           : { apiUrl: profile.metadata.baseUrl }
         : { apiUrl: options.apiUrl }),
       ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl }),
+      retry: normalizeRetryOptions(options),
       extractConnection: (data: unknown) => {
         const d = data as { teams: { nodes: RawTeam[]; pageInfo: PageInfo } };
         return d.teams;
@@ -339,6 +341,7 @@ async function handleTeamMembers(
           : { apiUrl: profile.metadata.baseUrl }
         : { apiUrl: options.apiUrl }),
       ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl }),
+      retry: normalizeRetryOptions(options),
       extractConnection: (data: unknown) => {
         const d = data as { team: { members: { nodes: RawTeamMember[]; pageInfo: PageInfo } } | null };
         if (d.team === null) {

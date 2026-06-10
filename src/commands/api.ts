@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { failureEnvelope, successEnvelope } from "../core/output/envelope.js";
 import { ExitCode } from "../core/errors/exit-codes.js";
+import { emitValidationError } from "../core/output/validation-error.js";
 import type { FetchLike } from "../core/transport/graphql.js";
 import { normalizeRetryOptions } from "../core/transport/retry.js";
 import { readAllStdin, isTtyInput } from "../core/io/stdin.js";
@@ -284,11 +285,11 @@ export async function handleApiCommand(
   const manifest = await loadManifest(options.manifestPath);
 
   if (manifest === null) {
-    process.stderr.write(
-      "Error: API commands manifest not found.\n" +
-      "Run 'linearctl schema pull' and then 'bun run generate:api-manifest' to generate it.\n"
+    return emitValidationError(
+      "API commands manifest not found.\n" +
+      "Run 'linearctl schema pull' and then 'bun run generate:api-manifest' to generate it.",
+      { ...options, sourceLayer: "generated" }
     );
-    return ExitCode.ValidationError;
   }
 
   const [resource, operation, ...rest] = positionals;
@@ -303,8 +304,7 @@ export async function handleApiCommand(
   if (resource === "search") {
     const term = operation;
     if (term === undefined || term === "") {
-      process.stderr.write("Error: usage: linearctl api search <term>\n");
-      return ExitCode.ValidationError;
+      return emitValidationError("usage: linearctl api search <term>", { ...options, sourceLayer: "generated" });
     }
     const results = searchManifest(manifest, term);
     if (options.json) {
@@ -332,20 +332,13 @@ export async function handleApiCommand(
     // Check if resource exists at all
     const resourceExists = manifest.some((e) => e.resource === resource);
     if (!resourceExists) {
-      process.stderr.write(
-        `Error: unknown resource '${resource}'. Use 'linear api --help' to list resources.\n`
-      );
-      return ExitCode.ValidationError;
+      return emitValidationError(`unknown resource '${resource}'. Use 'linear api --help' to list resources.`, { ...options, sourceLayer: "generated" });
     }
-    process.stderr.write(
-      `Error: unknown operation '${operation}' for resource '${resource}'. Use 'linear api ${resource} --help' to list operations.\n`
-    );
-    return ExitCode.ValidationError;
+    return emitValidationError(`unknown operation '${operation}' for resource '${resource}'. Use 'linear api ${resource} --help' to list operations.`, { ...options, sourceLayer: "generated" });
   }
 
   if (rest.length > 0) {
-    process.stderr.write("Error: unexpected positional arguments after operation.\n");
-    return ExitCode.ValidationError;
+    return emitValidationError("unexpected positional arguments after operation.", { ...options, sourceLayer: "generated" });
   }
 
   if (options.help === true) {
@@ -356,8 +349,7 @@ export async function handleApiCommand(
   // Validate input mode vs provided flags
   if (entry.inputMode === "id" || entry.inputMode === "id-plus-json") {
     if (options.id === undefined) {
-      process.stderr.write(`Error: --id is required for 'linear api ${resource} ${operation}'.\n`);
-      return ExitCode.ValidationError;
+      return emitValidationError(`--id is required for 'linear api ${resource} ${operation}'.`, { ...options, sourceLayer: "generated" });
     }
   }
 
@@ -367,23 +359,17 @@ export async function handleApiCommand(
     inputJson = await resolveInputJson(options);
   } catch (error) {
     const message = error instanceof Error ? error.message : "invalid input";
-    process.stderr.write(`Error: ${message}\n`);
-    return ExitCode.ValidationError;
+    return emitValidationError(message, { ...options, sourceLayer: "generated" });
   }
 
   const hasRequiredJsonArgs = entry.requiredArgs.length > 0 &&
     entry.inputMode !== "id" &&
     !(entry.inputMode === "id-plus-json" && entry.requiredArgs.every((a) => a.name === "id"));
   if (hasRequiredJsonArgs && inputJson === null) {
-    process.stderr.write(
-      `Error: this command requires JSON input. Use --input-json, --input-file, or --input-stdin.\n`
-    );
-    return ExitCode.ValidationError;
+    return emitValidationError("this command requires JSON input. Use --input-json, --input-file, or --input-stdin.", { ...options, sourceLayer: "generated" });
   }
 
-  // Build and execute the GraphQL operation
-  const retry = normalizeRetryOptions(options);
-  const ctx = createCommandContext({
+  const fallbackCtx = createCommandContext({
     json: options.json,
     jsonEnvelope: options.jsonEnvelope,
     ...(options.profile === undefined ? {} : { profile: options.profile }),
@@ -392,11 +378,23 @@ export async function handleApiCommand(
     ...(options.apiUrl === undefined ? {} : { apiUrl: options.apiUrl }),
     env: options.env,
     ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl }),
-    ...(retry === undefined ? {} : { retry }),
     sourceLayer: "generated"
   });
 
   try {
+    const retry = normalizeRetryOptions(options);
+    const ctx = createCommandContext({
+      json: options.json,
+      jsonEnvelope: options.jsonEnvelope,
+      ...(options.profile === undefined ? {} : { profile: options.profile }),
+      configFile: options.configFile,
+      credentialsFile: options.credentialsFile,
+      ...(options.apiUrl === undefined ? {} : { apiUrl: options.apiUrl }),
+      env: options.env,
+      ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl }),
+      ...(retry === undefined ? {} : { retry }),
+      sourceLayer: "generated"
+    });
     const variables = buildVariables(entry, options.id, inputJson);
     const query = buildGraphQLOperation(entry, options.fields);
     const response = await ctx.graphql<Record<string, unknown>>(
@@ -426,6 +424,9 @@ export async function handleApiCommand(
 
     return ExitCode.Success;
   } catch (error) {
-    return ctx.emitCaughtError(error);
+    if (error instanceof RangeError) {
+      return emitValidationError(error.message, { ...options, sourceLayer: "generated" });
+    }
+    return fallbackCtx.emitCaughtError(error);
   }
 }

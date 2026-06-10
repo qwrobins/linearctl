@@ -53,6 +53,31 @@ async function writeProfileFiles(directory: string): Promise<{ configFile: strin
   return { configFile, credentialsFile };
 }
 
+async function writeDefaultTeamProfileFiles(directory: string): Promise<{ configFile: string; credentialsFile: string }> {
+  const configFile = join(directory, "config");
+  const credentialsFile = join(directory, "credentials");
+
+  await writeLinearConfigFile(configFile, {
+    defaultProfile: "work",
+    profiles: {
+      work: {
+        defaultTeam: "team-default"
+      }
+    }
+  });
+  await writeCredentialsFile(credentialsFile, {
+    profiles: {
+      work: {
+        profileName: "work",
+        type: "api_key",
+        apiKey: "lin_api_work"
+      }
+    }
+  });
+
+  return { configFile, credentialsFile };
+}
+
 function makeRawIssue(overrides?: Partial<Record<string, unknown>>) {
   return {
     id: "issue-uuid-1",
@@ -984,6 +1009,55 @@ describe("handleIssueCommand — issue search", () => {
     }
   });
 
+  it("does not apply the profile default team to workspace-wide issue search", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-issue-"));
+    const paths = await writeDefaultTeamProfileFiles(directory);
+    const fetchImpl = makeFetch({
+      data: {
+        searchIssues: {
+          nodes: [makeRawIssue()],
+          pageInfo: { hasNextPage: false, endCursor: null }
+        }
+      }
+    });
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleIssueCommand(["search", "vault upgrade"], {
+        ...baseOptions(paths),
+        fetchImpl
+      });
+
+      expect(exitCode).toBe(0);
+      const callBody = JSON.parse(String((fetchImpl as ReturnType<typeof vi.fn>).mock.calls[0]?.[1]?.body));
+      expect(callBody.variables.term).toBe("vault upgrade");
+      expect(callBody.variables.filter).toBeUndefined();
+    } finally {
+      output.restore();
+    }
+  });
+
+  it("rejects ordering flags on issue search instead of silently dropping them", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-issue-"));
+    const paths = await writeDefaultTeamProfileFiles(directory);
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleIssueCommand(["search", "vault upgrade"], {
+        ...baseOptions(paths),
+        orderBy: "updatedAt",
+        fetchImpl: vi.fn(async () => {
+          throw new Error("unexpected network call");
+        }) as unknown as FetchLike
+      });
+
+      expect(exitCode).toBe(5);
+      expect(output.stderr.join("")).toContain("does not support --order-by");
+    } finally {
+      output.restore();
+    }
+  });
+
   it("routes issue list --search through text search", async () => {
     const directory = await mkdtemp(join(tmpdir(), "linear-cli-issue-"));
     const paths = await writeProfileFiles(directory);
@@ -1613,6 +1687,7 @@ describe("handleIssueCommand — issue bulk-update", () => {
       expect(parsed.succeeded[0].identifier).toBe("INF-2975");
       expect(parsed.failed).toHaveLength(1);
       expect(parsed.failed[0].identifier).toBe("NONEXISTENT-1");
+      expect(parsed.failed[0].category).toBe("general");
     } finally {
       output.restore();
     }
@@ -1650,7 +1725,7 @@ describe("handleIssueCommand — issue bulk-update", () => {
       const envelope = JSON.parse(output.stdout.join(""));
       expect(envelope.ok).toBe(false);
       expect(envelope.data.succeeded).toHaveLength(1);
-      expect(envelope.data.failed).toEqual([{ identifier: "NONEXISTENT-1", error: "Issue not found" }]);
+      expect(envelope.data.failed).toEqual([{ identifier: "NONEXISTENT-1", error: "Issue not found", category: "general" }]);
       expect(envelope.errors).toEqual([
         {
           category: "general",
@@ -1658,6 +1733,48 @@ describe("handleIssueCommand — issue bulk-update", () => {
         }
       ]);
       expect(envelope.meta.partial).toBe(true);
+    } finally {
+      output.restore();
+    }
+  });
+
+  it("preserves mapped per-item failure categories and uses category-priority exit codes", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-issue-"));
+    const paths = await writeProfileFiles(directory);
+    let callCount = 0;
+    const fetchImpl = vi.fn(async () => {
+      callCount++;
+      if (callCount === 1) {
+        return new Response(JSON.stringify({
+          data: { issueUpdate: { success: true, issue: makeRawIssue({ identifier: "INF-2975" }) } }
+        }), { status: 200 });
+      }
+      return new Response(JSON.stringify({
+        errors: [{ message: "Rate limited" }]
+      }), { status: 429 });
+    }) as unknown as FetchLike;
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleIssueCommand(["bulk-update"], {
+        ...baseOptions(paths),
+        json: false,
+        jsonEnvelope: true,
+        ids: "INF-2975,INF-2976",
+        priority: "1",
+        noRetry: true,
+        fetchImpl
+      });
+
+      expect(exitCode).toBe(3);
+      const envelope = JSON.parse(output.stdout.join(""));
+      expect(envelope.data.failed).toEqual([{ identifier: "INF-2976", error: "Linear GraphQL request failed with HTTP 429", category: "rate-limit" }]);
+      expect(envelope.errors).toEqual([
+        {
+          category: "rate-limit",
+          message: "Bulk operation failed for INF-2976: Linear GraphQL request failed with HTTP 429"
+        }
+      ]);
     } finally {
       output.restore();
     }
@@ -1715,7 +1832,7 @@ describe("handleIssueCommand — issue bulk-update", () => {
       expect(exitCode).toBe(1);
       const parsed = JSON.parse(output.stdout.join(""));
       expect(parsed.succeeded).toHaveLength(0);
-      expect(parsed.failed).toEqual([{ identifier: "INF-2975", error: "Issue lookup failed" }]);
+      expect(parsed.failed).toEqual([{ identifier: "INF-2975", error: "Issue lookup failed", category: "general" }]);
     } finally {
       output.restore();
     }

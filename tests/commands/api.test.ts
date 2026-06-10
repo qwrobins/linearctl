@@ -607,6 +607,48 @@ describe("handleApiCommand", () => {
       expect(parsed.errors[0].message).toBe("title must be shorter than or equal to 255 characters");
       expect(parsed.meta.sourceLayer).toBe("generated");
     });
+
+    it("emits validation envelopes for generated argument errors", async () => {
+      const manifestPath = await writeManifest(tmpDir);
+      const paths = await writeProfileFiles(tmpDir);
+
+      const result = await handleApiCommand(["issue", "get"], {
+        ...baseOptions(paths, manifestPath),
+        json: false,
+        jsonEnvelope: true
+      });
+
+      expect(result).toBe(5);
+      const parsed = JSON.parse(output.stdout.join(""));
+      expect(parsed.ok).toBe(false);
+      expect(parsed.errors).toEqual([
+        {
+          category: "validation",
+          message: "--id is required for 'linear api issue get'."
+        }
+      ]);
+      expect(parsed.meta.sourceLayer).toBe("generated");
+    });
+
+    it("keeps retry option validation inside the generated envelope boundary", async () => {
+      const manifestPath = await writeManifest(tmpDir);
+      const paths = await writeProfileFiles(tmpDir);
+
+      const result = await handleApiCommand(["issue", "get"], {
+        ...baseOptions(paths, manifestPath),
+        json: false,
+        jsonEnvelope: true,
+        id: "issue-1",
+        maxRetries: -1
+      });
+
+      expect(result).toBe(5);
+      const parsed = JSON.parse(output.stdout.join(""));
+      expect(parsed.ok).toBe(false);
+      expect(parsed.errors[0].category).toBe("validation");
+      expect(parsed.errors[0].message).toContain("maxRetries");
+      expect(parsed.meta.sourceLayer).toBe("generated");
+    });
   });
 
   describe("input validation", () => {

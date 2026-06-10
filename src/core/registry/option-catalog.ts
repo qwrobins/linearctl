@@ -102,7 +102,7 @@ export const OPTION_CATALOG: Record<string, OptionSpec> = {
 
 /** Reusable option groups that commands compose from */
 export const OPTION_GROUPS = {
-  global: ["help", "json", "json-envelope", "config", "config-file", "credentials", "credentials-file", "profile", "api-url"] as const,
+  global: ["help", "version", "metadata", "json", "json-envelope", "config", "config-file", "credentials", "credentials-file", "profile", "api-url"] as const,
   retry: ["no-retry", "max-retries"] as const,
   pagination: ["all", "max", "limit", "page-size", "after"] as const,
   streaming: ["jsonl", "quiet"] as const,

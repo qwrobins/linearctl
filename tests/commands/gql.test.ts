@@ -538,4 +538,37 @@ describe("handleGqlCommand", () => {
       output.restore();
     }
   });
+
+  it("emits validation envelopes for raw GraphQL argument errors", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-gql-"));
+    const { configFile, credentialsFile } = await writeProfileFiles(directory);
+    const output = captureOutput();
+
+    try {
+      await expect(
+        handleGqlCommand(["query"], {
+          json: false,
+          jsonEnvelope: true,
+          raw: false,
+          stdin: false,
+          vars: [],
+          configFile,
+          credentialsFile,
+          env: {},
+          stdinStream: Readable.from([]),
+          fetchImpl: vi.fn() as unknown as FetchLike
+        })
+      ).resolves.toBe(5);
+
+      const parsed = JSON.parse(output.stdout.join(""));
+      expect(parsed.ok).toBe(false);
+      expect(parsed.errors[0]).toEqual({
+        category: "validation",
+        message: "provide exactly one of inline query text, --file, or --stdin."
+      });
+      expect(parsed.meta.sourceLayer).toBe("raw-graphql");
+    } finally {
+      output.restore();
+    }
+  });
 });

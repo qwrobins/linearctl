@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0] - 2026-06-10
+
+### Changed
+
+- **Breaking:** `issue search <text>` without `--team` searches the whole workspace again, even when the active profile has a default team. Pass `--team` to scope full-text search explicitly.
+- **Breaking:** Bulk operation failure envelopes now preserve mapped per-item error categories, and the overall exit code is derived by priority: auth, rate-limit, not-found, then general.
+- File upload and download now follow cross-host redirects after dropping Linear authorization and signed upload headers; same-host redirects continue to preserve those headers.
+- `issue create --dry-run` resolves friendly names before emitting the dry-run payload, so dry runs validate resolvability without creating issues.
+
+### Fixed
+
+- `--no-retry` and `--max-retries` now reach all curated list pagination paths, not only issue listing.
+- Team, user, and label resolution now prefer exact case-sensitive matches before reporting ambiguity; users prefer email matches, and team-scoped labels beat same-named workspace labels under `--team`.
+- Leading `--version` and `--metadata curated --json` now early-exit correctly even when command tokens follow them.
+- Curated metadata classifies archive/delete semantics consistently, including bulk operations, and reserves `confirmation-required` for commands that actually require confirmation.
+- `Retry-After` sleeps are capped at the maximum retry delay and report a stderr notice that the pause came from `Retry-After`.
+- `issue search --order-by` / `--order-dir` now errors clearly instead of dropping ordering flags.
+- `schema pull` help shows the real default output directory, `<config-dir>/schema`.
+- `api`, `gql`, and `schema` validation errors now use the unified envelope-aware emitter when `--json-envelope` is set.
+
 ## [0.7.3] - 2026-06-10
 
 ### Fixed

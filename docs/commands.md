@@ -1,6 +1,6 @@
 # Command reference
 
-All commands support `--json` for machine-readable output and `--json-envelope` for metadata-enriched output. Mutating commands support `--dry-run` to preview without executing.
+All commands support `--json` for machine-readable output and `--json-envelope` for metadata-enriched output. Mutating commands support `--dry-run` to preview without executing; dry runs validate and resolve friendly names before emitting the preview payload.
 
 Global flags: `--profile <name>`, `--no-retry`, `--max-retries <n>`.
 
@@ -18,8 +18,8 @@ linearctl issue list [--search <text>|--query <text>] [--team <name|key|id>] [--
   [--all-teams] [--filter-json <json>] [--order-by <field>] \
   [--all] [--max <n>|--limit <n>] [--page-size <n>] [--after <cursor>] --json
 
-# Search issues by text
-linearctl issue search [<text>|--query <text>] [--all] --json
+# Search issues by text. Profile default teams are not applied; pass --team to scope explicitly.
+linearctl issue search [<text>|--query <text>] [--team <name|key|id>] [--all] --json
 
 # Create an issue
 linearctl issue create --title <title> --team <name|key|id> \
@@ -71,9 +71,9 @@ linearctl issue bulk-delete --ids <id1,id2,...> --yes|--confirm --json
 linearctl issue bulk-assign --ids <id1,id2,...> --assignee <id> --json
 ```
 
-Bulk operations fail the command when any item fails. With `--json-envelope`, partial failures return `ok: false`, populate `errors[]`, include per-item `data.succeeded` and `data.failed`, and set `meta.partial: true` when at least one item succeeded.
+Bulk operations fail the command when any item fails. With `--json-envelope`, partial failures return `ok: false`, populate `errors[]`, include per-item `data.succeeded` and `data.failed`, and set `meta.partial: true` when at least one item succeeded. Per-item failures preserve mapped error categories, and the overall exit code is selected by highest-priority category: auth, rate-limit, not-found, then general.
 
-Friendly names for teams, users, labels, workflow states, and projects resolve case-insensitively. When `issue list --state <name>` has a team scope from `--team` or the profile default team, it resolves the state name to an ID before filtering; without a team scope, it falls back to a case-insensitive state-name filter.
+Friendly names for teams, users, labels, workflow states, and projects resolve case-insensitively. When multiple case-insensitive matches exist, exact case-sensitive matches win before ambiguity is reported; user email matches outrank name/displayName matches, and team-scoped labels outrank same-named workspace labels under `--team`. When `issue list --state <name>` has a team scope from `--team` or the profile default team, it resolves the state name to an ID before filtering; without a team scope, it falls back to a case-insensitive state-name filter.
 
 ## Project
 
@@ -202,7 +202,7 @@ linearctl file url <attachment-id> [--expires-in <seconds>] --json
 linearctl file download <url> [--output <path>] --json
 ```
 
-File upload and download requests use manual redirect handling. Redirects are followed only when they stay on the original host, so signed upload headers and Linear authorization are not reattached to a different host.
+File upload and download requests use manual redirect handling. Same-host redirects keep signed upload headers and Linear authorization. Cross-host redirects are followed only after dropping those headers.
 
 ## Auth
 

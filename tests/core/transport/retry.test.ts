@@ -159,6 +159,38 @@ describe("executeGraphQLWithRetry", () => {
     }
   });
 
+  it("caps Retry-After sleeps and reports the explicit backoff source", async () => {
+    const stderr: string[] = [];
+    const stderrSpy = vi.spyOn(process.stderr, "write").mockImplementation(((chunk: string | Uint8Array) => {
+      stderr.push(String(chunk));
+      return true;
+    }) as typeof process.stderr.write);
+    const sleeps: number[] = [];
+    try {
+      let callCount = 0;
+      const fetchImpl = vi.fn(async () => {
+        callCount++;
+        if (callCount === 1) {
+          return rateLimitResponse({ "Retry-After": "3600" });
+        }
+        return successResponse({ viewer: { id: "1" } });
+      }) as FetchLike;
+
+      await executeGraphQLWithRetry({
+        query: "query { viewer { id } }",
+        credentials: mockCredentials(),
+        fetchImpl,
+        retry: { maxRetries: 1 },
+        sleepImpl: async (ms) => { sleeps.push(ms); }
+      });
+
+      expect(sleeps).toEqual([30_000]);
+      expect(stderr.join("")).toContain("Retry-After");
+    } finally {
+      stderrSpy.mockRestore();
+    }
+  });
+
   it("honors HTTP-date Retry-After headers", async () => {
     const stderrSpy = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
     const sleeps: number[] = [];

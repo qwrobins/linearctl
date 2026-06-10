@@ -8,8 +8,7 @@ import {
 } from "../../core/metadata/command-metadata.js";
 
 const NON_CURATED_COMMANDS = new Set(["api", "gql"]);
-const DESTRUCTIVE_OPERATIONS = new Set(["archive", "delete", "bulk-delete"]);
-const CONFIRMATION_REQUIRED = new Set(["auth logout", "issue close"]);
+const CONFIRMATION_REQUIRED = new Set(["issue bulk-delete"]);
 const ARRAY_OPERATIONS = new Set(["list", "search", "members"]);
 const NO_INPUT_COMMANDS = new Set([
   "auth status",
@@ -63,7 +62,7 @@ function safetyFor(resource: string, operation: string): SafetyClassification {
   if (CONFIRMATION_REQUIRED.has(`${resource} ${operation}`)) {
     return "confirmation-required";
   }
-  if (DESTRUCTIVE_OPERATIONS.has(operation)) {
+  if (operation.includes("archive") || operation.includes("delete") || `${resource} ${operation}` === "auth logout") {
     return "destructive";
   }
   return "safe";

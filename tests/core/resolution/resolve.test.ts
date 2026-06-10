@@ -75,7 +75,7 @@ describe("resolveTeamId", () => {
         teams: {
           nodes: [
             { id: "team-uuid-1", key: "INF", name: "Infrastructure" },
-            { id: "team-uuid-2", key: "INF2", name: "Infrastructure 2" }
+            { id: "team-uuid-2", key: "INF", name: "Infrastructure 2" }
           ]
         }
       }
@@ -92,6 +92,21 @@ describe("resolveTeamId", () => {
       expect(resError.message).toContain("Ambiguous team");
       expect(resError.message).toContain("INF");
     }
+  });
+
+  it("prefers the case-sensitive exact team when case-shadowed names match", async () => {
+    const fetchImpl = makeFetch({
+      data: {
+        teams: {
+          nodes: [
+            { id: "team-ops", key: "OPS", name: "Ops" },
+            { id: "team-uppercase", key: "OPS2", name: "OPS" }
+          ]
+        }
+      }
+    });
+
+    await expect(resolveTeamId("Ops", makeOptions(fetchImpl))).resolves.toBe("team-ops");
   });
 
   it("throws on not-found with suggestion to use direct ID", async () => {
@@ -204,6 +219,21 @@ describe("resolveUserId", () => {
       expect((error as ResolutionError).candidates).toHaveLength(2);
     }
   });
+
+  it("prefers an exact email match before name/displayName matches", async () => {
+    const fetchImpl = makeFetch({
+      data: {
+        users: {
+          nodes: [
+            { id: "user-email", name: "Ops", displayName: "ops", email: "ops@example.com" },
+            { id: "user-name", name: "ops@example.com", displayName: "ops@example.com", email: "other@example.com" }
+          ]
+        }
+      }
+    });
+
+    await expect(resolveUserId("ops@example.com", makeOptions(fetchImpl))).resolves.toBe("user-email");
+  });
 });
 
 describe("resolveLabelId", () => {
@@ -268,6 +298,22 @@ describe("resolveLabelId", () => {
       expect((error as ResolutionError).kind).toBe("ambiguous");
       expect((error as ResolutionError).candidates).toHaveLength(2);
     }
+  });
+
+  it("prefers a team-scoped exact label over a workspace label with the same name", async () => {
+    const fetchImpl = makeFetch({
+      data: {
+        issueLabels: {
+          nodes: [
+            { id: "workspace-bug", name: "bug", team: null },
+            { id: "team-bug", name: "bug", team: { id: "team-1", name: "Ops" } },
+            { id: "uppercase-team-bug", name: "BUG", team: { id: "team-1", name: "Ops" } }
+          ]
+        }
+      }
+    });
+
+    await expect(resolveLabelId("bug", "team-1", makeOptions(fetchImpl))).resolves.toBe("team-bug");
   });
 });
 
