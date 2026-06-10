@@ -34,7 +34,7 @@ Compares the bundled schema against the live API. Reports added/removed types an
 
 ### Startup freshness warning
 
-For normal commands, `linearctl` checks schema freshness at most once per day when the bundled schema is older than the configured threshold. The default threshold is 14 days. If the live Linear API schema has drifted, the command continues and a warning is printed to stderr:
+For normal commands, `linearctl` checks schema freshness at most once per day when the bundled schema is older than the configured threshold. The default threshold is 14 days. Failed or timed-out check attempts are also cached for 24 hours so normal commands do not repeatedly spend network work on advisory freshness probes. If the live Linear API schema has drifted, the command continues and a warning is printed to stderr:
 
 ```text
 Warning: linearctl schema is 38 days old. Run `linearctl schema pull` to update, or `linearctl schema check` for details.

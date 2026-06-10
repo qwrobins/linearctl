@@ -20,7 +20,9 @@ async function writeProfileFiles(directory: string, autoUpdate = false): Promise
       staleAfterDays: 1
     },
     profiles: {
-      work: {}
+      work: {
+        defaultTeam: "team-1"
+      }
     }
   });
   await writeCredentialsFile(credentialsFile, {
@@ -152,5 +154,44 @@ describe("maybeWarnForStaleSchema", () => {
     });
 
     expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it("records failed freshness attempts so slow checks are throttled", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-freshness-"));
+    const { configFile, credentialsFile } = await writeProfileFiles(directory);
+    const cacheFile = join(directory, "cache.json");
+    const fetchImpl = vi.fn(async () => {
+      throw new DOMException("operation timed out", "AbortError");
+    }) as FetchLike;
+
+    await maybeWarnForStaleSchema({
+      commandName: "issue",
+      configFile,
+      credentialsFile,
+      cacheFile,
+      env: {},
+      fetchImpl,
+      now: FRESHNESS_TEST_NOW
+    });
+
+    await maybeWarnForStaleSchema({
+      commandName: "issue",
+      configFile,
+      credentialsFile,
+      cacheFile,
+      env: {},
+      fetchImpl,
+      now: new Date(FRESHNESS_TEST_NOW.getTime() + 60_000)
+    });
+
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    const cache = JSON.parse(await readFile(cacheFile, "utf8")) as {
+      lastCheckedAt?: string;
+      lastAttemptStatus?: string;
+      lastLiveVersion?: string | null;
+    };
+    expect(cache.lastCheckedAt).toBe(FRESHNESS_TEST_NOW.toISOString());
+    expect(cache.lastAttemptStatus).toBe("failed");
+    expect(cache.lastLiveVersion).toBeNull();
   });
 });
