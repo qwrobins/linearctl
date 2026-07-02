@@ -1,6 +1,7 @@
-import { mkdtemp } from "node:fs/promises";
+import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { Readable } from "node:stream";
 import { describe, expect, it, vi } from "vitest";
 import { handleCommentCommand, normalizeCommentFull } from "../../src/commands/comment.js";
 import { writeCredentialsFile } from "../../src/core/auth/credentials.js";
@@ -196,6 +197,79 @@ describe("handleCommentCommand — comment create", () => {
     }
   });
 
+  it("reads --body-file into the comment create input", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-comment-"));
+    const paths = await writeProfileFiles(directory);
+    const bodyFile = join(directory, "comment.md");
+    await writeFile(bodyFile, "File body\n");
+    const fetchImpl = makeFetch({
+      data: { commentCreate: { success: true, comment: makeRawComment({ body: "File body\n" }) } }
+    });
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleCommentCommand(["create"], {
+        ...baseOptions(paths),
+        issue: "issue-1",
+        bodyFile,
+        fetchImpl
+      });
+
+      expect(exitCode).toBe(0);
+      const request = JSON.parse(String((fetchImpl as ReturnType<typeof vi.fn>).mock.calls[0]?.[1]?.body ?? "{}"));
+      expect(request.variables.input.body).toBe("File body\n");
+      const parsed = JSON.parse(output.stdout.join(""));
+      expect(parsed.body).toBe("File body\n");
+    } finally {
+      output.restore();
+    }
+  });
+
+  it("reads --body-file - from explicit stdin for comment create", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-comment-"));
+    const paths = await writeProfileFiles(directory);
+    const fetchImpl = makeFetch({
+      data: { commentCreate: { success: true, comment: makeRawComment({ body: "Stdin body" }) } }
+    });
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleCommentCommand(["create"], {
+        ...baseOptions(paths),
+        issue: "issue-1",
+        bodyFile: "-",
+        stdinStream: Readable.from(["Stdin body"]),
+        fetchImpl
+      });
+
+      expect(exitCode).toBe(0);
+      const request = JSON.parse(String((fetchImpl as ReturnType<typeof vi.fn>).mock.calls[0]?.[1]?.body ?? "{}"));
+      expect(request.variables.input.body).toBe("Stdin body");
+    } finally {
+      output.restore();
+    }
+  });
+
+  it("rejects comment create with both --body and --body-file", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-comment-"));
+    const paths = await writeProfileFiles(directory);
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleCommentCommand(["create"], {
+        ...baseOptions(paths),
+        issue: "issue-1",
+        body: "Inline",
+        bodyFile: "comment.md"
+      });
+
+      expect(exitCode).toBe(5);
+      expect(output.stderr.join("")).toContain("--body and --body-file are mutually exclusive");
+    } finally {
+      output.restore();
+    }
+  });
+
   it("returns exit code 5 when --issue is missing", async () => {
     const directory = await mkdtemp(join(tmpdir(), "linear-cli-comment-"));
     const paths = await writeProfileFiles(directory);
@@ -226,7 +300,7 @@ describe("handleCommentCommand — comment create", () => {
       });
 
       expect(exitCode).toBe(5);
-      expect(output.stderr.join("")).toContain("--body is required");
+      expect(output.stderr.join("")).toContain("--body or --body-file is required");
     } finally {
       output.restore();
     }
@@ -254,6 +328,67 @@ describe("handleCommentCommand — comment update", () => {
       const parsed = JSON.parse(output.stdout.join(""));
       expect(parsed.body).toBe("Updated text");
       expect(parsed.id).toBe("comment-uuid-1");
+    } finally {
+      output.restore();
+    }
+  });
+
+  it("reads --body-file into the comment update input", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-comment-"));
+    const paths = await writeProfileFiles(directory);
+    const bodyFile = join(directory, "comment-update.md");
+    await writeFile(bodyFile, "Updated from file");
+    const fetchImpl = makeFetch({
+      data: { commentUpdate: { success: true, comment: makeRawComment({ body: "Updated from file" }) } }
+    });
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleCommentCommand(["update", "comment-uuid-1"], {
+        ...baseOptions(paths),
+        bodyFile,
+        fetchImpl
+      });
+
+      expect(exitCode).toBe(0);
+      const request = JSON.parse(String((fetchImpl as ReturnType<typeof vi.fn>).mock.calls[0]?.[1]?.body ?? "{}"));
+      expect(request.variables.input.body).toBe("Updated from file");
+    } finally {
+      output.restore();
+    }
+  });
+
+  it("rejects comment update with both --body and --body-file", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-comment-"));
+    const paths = await writeProfileFiles(directory);
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleCommentCommand(["update", "comment-uuid-1"], {
+        ...baseOptions(paths),
+        body: "Inline",
+        bodyFile: "comment.md"
+      });
+
+      expect(exitCode).toBe(5);
+      expect(output.stderr.join("")).toContain("--body and --body-file are mutually exclusive");
+    } finally {
+      output.restore();
+    }
+  });
+
+  it("returns exit code 5 when update has neither --body nor --body-file", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-comment-"));
+    const paths = await writeProfileFiles(directory);
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleCommentCommand(["update", "comment-uuid-1"], {
+        ...baseOptions(paths)
+      });
+
+      expect(exitCode).toBe(5);
+      expect(output.stderr.join("")).toContain("--body or --body-file is required");
     } finally {
       output.restore();
     }

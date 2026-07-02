@@ -85,6 +85,7 @@ export interface ParsedCliArguments {
   startsAt?: string;
   endsAt?: string;
   body?: string;
+  bodyFile?: string;
   issue?: string;
   url?: string;
   output?: string;

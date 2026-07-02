@@ -47,10 +47,10 @@ linearctl issue assign <identifier> <assignee> --json
 linearctl issue attach-slack <identifier> --url <slack-url> [--sync] [--title <text>] --json
 
 # Add a comment
-linearctl issue comment <identifier> --body <text> --json
+linearctl issue comment <identifier> (--body <text>|--body-file <path|->) --json
 ```
 
-`issue get` / `issue view` returns soft-deleted Linear issues when the API can still read them. JSON output includes `trashed` and `archivedAt`; human output prints `Trashed: true` and `Archived: <timestamp>` when applicable. A missing referenced issue returns exit 4 with `category: "not-found"` in `--json-envelope`.
+`issue get` / `issue view` returns soft-deleted Linear issues when the API can still read them. JSON output includes `projectMilestone`, `trashed`, and `archivedAt`; human output prints `Trashed: true` and `Archived: <timestamp>` when applicable. A missing referenced issue returns exit 4 with `category: "not-found"` in `--json-envelope`.
 
 ### Bulk operations
 
@@ -156,6 +156,8 @@ linearctl state get <id> --json
 linearctl state list [--team <name|key|id>] [--all-teams] --json
 linearctl state create --name <name> --team <name|key|id> --state-type <type> \
   [--description <text>] [--color <hex>] [--position <n>] --json
+linearctl state archive <id|name> [--team <name|key|id>] --json
+linearctl state delete <id|name> [--team <name|key|id>] --json     # [destructive]
 ```
 
 `--state-type` must be one of: `backlog`, `unstarted`, `started`, `completed`, `canceled`.
@@ -178,8 +180,8 @@ linearctl project-status delete <id> [--json]          # [destructive]
 
 ```bash
 linearctl comment list --issue <id> --json
-linearctl comment create --issue <id> --body <text> --json
-linearctl comment update <id> --body <text> --json
+linearctl comment create --issue <id> (--body <text>|--body-file <path|->) --json
+linearctl comment update <id> (--body <text>|--body-file <path|->) --json
 linearctl comment delete <id> --json              # [destructive]
 ```
 

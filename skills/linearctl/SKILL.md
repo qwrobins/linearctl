@@ -33,7 +33,7 @@ Raw GraphQL should not be used merely because it is possible. It is the fallback
 ## Available curated commands
 
 ### Issues
-- `linearctl issue get <identifier> --json` / `linearctl issue view <identifier> --json` — fetch a single issue by identifier (e.g. INF-2975) or UUID; JSON includes `trashed` and `archivedAt`, so delete verification must check those fields instead of assuming exit 0 means live
+- `linearctl issue get <identifier> --json` / `linearctl issue view <identifier> --json` — fetch a single issue by identifier (e.g. INF-2975) or UUID; JSON includes `projectMilestone`, `trashed`, and `archivedAt`, so write/delete verification must check those fields instead of assuming exit 0 means live
 - `linearctl issue list [--search <text>|--query <text>] [--state <name> ...] [--status <name>] [--assignee <name|displayName|email|"me"|id>] [--team <id|key|name>] [--label <name|id>] [--priority <0-4>] [--cycle <id>] [--project <name|id>] [--created-after <date>] [--updated-after <date>] [--completed-after <date>] [--order-by <field>] [--all-teams] [--all] [--max <n>|--limit <n>] [--json]` — list issues with filters; repeated `--state` values are unioned; `--status` aliases `--state`; `--search`/`--query` routes to full-text search and composes with the other filters; friendly names resolve case-insensitively
 - `linearctl issue search [<text>|--query <text>] [--team <id|key|name>] [--all] --json` — full-text search across issues; profile default teams are not applied, so pass `--team` to scope explicitly
 - `linearctl issue create --title <title> --team <id> [--description <text>|--description-file <path|->] [--priority <0-4>] [--estimate <n>] [--assignee <id>] [--label <id>] [--state <id>] [--cycle <id>] [--project <name|id>] [--project-milestone <id>|--milestone <id>] --json` — create an issue
@@ -42,7 +42,7 @@ Raw GraphQL should not be used merely because it is possible. It is the fallback
 - `linearctl issue delete <identifier> --json` — delete/trash an issue by identifier or UUID
 - `linearctl issue assign <identifier> <assignee-id> --json` — assign an issue
 - `linearctl issue attach-slack <identifier> --url <slack-url> [--sync] [--title <text>] --json` — link a Slack thread to an issue (--sync enables bidirectional comment sync)
-- `linearctl issue comment <identifier> --body <text> --json` — add a comment to an issue
+- `linearctl issue comment <identifier> (--body <text>|--body-file <path|->) --json` — add a comment to an issue
 
 ### Bulk operations
 - `linearctl issue bulk-update --ids <id1,id2,...> [--state <id>] [--assignee <id>] [--priority <0-4>] [--estimate <n>] [--label <id>] [--cycle <id>] [--project-milestone <id>|--milestone <id>] --json`
@@ -92,8 +92,8 @@ Raw GraphQL should not be used merely because it is possible. It is the fallback
 
 ### Comments
 - `linearctl comment list --issue <id> --json` — with human-readable issue identifiers, a missing parent issue returns exit 4 / `category: "not-found"` instead of an empty list
-- `linearctl comment create --issue <id> --body <text> --json`
-- `linearctl comment update <id> --body <text> --json`
+- `linearctl comment create --issue <id> (--body <text>|--body-file <path|->) --json`
+- `linearctl comment update <id> (--body <text>|--body-file <path|->) --json`
 - `linearctl comment delete <id> --json`
 
 ### Attachments
@@ -111,6 +111,8 @@ Raw GraphQL should not be used merely because it is possible. It is the fallback
 - `linearctl state list [--team <id>] [--all-teams] --json` — list issue workflow states for a team
 - `linearctl state get <id> --json`
 - `linearctl state create --name <name> --team <id> --state-type <type> --json` (types: backlog, unstarted, started, completed, canceled)
+- `linearctl state archive <id|name> [--team <id>] --json`
+- `linearctl state delete <id|name> [--team <id>] --json`
 
 ### Skills
 - `linearctl skills install [--json]` — auto-detect agents and install skill files
@@ -193,7 +195,7 @@ Use `--dry-run` on any mutating command to preview what would happen without exe
 - Use `--max <n>` or `--limit <n>` to cap total results
 - Use `--quiet` / `-q` to suppress the truncation warning (useful when piping JSON)
 - Add filters before broad pagination whenever possible
-- Prefer `--jsonl` for large result sets — it streams and auto-paginates
+- Prefer `--jsonl` for large result sets — it streams one object per line; pass `--all` or `--max <n>`
 
 ## Profile selection
 

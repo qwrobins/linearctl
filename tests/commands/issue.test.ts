@@ -93,6 +93,7 @@ function makeRawIssue(overrides?: Partial<Record<string, unknown>>) {
     creator: { id: "user-2", name: "Alice", email: "alice@example.com" },
     cycle: { id: "cycle-1", number: 42, name: "Cycle 42" },
     project: { id: "proj-1", name: "Auth hardening" },
+    projectMilestone: { id: "milestone-1", name: "Phase 1" },
     parent: null,
     labels: { nodes: [{ id: "label-1", name: "bug" }, { id: "label-2", name: "mobile" }] },
     url: "https://linear.app/team/issue/INF-2975",
@@ -138,6 +139,18 @@ describe("normalizeIssue", () => {
     const normalized = normalizeIssue(raw as Parameters<typeof normalizeIssue>[0]);
     expect(normalized.parent).toEqual({ id: "parent-1", identifier: "INF-1", title: "Parent issue" });
   });
+
+  it("preserves project milestone details", () => {
+    const raw = makeRawIssue();
+    const normalized = normalizeIssue(raw as Parameters<typeof normalizeIssue>[0]);
+    expect(normalized.projectMilestone).toEqual({ id: "milestone-1", name: "Phase 1" });
+  });
+
+  it("preserves null project milestone details", () => {
+    const raw = makeRawIssue({ projectMilestone: null });
+    const normalized = normalizeIssue(raw as Parameters<typeof normalizeIssue>[0]);
+    expect(normalized.projectMilestone).toBeNull();
+  });
 });
 
 describe("handleIssueCommand — issue get", () => {
@@ -163,6 +176,7 @@ describe("handleIssueCommand — issue get", () => {
       ]);
       expect(parsed.state).toEqual({ id: "state-1", name: "In Progress", type: "started" });
       expect(parsed.team).toEqual({ id: "team-1", key: "INF", name: "Infrastructure" });
+      expect(parsed.projectMilestone).toEqual({ id: "milestone-1", name: "Phase 1" });
       expect(parsed.parent).toBeNull();
       expect(parsed.trashed).toBe(false);
       expect(parsed.archivedAt).toBeNull();
@@ -1280,7 +1294,7 @@ describe("handleIssueCommand — issue update", () => {
     await writeFile(descriptionPath, "Updated from file\n", "utf8");
     const fetchSpy = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
       new Response(JSON.stringify({
-        data: { issueUpdate: { success: true, issue: makeRawIssue() } }
+        data: { issueUpdate: { success: true, issue: makeRawIssue({ projectMilestone: { id: "e0000000-0000-0000-0000-000000000001", name: "Release 1" } }) } }
       }), { status: 200 })
     );
     const fetchImpl = fetchSpy as unknown as FetchLike;
@@ -1386,6 +1400,8 @@ describe("handleIssueCommand — issue update", () => {
       expect(exitCode).toBe(0);
       const request = JSON.parse(String(fetchSpy.mock.calls[0]?.[1]?.body ?? "{}"));
       expect(request.variables.input.projectMilestoneId).toBe("e0000000-0000-0000-0000-000000000001");
+      const parsed = JSON.parse(output.stdout.join(""));
+      expect(parsed.projectMilestone).toEqual({ id: "milestone-1", name: "Phase 1" });
     } finally {
       output.restore();
     }
@@ -1703,6 +1719,105 @@ describe("handleIssueCommand — issue comment", () => {
     }
   });
 
+  it("reads --body-file into the issue comment input", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-issue-"));
+    const paths = await writeProfileFiles(directory);
+    const bodyFile = join(directory, "comment.md");
+    await writeFile(bodyFile, "File issue comment");
+    let callCount = 0;
+    const fetchImpl = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => {
+      callCount++;
+      if (callCount === 1) {
+        return new Response(JSON.stringify({ data: { issue: makeRawIssue() } }), { status: 200 });
+      }
+      return new Response(JSON.stringify({
+        data: {
+          commentCreate: {
+            success: true,
+            comment: {
+              id: "comment-1",
+              body: "File issue comment",
+              createdAt: "2026-04-10T10:00:00Z",
+              user: { id: "user-1", name: "Quentin", email: "quentin@example.com" }
+            }
+          }
+        }
+      }), { status: 200 });
+    }) as unknown as FetchLike;
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleIssueCommand(["comment", "INF-2975"], {
+        ...baseOptions(paths),
+        bodyFile,
+        fetchImpl
+      });
+
+      expect(exitCode).toBe(0);
+      const request = JSON.parse(String((fetchImpl as ReturnType<typeof vi.fn>).mock.calls[1]?.[1]?.body ?? "{}"));
+      expect(request.variables.input.body).toBe("File issue comment");
+    } finally {
+      output.restore();
+    }
+  });
+
+  it("reads --body-file - from explicit stdin for issue comment", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-issue-"));
+    const paths = await writeProfileFiles(directory);
+    const fetchImpl = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
+      new Response(JSON.stringify({
+        data: {
+          commentCreate: {
+            success: true,
+            comment: {
+              id: "comment-1",
+              body: "Stdin issue comment",
+              createdAt: "2026-04-10T10:00:00Z",
+              user: { id: "user-1", name: "Quentin", email: "quentin@example.com" }
+            }
+          }
+        }
+      }), { status: 200 })
+    ) as unknown as FetchLike;
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleIssueCommand(["comment", "INF-2975"], {
+        ...baseOptions(paths),
+        bodyFile: "-",
+        stdinStream: Readable.from(["Stdin issue comment"]),
+        dryRun: true,
+        fetchImpl
+      });
+
+      expect(exitCode).toBe(0);
+      const parsed = JSON.parse(output.stdout.join(""));
+      expect(parsed.input.body).toBe("Stdin issue comment");
+      expect((fetchImpl as ReturnType<typeof vi.fn>)).not.toHaveBeenCalled();
+    } finally {
+      output.restore();
+    }
+  });
+
+  it("rejects issue comment with both --body and --body-file", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-issue-"));
+    const paths = await writeProfileFiles(directory);
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleIssueCommand(["comment", "INF-2975"], {
+        ...baseOptions(paths),
+        body: "Inline",
+        bodyFile: "comment.md"
+      });
+
+      expect(exitCode).toBe(5);
+      expect(output.stderr.join("")).toContain("--body and --body-file are mutually exclusive");
+    } finally {
+      output.restore();
+    }
+  });
+
   it("rejects comment without --body", async () => {
     const directory = await mkdtemp(join(tmpdir(), "linear-cli-issue-"));
     const paths = await writeProfileFiles(directory);
@@ -1714,7 +1829,7 @@ describe("handleIssueCommand — issue comment", () => {
       });
 
       expect(exitCode).toBe(5);
-      expect(output.stderr.join("")).toContain("--body is required");
+      expect(output.stderr.join("")).toContain("--body or --body-file is required");
     } finally {
       output.restore();
     }

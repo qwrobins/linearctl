@@ -13,7 +13,7 @@ curl -fsSL https://raw.githubusercontent.com/qwrobins/linearctl/main/install.sh 
 Or install a specific version:
 
 ```bash
-LINEAR_VERSION=v0.1.0 curl -fsSL https://raw.githubusercontent.com/qwrobins/linearctl/main/install.sh | sh
+LINEAR_VERSION=v0.8.4 curl -fsSL https://raw.githubusercontent.com/qwrobins/linearctl/main/install.sh | sh
 ```
 
 On Debian/Ubuntu, the installer automatically uses the `.deb` package. To skip deb and install the raw binary instead:
@@ -60,6 +60,7 @@ Create an API key at https://linear.app/settings/api, then:
 ```bash
 export LINEAR_API_KEY=lin_api_...
 linearctl auth login --profile work --api-key-env LINEAR_API_KEY --set-default
+linearctl team list
 linearctl team get <team-key> --set-default
 ```
 
@@ -67,7 +68,7 @@ Your key is now stored in `~/.config/linear/credentials` (permissions `0600`) an
 
 ### OAuth (browser-based)
 
-Create an OAuth app at https://linear.app/settings/api/applications, then:
+Create an OAuth app at https://linear.app/settings/api/applications and register `http://127.0.0.1:8765/oauth/callback` as its redirect URI, then:
 
 ```bash
 linearctl auth login --profile work --oauth --oauth-client-id <id> --set-default
@@ -86,23 +87,27 @@ linearctl auth whoami
 ```
 
 Add `--json` to any command for machine-readable output (see [output modes](docs/output-modes.md)).
+For command discovery, agents can inspect the stable curated metadata with `linearctl --metadata curated --json`.
 
 ## Commands
 
 | Group | Operations |
 |---|---|
-| [issue](docs/commands.md#issue) | get, list, create, update, close, assign, comment, bulk-update, bulk-close, bulk-assign |
-| [project](docs/commands.md#project) | get, list, create, update |
-| [cycle](docs/commands.md#cycle) | get, list, create, update |
-| [team](docs/commands.md#team) | get, list |
+| [issue](docs/commands.md#issue) | get, view, create, list, search, update, close, delete, assign, comment, attach-slack, bulk-update, bulk-close, bulk-archive, bulk-delete, bulk-assign |
+| [project](docs/commands.md#project) | get, list, create, update, create-with-issues, delete |
+| [cycle](docs/commands.md#cycle) | get, list, current, create, update, archive, delete |
+| [team](docs/commands.md#team) | get, list, members |
 | [user](docs/commands.md#user) | get, me, list |
-| [label](docs/commands.md#label) | get, list, create |
+| [label](docs/commands.md#label) | get, list, create, delete |
+| [state](docs/commands.md#state) | get, list, create, archive, delete |
+| [project-status](docs/commands.md#project-status) | list, get, create, delete |
 | [comment](docs/commands.md#comment) | list, create, update, delete |
 | [attachment](docs/commands.md#attachment) | list, create, delete |
 | [file](docs/commands.md#file) | upload, url, download |
 | [auth](docs/commands.md#auth) | login, logout, status, switch, whoami |
-| [workspace](docs/commands.md#workspace) | list |
 | [schema](docs/commands.md#schema) | version, pull, check |
+| [workspace](docs/commands.md#workspace) | list |
+| [skills](docs/commands.md#skills) | install, list |
 | [api](docs/commands.md#generated-api) | Generated commands for any Linear API resource |
 | [gql](docs/commands.md#raw-graphql) | Raw GraphQL queries and mutations |
 
@@ -125,7 +130,7 @@ Each profile is a named section. Resolution order: `--profile` flag > `LINEAR_PR
 | *(none)* | Human-readable (not stable, not for parsing) |
 | `--json` | Data-only JSON (stable contract) |
 | `--json-envelope` | Envelope with `ok`, `data`, `pageInfo`, `errors`, `meta` |
-| `--jsonl` | Streaming, one JSON object per line, auto-paginates |
+| `--jsonl` | Streaming, one JSON object per line; requires `--all` or `--max <n>` |
 | `--raw` | Exact GraphQL response (gql only) |
 
 See [docs/output-modes.md](docs/output-modes.md).

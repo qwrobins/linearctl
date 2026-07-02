@@ -9,7 +9,7 @@ import type { PaginationOptions } from "../core/pagination/pagination.js";
 import { streamPaginateGraphQL } from "../core/pagination/streaming.js";
 import { normalizeRetryOptions } from "../core/transport/retry.js";
 import { emitDryRunResult } from "../core/output/dry-run.js";
-import { resolveDescriptionInput } from "../core/io/text-input.js";
+import { resolveBodyInput, resolveDescriptionInput } from "../core/io/text-input.js";
 import {
   resolveTeamId,
   resolveUserId,
@@ -56,6 +56,7 @@ export interface IssueCommandOptions {
   ids?: string;
   // issue comment flags
   body?: string;
+  bodyFile?: string;
   // issue attach-slack flags
   url?: string;
   sync?: boolean;
@@ -120,6 +121,7 @@ fragment CuratedIssue on Issue {
   creator { id name email }
   cycle { id number name }
   project { id name }
+  projectMilestone { id name }
   parent { id identifier title }
   labels { nodes { id name } }
   url
@@ -143,6 +145,7 @@ fragment CuratedIssueSearchResult on IssueSearchResult {
   creator { id name email }
   cycle { id number name }
   project { id name }
+  projectMilestone { id name }
   parent { id identifier title }
   labels { nodes { id name } }
   url
@@ -274,6 +277,7 @@ interface RawIssue {
   creator: { id: string; name: string; email: string } | null;
   cycle: { id: string; number: number; name: string | null } | null;
   project: { id: string; name: string } | null;
+  projectMilestone: { id: string; name: string } | null;
   parent: { id: string; identifier: string; title: string } | null;
   labels: { nodes: Array<{ id: string; name: string }> };
   url: string;
@@ -296,6 +300,7 @@ export interface NormalizedIssue {
   creator: { id: string; name: string; email: string } | null;
   cycle: { id: string; number: number; name: string | null } | null;
   project: { id: string; name: string } | null;
+  projectMilestone: { id: string; name: string } | null;
   parent: { id: string; identifier: string; title: string } | null;
   labels: Array<{ id: string; name: string }>;
   url: string;
@@ -319,6 +324,7 @@ export function normalizeIssue(raw: RawIssue): NormalizedIssue {
     creator: raw.creator,
     cycle: raw.cycle,
     project: raw.project,
+    projectMilestone: raw.projectMilestone,
     parent: raw.parent,
     labels: raw.labels.nodes,
     url: raw.url,
@@ -1270,12 +1276,19 @@ async function handleIssueComment(
   identifier: string,
   options: IssueCommandOptions
 ): Promise<number> {
-  if (options.body === undefined || options.body.trim() === "") {
-    return emitValidationError("--body is required for issue comment.", options);
+  let body: string | undefined;
+  try {
+    body = await resolveBodyInput(options);
+  } catch (error) {
+    return emitValidationError(error instanceof Error ? error.message : String(error), options);
+  }
+
+  if (body === undefined || body.trim() === "") {
+    return emitValidationError("--body or --body-file is required for issue comment.", options);
   }
 
   if (options.dryRun === true) {
-    return emitDryRunResult("create", "comment", { issueId: identifier, body: options.body }, options);
+    return emitDryRunResult("create", "comment", { issueId: identifier, body }, options);
   }
 
   const ctx = buildContext(options);
@@ -1299,7 +1312,7 @@ async function handleIssueComment(
 
     const response = await ctx.graphql<{
       commentCreate: { success: boolean; comment: RawComment | null };
-    }>(COMMENT_CREATE_MUTATION, { input: { issueId, body: options.body } });
+    }>(COMMENT_CREATE_MUTATION, { input: { issueId, body } });
 
     if (
       ctx.hasErrors(response.body.errors) ||

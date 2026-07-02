@@ -8,6 +8,7 @@ import { streamPaginateGraphQL } from "../core/pagination/streaming.js";
 import { emitDryRunResult } from "../core/output/dry-run.js";
 import { normalizeRetryOptions } from "../core/transport/retry.js";
 import { CommandContext } from "../core/runtime/command-context.js";
+import { resolveBodyInput } from "../core/io/text-input.js";
 
 export interface CommentCommandOptions {
   json: boolean;
@@ -22,6 +23,8 @@ export interface CommentCommandOptions {
   dryRun?: boolean;
   issue?: string;
   body?: string;
+  bodyFile?: string;
+  stdinStream?: NodeJS.ReadableStream;
   all?: boolean;
   max?: number;
   pageSize?: number;
@@ -261,12 +264,19 @@ async function handleCommentCreate(options: CommentCommandOptions): Promise<numb
     return emitValidationError("--issue is required for comment create.", options);
   }
 
-  if (options.body === undefined || options.body.trim() === "") {
-    return emitValidationError("--body is required for comment create.", options);
+  let body: string | undefined;
+  try {
+    body = await resolveBodyInput(options);
+  } catch (error) {
+    return emitValidationError(error instanceof Error ? error.message : String(error), options);
+  }
+
+  if (body === undefined || body.trim() === "") {
+    return emitValidationError("--body or --body-file is required for comment create.", options);
   }
 
   if (options.dryRun === true) {
-    return emitDryRunResult("create", "comment", { issueId: options.issue, body: options.body }, options);
+    return emitDryRunResult("create", "comment", { issueId: options.issue, body }, options);
   }
 
   const ctx = buildContext(options);
@@ -274,7 +284,7 @@ async function handleCommentCreate(options: CommentCommandOptions): Promise<numb
   try {
     const response = await ctx.graphql<{
       commentCreate: { success: boolean; comment: RawComment | null };
-    }>(COMMENT_CREATE_MUTATION, { input: { issueId: options.issue, body: options.body } });
+    }>(COMMENT_CREATE_MUTATION, { input: { issueId: options.issue, body } });
 
     if (
       ctx.hasErrors(response.body.errors) ||
@@ -305,12 +315,19 @@ async function handleCommentCreate(options: CommentCommandOptions): Promise<numb
 }
 
 async function handleCommentUpdate(commentId: string, options: CommentCommandOptions): Promise<number> {
-  if (options.body === undefined || options.body.trim() === "") {
-    return emitValidationError("--body is required for comment update.", options);
+  let body: string | undefined;
+  try {
+    body = await resolveBodyInput(options);
+  } catch (error) {
+    return emitValidationError(error instanceof Error ? error.message : String(error), options);
+  }
+
+  if (body === undefined || body.trim() === "") {
+    return emitValidationError("--body or --body-file is required for comment update.", options);
   }
 
   if (options.dryRun === true) {
-    return emitDryRunResult("update", "comment", { id: commentId, body: options.body }, options);
+    return emitDryRunResult("update", "comment", { id: commentId, body }, options);
   }
 
   const ctx = buildContext(options);
@@ -318,7 +335,7 @@ async function handleCommentUpdate(commentId: string, options: CommentCommandOpt
   try {
     const response = await ctx.graphql<{
       commentUpdate: { success: boolean; comment: RawComment | null };
-    }>(COMMENT_UPDATE_MUTATION, { id: commentId, input: { body: options.body } });
+    }>(COMMENT_UPDATE_MUTATION, { id: commentId, input: { body } });
 
     if (
       ctx.hasErrors(response.body.errors) ||
@@ -409,7 +426,7 @@ export async function handleCommentCommand(
   if (subcommand === "update") {
     const commentId = rest[0];
     if (commentId === undefined || commentId.trim() === "") {
-      return emitValidationError("usage: linearctl comment update <commentId> --body <text>", options);
+      return emitValidationError("usage: linearctl comment update <commentId> (--body <text>|--body-file <path|->)", options);
     }
     if (rest.length > 1) {
       return emitValidationError("comment update accepts exactly one comment ID.", options);

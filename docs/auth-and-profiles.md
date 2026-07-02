@@ -29,7 +29,7 @@ The CLI never accepts API keys as plain command-line arguments. This prevents se
 
 OAuth uses the PKCE authorization code flow with a local loopback callback server.
 
-You need an OAuth application client ID. Create one at [Linear API applications](https://linear.app/settings/api/applications).
+You need an OAuth application client ID. Create one at [Linear API applications](https://linear.app/settings/api/applications), and register `http://127.0.0.1:8765/oauth/callback` as the redirect URI.
 
 ```bash
 linearctl auth login --profile work --oauth --oauth-client-id <client-id>

@@ -53,6 +53,7 @@ export const OPTION_CATALOG: Record<string, OptionSpec> = {
   id: { type: "string" },
   fields: { type: "string" },
   body: { type: "string" },
+  "body-file": { type: "string" },
   "filter-json": { type: "string" },
   "created-after": { type: "string" },
   "updated-after": { type: "string" },

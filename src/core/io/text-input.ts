@@ -39,6 +39,23 @@ export async function resolveDescriptionInput(options: {
   return undefined;
 }
 
+export async function resolveBodyInput(options: {
+  body?: string;
+  bodyFile?: string;
+  stdinStream?: NodeJS.ReadableStream;
+}): Promise<string | undefined> {
+  if (options.body !== undefined && options.bodyFile !== undefined) {
+    throw new Error("--body and --body-file are mutually exclusive.");
+  }
+  if (options.body !== undefined) {
+    return options.body;
+  }
+  if (options.bodyFile !== undefined) {
+    return readTextInput(options.bodyFile, "body-file", options.stdinStream);
+  }
+  return undefined;
+}
+
 export async function resolveContentInput(options: {
   content?: string;
   contentFile?: string;
