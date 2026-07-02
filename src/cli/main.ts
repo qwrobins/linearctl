@@ -264,6 +264,7 @@ function toParsedCliArguments(values: Record<string, unknown>, positionals: stri
     ...(typeof values["starts-at"] === "string" ? { startsAt: values["starts-at"] } : {}),
     ...(typeof values["ends-at"] === "string" ? { endsAt: values["ends-at"] } : {}),
     ...(typeof values.body === "string" ? { body: values.body } : {}),
+    ...(typeof values["body-file"] === "string" ? { bodyFile: values["body-file"] } : {}),
     ...(typeof values.issue === "string" ? { issue: values.issue } : {}),
     ...(typeof values.url === "string" ? { url: values.url } : {}),
     ...(typeof values.output === "string" ? { output: values.output } : {}),

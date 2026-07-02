@@ -147,6 +147,8 @@ describe("OAuth login", () => {
     await new Promise((resolve) => setTimeout(resolve, 200));
 
     expect(openUrl).toHaveBeenCalledTimes(1);
+    expect(stderrChunks.join("")).toContain(`OAuth callback URL: http://127.0.0.1:${port}/oauth/callback`);
+    expect(stderrChunks.join("")).toContain("Register this exact URL as a redirect URI");
     capturedAuthorizeUrl = openUrl.mock.calls[0]![0] as string;
     const parsedUrl = new URL(capturedAuthorizeUrl);
     const state = parsedUrl.searchParams.get("state")!;
@@ -248,6 +250,8 @@ describe("OAuth login", () => {
     await new Promise((resolve) => setTimeout(resolve, 200));
 
     const stderrOutput = stderrChunks.join("");
+    expect(stderrOutput).toContain(`OAuth callback URL: http://127.0.0.1:${port}/oauth/callback`);
+    expect(stderrOutput).toContain("Register this exact URL as a redirect URI");
     expect(stderrOutput).toContain("Open this URL in your browser");
 
     // Extract the URL from the stderr output

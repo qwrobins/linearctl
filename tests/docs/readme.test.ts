@@ -5,6 +5,9 @@ import { curatedCommandMetadata } from "../../src/commands/metadata/curated-taxo
 const README = readFileSync("README.md", "utf8");
 const INSTALL = readFileSync("INSTALL.md", "utf8");
 const AUTH_DOCS = readFileSync("docs/auth-and-profiles.md", "utf8");
+const COMMANDS_DOCS = readFileSync("docs/commands.md", "utf8");
+const GETTING_STARTED = readFileSync("docs/getting-started.md", "utf8");
+const SKILL = readFileSync("skills/linearctl/SKILL.md", "utf8");
 
 function readCommandTable(markdown: string): Map<string, string[]> {
   const table = new Map<string, string[]>();
@@ -52,10 +55,11 @@ describe("README quickstart documentation", () => {
   it("documents the current jsonl pagination contract", () => {
     expect(README).toContain("requires `--all` or `--max <n>`");
     expect(README).not.toContain("auto-paginates");
+    expect(SKILL).not.toContain("auto-paginates");
   });
 
   it("keeps the pinned install example on the current package version", () => {
-    expect(README).toContain("LINEAR_VERSION=v0.8.3");
+    expect(README).toContain("LINEAR_VERSION=v0.8.4");
     expect(README).not.toContain("LINEAR_VERSION=v0.1.0");
   });
 
@@ -68,5 +72,14 @@ describe("README quickstart documentation", () => {
   it("documents the OAuth callback URL that must be registered in Linear", () => {
     expect(README).toContain("http://127.0.0.1:8765/oauth/callback");
     expect(AUTH_DOCS).toContain("http://127.0.0.1:8765/oauth/callback");
+    expect(GETTING_STARTED).toContain("http://127.0.0.1:8765/oauth/callback");
+  });
+
+  it("keeps docs/commands.md aligned with curated command metadata", () => {
+    for (const command of curatedCommandMetadata) {
+      expect(COMMANDS_DOCS, `${command.resource} ${command.operation}`).toContain(
+        `linearctl ${command.resource} ${command.operation}`
+      );
+    }
   });
 });

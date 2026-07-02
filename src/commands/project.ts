@@ -16,6 +16,10 @@ import { normalizeRetryOptions } from "../core/transport/retry.js";
 import { CommandContext } from "../core/runtime/command-context.js";
 import { runTwoStepWorkflow } from "../core/runtime/workflow.js";
 
+// Linear's query-complexity budget is exceeded by 250-project pages because
+// each project includes nested milestones and teams in the stable JSON output.
+const PROJECT_LIST_PAGE_SIZE = 50;
+
 export interface ProjectCommandOptions {
   json: boolean;
   jsonEnvelope: boolean;
@@ -558,7 +562,7 @@ async function handleProjectList(options: ProjectCommandOptions): Promise<number
   const paginationOptions: PaginationOptions = {
     all: options.all,
     max: options.max,
-    pageSize: options.pageSize,
+    pageSize: options.pageSize ?? PROJECT_LIST_PAGE_SIZE,
     after: options.after,
     quiet: options.quiet
   };

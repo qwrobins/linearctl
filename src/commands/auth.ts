@@ -385,6 +385,9 @@ async function handleOAuthLogin(options: AuthCommandOptions): Promise<number> {
     codeChallenge
   });
 
+  process.stderr.write(`OAuth callback URL: ${redirectUri}\n`);
+  process.stderr.write("Register this exact URL as a redirect URI on your Linear OAuth application.\n");
+
   if (options.noBrowser) {
     process.stderr.write(`Open this URL in your browser to authorize:\n${authorizeUrl}\n\n`);
   } else {

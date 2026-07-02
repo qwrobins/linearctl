@@ -59,6 +59,8 @@ Use OAuth for browser-based login with PKCE. You need an OAuth application clien
 linearctl auth login --profile work --oauth --oauth-client-id <client-id>
 ```
 
+Register `http://127.0.0.1:8765/oauth/callback` as a redirect URI on the Linear OAuth app, or use the matching `--callback-port` variant.
+
 This opens your browser for authorization and listens on `127.0.0.1:8765` for the callback. Override the port with `--callback-port`. Use `--no-browser` to print the URL instead of opening it.
 
 OAuth tokens auto-refresh when expired.

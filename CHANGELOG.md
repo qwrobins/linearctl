@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.4] - 2026-07-01
+
+### Fixed
+
+- Issue JSON now includes `projectMilestone` so reads can verify milestone writes.
+- Comments now accept `--body-file <path|->` anywhere `--body <text>` is accepted.
+- `project list --all` uses 50-item pages by default to stay under Linear's query-complexity limit while preserving stable JSON fields.
+
+## [0.8.3] - 2026-07-01
+
+### Fixed
+
+- Quickstart and command docs now match the current JSONL pagination and workflow-state command contracts.
+- OAuth setup docs and login output call out the exact redirect URI that must be registered in Linear.
+
 ## [0.8.2] - 2026-06-10
 
 ### Fixed

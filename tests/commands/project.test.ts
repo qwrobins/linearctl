@@ -1012,6 +1012,79 @@ describe("handleProjectCommand — project list", () => {
     }
   });
 
+  it("uses 50-item pages for project list --all by default", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-project-"));
+    const paths = await writeProfileFiles(directory);
+    const fetchImpl = makeFetchSequence([
+      {
+        data: {
+          projects: {
+            nodes: [makeRawProject({ id: "proj-1", name: "First project" })],
+            pageInfo: { hasNextPage: true, endCursor: "cursor-1" }
+          }
+        }
+      },
+      {
+        data: {
+          projects: {
+            nodes: [makeRawProject({ id: "proj-2", name: "Second project" })],
+            pageInfo: { hasNextPage: false, endCursor: null }
+          }
+        }
+      }
+    ]);
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleProjectCommand(["list"], {
+        ...baseOptions(paths),
+        all: true,
+        fetchImpl
+      });
+
+      expect(exitCode).toBe(0);
+      expect(fetchImpl).toHaveBeenCalledTimes(2);
+      const firstRequest = JSON.parse(String((fetchImpl as ReturnType<typeof vi.fn>).mock.calls[0]?.[1]?.body ?? "{}"));
+      const secondRequest = JSON.parse(String((fetchImpl as ReturnType<typeof vi.fn>).mock.calls[1]?.[1]?.body ?? "{}"));
+      expect(firstRequest.variables.first).toBe(50);
+      expect(secondRequest.variables.first).toBe(50);
+      expect(secondRequest.variables.after).toBe("cursor-1");
+      const parsed = JSON.parse(output.stdout.join(""));
+      expect(parsed.map((project: { name: string }) => project.name)).toEqual(["First project", "Second project"]);
+    } finally {
+      output.restore();
+    }
+  });
+
+  it("honors explicit --page-size for project list --all", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-project-"));
+    const paths = await writeProfileFiles(directory);
+    const fetchImpl = makeFetch({
+      data: {
+        projects: {
+          nodes: [makeRawProject()],
+          pageInfo: { hasNextPage: false, endCursor: null }
+        }
+      }
+    });
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleProjectCommand(["list"], {
+        ...baseOptions(paths),
+        all: true,
+        pageSize: 100,
+        fetchImpl
+      });
+
+      expect(exitCode).toBe(0);
+      const request = JSON.parse(String((fetchImpl as ReturnType<typeof vi.fn>).mock.calls[0]?.[1]?.body ?? "{}"));
+      expect(request.variables.first).toBe(100);
+    } finally {
+      output.restore();
+    }
+  });
+
   it("sends project status type filter when --state is provided", async () => {
     const directory = await mkdtemp(join(tmpdir(), "linear-cli-project-"));
     const paths = await writeProfileFiles(directory);

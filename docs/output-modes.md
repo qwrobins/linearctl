@@ -23,7 +23,7 @@ linearctl issue get INF-42 --json
 }
 ```
 
-The shape of `--json` output is a stable contract. Fields are not removed or renamed without a major version change.
+The shape of `--json` output is a stable contract. Fields are not removed or renamed without a major version change. Issue output includes `projectMilestone` when an issue is attached to a project milestone.
 
 For list commands, `--json` outputs a JSON array.
 For some resources, single-item `get` commands intentionally return a richer object than each item in `list`; for example, `linearctl project get --json` includes detail fields like `progress`, `health`, `currentProgress`, and `milestones` (with description, sortOrder, createdAt, updatedAt).
