@@ -1829,7 +1829,7 @@ describe("handleIssueCommand — issue comment", () => {
       });
 
       expect(exitCode).toBe(5);
-      expect(output.stderr.join("")).toContain("--body is required");
+      expect(output.stderr.join("")).toContain("--body or --body-file is required");
     } finally {
       output.restore();
     }

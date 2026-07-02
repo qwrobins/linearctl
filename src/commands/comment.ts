@@ -272,7 +272,7 @@ async function handleCommentCreate(options: CommentCommandOptions): Promise<numb
   }
 
   if (body === undefined || body.trim() === "") {
-    return emitValidationError("--body is required for comment create.", options);
+    return emitValidationError("--body or --body-file is required for comment create.", options);
   }
 
   if (options.dryRun === true) {
@@ -323,7 +323,7 @@ async function handleCommentUpdate(commentId: string, options: CommentCommandOpt
   }
 
   if (body === undefined || body.trim() === "") {
-    return emitValidationError("--body is required for comment update.", options);
+    return emitValidationError("--body or --body-file is required for comment update.", options);
   }
 
   if (options.dryRun === true) {
@@ -426,7 +426,7 @@ export async function handleCommentCommand(
   if (subcommand === "update") {
     const commentId = rest[0];
     if (commentId === undefined || commentId.trim() === "") {
-      return emitValidationError("usage: linearctl comment update <commentId> --body <text>", options);
+      return emitValidationError("usage: linearctl comment update <commentId> (--body <text>|--body-file <path|->)", options);
     }
     if (rest.length > 1) {
       return emitValidationError("comment update accepts exactly one comment ID.", options);

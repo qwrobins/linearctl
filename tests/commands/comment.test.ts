@@ -300,7 +300,7 @@ describe("handleCommentCommand — comment create", () => {
       });
 
       expect(exitCode).toBe(5);
-      expect(output.stderr.join("")).toContain("--body is required");
+      expect(output.stderr.join("")).toContain("--body or --body-file is required");
     } finally {
       output.restore();
     }
@@ -372,6 +372,23 @@ describe("handleCommentCommand — comment update", () => {
 
       expect(exitCode).toBe(5);
       expect(output.stderr.join("")).toContain("--body and --body-file are mutually exclusive");
+    } finally {
+      output.restore();
+    }
+  });
+
+  it("returns exit code 5 when update has neither --body nor --body-file", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-comment-"));
+    const paths = await writeProfileFiles(directory);
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleCommentCommand(["update", "comment-uuid-1"], {
+        ...baseOptions(paths)
+      });
+
+      expect(exitCode).toBe(5);
+      expect(output.stderr.join("")).toContain("--body or --body-file is required");
     } finally {
       output.restore();
     }

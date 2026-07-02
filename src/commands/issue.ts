@@ -1284,7 +1284,7 @@ async function handleIssueComment(
   }
 
   if (body === undefined || body.trim() === "") {
-    return emitValidationError("--body is required for issue comment.", options);
+    return emitValidationError("--body or --body-file is required for issue comment.", options);
   }
 
   if (options.dryRun === true) {
