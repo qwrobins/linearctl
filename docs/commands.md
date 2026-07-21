@@ -77,6 +77,19 @@ Bulk operations fail the command when any item fails. With `--json-envelope`, pa
 
 Friendly names for teams, users, labels, workflow states, and projects resolve case-insensitively. When multiple case-insensitive matches exist, exact case-sensitive matches win before ambiguity is reported; user email matches outrank name/displayName matches, and team-scoped labels outrank same-named workspace labels under `--team`. When `issue list --state <name>` has a team scope from `--team` or the profile default team, it resolves the state name to an ID before filtering; without a team scope, it falls back to a case-insensitive state-name filter.
 
+## Relation
+
+```bash
+linearctl relation list <issue> [--all] [--max <n>] --json
+linearctl relation create --issue <issue> --related <issue> \
+  --type <blocks|duplicate|related|similar> --json
+linearctl relation delete <relation-id> --json       # [destructive]
+```
+
+`relation list` resolves a human-readable issue identifier or UUID and returns both outbound and inbound relations. Each result preserves the API's `issue` and `relatedIssue` endpoints and adds `direction` relative to the issue being listed.
+
+For `duplicate`, `--issue` is the duplicate and `--related` is the canonical issue. For `blocks`, `--issue` blocks `--related`. `related-to` and `relatedTo` are accepted as aliases for the API's `related` type. Creation resolves both issue identifiers before mutation and supports `--dry-run`.
+
 ## Project
 
 ```bash

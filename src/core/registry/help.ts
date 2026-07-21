@@ -13,6 +13,7 @@ type CommandDetails = {
 
 const COMMAND_DETAILS: Record<string, CommandDetails> = {
   issue: { summary: "Issues and bulk issue changes", group: "Work items", topLevel: true },
+  relation: { summary: "Issue relations and duplicate links", group: "Work items", topLevel: true },
   comment: { summary: "Issue comments", group: "Work items", topLevel: true },
   attachment: { summary: "Issue links and attachments", group: "Work items", topLevel: true },
   file: { summary: "Upload and download files", group: "Work items", topLevel: true },

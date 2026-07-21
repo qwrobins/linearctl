@@ -13,7 +13,7 @@ curl -fsSL https://raw.githubusercontent.com/qwrobins/linearctl/main/install.sh 
 Or install a specific version:
 
 ```bash
-LINEAR_VERSION=v0.8.5 curl -fsSL https://raw.githubusercontent.com/qwrobins/linearctl/main/install.sh | sh
+LINEAR_VERSION=v0.8.6 curl -fsSL https://raw.githubusercontent.com/qwrobins/linearctl/main/install.sh | sh
 ```
 
 On Debian/Ubuntu, the installer automatically uses the `.deb` package. To skip deb and install the raw binary instead:
@@ -94,6 +94,7 @@ For command discovery, agents can inspect the stable curated metadata with `line
 | Group | Operations |
 |---|---|
 | [issue](docs/commands.md#issue) | get, view, create, list, search, update, close, delete, assign, comment, attach-slack, bulk-update, bulk-close, bulk-archive, bulk-delete, bulk-assign |
+| [relation](docs/commands.md#relation) | list, create, delete |
 | [project](docs/commands.md#project) | get, list, create, update, create-with-issues, delete |
 | [cycle](docs/commands.md#cycle) | get, list, current, create, update, archive, delete |
 | [team](docs/commands.md#team) | get, list, members |

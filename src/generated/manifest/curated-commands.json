@@ -260,6 +260,54 @@
     ]
   },
   {
+    "commandPath": "linearctl relation list",
+    "layer": "curated",
+    "resource": "relation",
+    "operation": "list",
+    "stability": "stable",
+    "preferredForAgents": true,
+    "safety": "safe",
+    "inputMode": "flags",
+    "outputShape": "array",
+    "supportedOutputModes": [
+      "human",
+      "json",
+      "json-envelope"
+    ]
+  },
+  {
+    "commandPath": "linearctl relation create",
+    "layer": "curated",
+    "resource": "relation",
+    "operation": "create",
+    "stability": "stable",
+    "preferredForAgents": true,
+    "safety": "safe",
+    "inputMode": "flags",
+    "outputShape": "object",
+    "supportedOutputModes": [
+      "human",
+      "json",
+      "json-envelope"
+    ]
+  },
+  {
+    "commandPath": "linearctl relation delete",
+    "layer": "curated",
+    "resource": "relation",
+    "operation": "delete",
+    "stability": "stable",
+    "preferredForAgents": true,
+    "safety": "destructive",
+    "inputMode": "id",
+    "outputShape": "object",
+    "supportedOutputModes": [
+      "human",
+      "json",
+      "json-envelope"
+    ]
+  },
+  {
     "commandPath": "linearctl project get",
     "layer": "curated",
     "resource": "project",

@@ -27,6 +27,7 @@ export * from "./core/transport/retry.js";
 export * from "./core/resolution/resolve.js";
 export * from "./commands/api.js";
 export * from "./commands/issue.js";
+export * from "./commands/relation.js";
 export * from "./commands/comment.js";
 export * from "./commands/attachment.js";
 export * from "./commands/team.js";

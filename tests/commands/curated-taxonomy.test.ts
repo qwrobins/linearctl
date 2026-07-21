@@ -35,6 +35,7 @@ describe("curated command taxonomy", () => {
   it("marks destructive and confirmation-requiring commands explicitly", () => {
     expect(findCuratedCommand("linearctl comment delete")?.safety).toBe("destructive");
     expect(findCuratedCommand("linearctl attachment delete")?.safety).toBe("destructive");
+    expect(findCuratedCommand("linearctl relation delete")?.safety).toBe("destructive");
     expect(findCuratedCommand("linearctl issue delete")?.safety).toBe("destructive");
     expect(findCuratedCommand("linearctl issue bulk-delete")?.safety).toBe("confirmation-required");
     expect(findCuratedCommand("linearctl issue bulk-archive")?.safety).toBe("destructive");
