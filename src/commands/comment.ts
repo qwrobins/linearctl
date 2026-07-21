@@ -83,14 +83,16 @@ fragment CuratedComment on Comment {
 }`;
 
 const COMMENT_LIST_QUERY = `
-query CommentList($first: Int!, $after: String, $issueId: ID!) {
-  comments(first: $first, after: $after, filter: { issue: { id: { eq: $issueId } } }) {
-    nodes {
-      ...CuratedComment
-    }
-    pageInfo {
-      hasNextPage
-      endCursor
+query CommentList($first: Int!, $after: String, $issueId: String!) {
+  issue(id: $issueId) {
+    comments(first: $first, after: $after) {
+      nodes {
+        ...CuratedComment
+      }
+      pageInfo {
+        hasNextPage
+        endCursor
+      }
     }
   }
 }
@@ -165,7 +167,7 @@ function buildContext(options: CommentCommandOptions): CommandContext {
 
 async function handleCommentList(options: CommentCommandOptions): Promise<number> {
   if (options.issue === undefined) {
-    return emitValidationError("--issue is required for comment list.", options);
+    return emitValidationError("<issue> or --issue is required for comment list.", options);
   }
 
   const paginationOptions: PaginationOptions = {
@@ -213,8 +215,8 @@ async function handleCommentList(options: CommentCommandOptions): Promise<number
       ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl }),
       retry: normalizeRetryOptions(options),
       extractConnection: (data: unknown) => {
-        const d = data as { comments: { nodes: RawComment[]; pageInfo: PageInfo } };
-        return d.comments;
+        const d = data as { issue: { comments: { nodes: RawComment[]; pageInfo: PageInfo } } };
+        return d.issue.comments;
       }
     };
 
@@ -410,10 +412,16 @@ export async function handleCommentCommand(
   const [subcommand, ...rest] = positionals;
 
   if (subcommand === "list") {
-    if (rest.length > 0) {
-      return emitValidationError("comment list does not accept positional arguments.", options);
+    if (rest.length > 1) {
+      return emitValidationError("comment list accepts at most one issue argument.", options);
     }
-    return handleCommentList(options);
+    if (rest[0] !== undefined && options.issue !== undefined) {
+      return emitValidationError(
+        "mixed positional and flag-based issue identifiers are not allowed; provide either <issue> or --issue, not both.",
+        options
+      );
+    }
+    return handleCommentList(rest[0] === undefined ? options : { ...options, issue: rest[0] });
   }
 
   if (subcommand === "create") {

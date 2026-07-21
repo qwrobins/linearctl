@@ -101,9 +101,11 @@ describe("handleCommentCommand — comment list", () => {
     const paths = await writeProfileFiles(directory);
     const fetchImpl = makeFetch({
       data: {
-        comments: {
-          nodes: [makeRawComment(), makeRawComment({ id: "comment-uuid-2", body: "Second comment" })],
-          pageInfo: { hasNextPage: false, endCursor: null }
+        issue: {
+          comments: {
+            nodes: [makeRawComment(), makeRawComment({ id: "comment-uuid-2", body: "Second comment" })],
+            pageInfo: { hasNextPage: false, endCursor: null }
+          }
         }
       }
     });
@@ -122,6 +124,67 @@ describe("handleCommentCommand — comment list", () => {
       expect(parsed).toHaveLength(2);
       expect(parsed[0].id).toBe("comment-uuid-1");
       expect(parsed[1].id).toBe("comment-uuid-2");
+    } finally {
+      output.restore();
+    }
+  });
+
+  it("accepts a positional issue identifier and reads its nested comments connection", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-comment-"));
+    const paths = await writeProfileFiles(directory);
+    const fetchImpl = vi.fn(async (_input: string | URL | Request, init?: RequestInit) => {
+      const request = JSON.parse(String(init?.body ?? "{}"));
+      if (request.query.includes("CommentListIssueLookup")) {
+        return new Response(JSON.stringify({ data: { issue: { id: "issue-1" } } }), { status: 200 });
+      }
+      return new Response(JSON.stringify({
+        data: {
+          issue: {
+            comments: {
+              nodes: [makeRawComment()],
+              pageInfo: { hasNextPage: false, endCursor: null }
+            }
+          }
+        }
+      }), { status: 200 });
+    }) as FetchLike;
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleCommentCommand(["list", "INF-2975"], {
+        ...baseOptions(paths),
+        fetchImpl
+      });
+
+      expect(exitCode).toBe(0);
+      expect(JSON.parse(output.stdout.join(""))).toHaveLength(1);
+      expect(fetchImpl).toHaveBeenCalledTimes(2);
+
+      const lookupRequest = JSON.parse(String((fetchImpl as ReturnType<typeof vi.fn>).mock.calls[0]?.[1]?.body));
+      const listRequest = JSON.parse(String((fetchImpl as ReturnType<typeof vi.fn>).mock.calls[1]?.[1]?.body));
+      expect(lookupRequest.variables.id).toBe("INF-2975");
+      expect(listRequest.variables.issueId).toBe("issue-1");
+      expect(listRequest.query).toContain("issue(id: $issueId)");
+      expect(listRequest.query).not.toContain("filter: { issue:");
+    } finally {
+      output.restore();
+    }
+  });
+
+  it("rejects mixed positional and --issue identifiers", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-comment-"));
+    const paths = await writeProfileFiles(directory);
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleCommentCommand(["list", "INF-2975"], {
+        ...baseOptions(paths),
+        issue: "INF-2975"
+      });
+
+      expect(exitCode).toBe(5);
+      expect(output.stderr.join("")).toContain("mixed positional and flag-based issue identifiers");
+      expect(output.stdout.join("")).toBe("");
     } finally {
       output.restore();
     }
