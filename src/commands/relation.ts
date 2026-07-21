@@ -210,7 +210,7 @@ async function handleRelationList(issueInput: string, options: RelationCommandOp
     const requestPageSize = options.pageSize;
     const totalLimit = options.all === true && options.max === undefined
       ? undefined
-      : options.max ?? options.pageSize ?? 50;
+      : options.max ?? 50;
     const directionOptions = (limit: number | undefined): PaginationOptions => ({
       ...(totalLimit === undefined ? { all: true } : {}),
       ...(limit === undefined ? {} : { max: limit }),
@@ -257,8 +257,11 @@ async function handleRelationList(issueInput: string, options: RelationCommandOp
       (inboundSkipped && issue.inverseRelations.nodes.length > 0);
 
     if (hasNextPage && options.all !== true && options.max === undefined && !options.quiet) {
+      const inboundNote = inboundSkipped && issue.inverseRelations.nodes.length > 0
+        ? " Outbound relations exhausted the limit; inbound relations were not fetched."
+        : "";
       process.stderr.write(
-        `Warning: results truncated at ${relations.length} items. Use --all to fetch all results, or --max <n> for a specific limit.\n`
+        `Warning: results truncated at ${relations.length} items.${inboundNote} Use --all to fetch all results, or --max <n> for a specific limit.\n`
       );
     }
 

@@ -169,6 +169,89 @@ describe("handleRelationCommand — relation list", () => {
     }
   });
 
+  it("uses --page-size as the request batch size without reducing the default result limit", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-relation-"));
+    const paths = await writeProfileFiles(directory);
+    let outboundPage = 0;
+    const fetchImpl = makeFetch((request) => {
+      if (request.query.includes("RelationListIssueLookup")) {
+        return { data: { issue: { id: "issue-1", identifier: "INF-1", inverseRelations: { nodes: [] } } } };
+      }
+      if (request.query.includes("RelationListOutbound")) {
+        outboundPage += 1;
+        const offset = (outboundPage - 1) * 25;
+        return {
+          data: {
+            issue: {
+              relations: {
+                nodes: Array.from({ length: 25 }, (_, index) => rawRelation({ id: `relation-${offset + index}` })),
+                pageInfo: {
+                  hasNextPage: outboundPage === 1,
+                  endCursor: outboundPage === 1 ? "page-2" : null
+                }
+              }
+            }
+          }
+        };
+      }
+      throw new Error("Inbound relations should not be fetched after the default limit is reached");
+    });
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleRelationCommand(["list", "INF-1"], {
+        ...baseOptions(paths),
+        pageSize: 25,
+        fetchImpl
+      });
+
+      expect(exitCode).toBe(0);
+      expect(JSON.parse(output.stdout.join(""))).toHaveLength(50);
+      const requests = (fetchImpl as ReturnType<typeof vi.fn>).mock.calls.map((call) =>
+        JSON.parse(String(call[1]?.body ?? "{}"))
+      );
+      expect(requests.slice(1).map((request) => request.variables.first)).toEqual([25, 25]);
+    } finally {
+      output.restore();
+    }
+  });
+
+  it("warns when outbound relations exhaust the default limit before inbound relations are fetched", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-relation-"));
+    const paths = await writeProfileFiles(directory);
+    const fetchImpl = makeFetch((request) => {
+      if (request.query.includes("RelationListIssueLookup")) {
+        return { data: { issue: { id: "issue-1", identifier: "INF-1", inverseRelations: { nodes: [{ id: "incoming-1" }] } } } };
+      }
+      return {
+        data: {
+          issue: {
+            relations: {
+              nodes: Array.from({ length: 50 }, (_, index) => rawRelation({ id: `relation-${index}` })),
+              pageInfo: { hasNextPage: false, endCursor: null }
+            }
+          }
+        }
+      };
+    });
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleRelationCommand(["list", "INF-1"], {
+        ...baseOptions(paths),
+        fetchImpl
+      });
+
+      expect(exitCode).toBe(0);
+      expect(output.stderr.join("")).toContain(
+        "Outbound relations exhausted the limit; inbound relations were not fetched."
+      );
+      expect(fetchImpl).toHaveBeenCalledTimes(2);
+    } finally {
+      output.restore();
+    }
+  });
+
   it("requires exactly one positional issue", async () => {
     const directory = await mkdtemp(join(tmpdir(), "linear-cli-relation-"));
     const paths = await writeProfileFiles(directory);
