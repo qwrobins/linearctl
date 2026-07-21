@@ -1,7 +1,7 @@
 import { emitValidationError } from "../core/output/validation-error.js";
 import type { PageInfo } from "../core/output/envelope.js";
 import { ExitCode } from "../core/errors/exit-codes.js";
-import type { FetchLike, GraphQLErrorPayload } from "../core/transport/graphql.js";
+import type { FetchLike } from "../core/transport/graphql.js";
 import { paginateGraphQL, validatePaginationOptions } from "../core/pagination/pagination.js";
 import type { PaginationOptions } from "../core/pagination/pagination.js";
 import { streamPaginateGraphQL } from "../core/pagination/streaming.js";
@@ -83,14 +83,16 @@ fragment CuratedComment on Comment {
 }`;
 
 const COMMENT_LIST_QUERY = `
-query CommentList($first: Int!, $after: String, $issueId: ID!) {
-  comments(first: $first, after: $after, filter: { issue: { id: { eq: $issueId } } }) {
-    nodes {
-      ...CuratedComment
-    }
-    pageInfo {
-      hasNextPage
-      endCursor
+query CommentList($first: Int!, $after: String, $issueId: String!) {
+  issue(id: $issueId) {
+    comments(first: $first, after: $after) {
+      nodes {
+        ...CuratedComment
+      }
+      pageInfo {
+        hasNextPage
+        endCursor
+      }
     }
   }
 }
@@ -165,7 +167,7 @@ function buildContext(options: CommentCommandOptions): CommandContext {
 
 async function handleCommentList(options: CommentCommandOptions): Promise<number> {
   if (options.issue === undefined) {
-    return emitValidationError("--issue is required for comment list.", options);
+    return emitValidationError("<issue> or --issue is required for comment list.", options);
   }
 
   const paginationOptions: PaginationOptions = {
@@ -213,8 +215,11 @@ async function handleCommentList(options: CommentCommandOptions): Promise<number
       ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl }),
       retry: normalizeRetryOptions(options),
       extractConnection: (data: unknown) => {
-        const d = data as { comments: { nodes: RawComment[]; pageInfo: PageInfo } };
-        return d.comments;
+        const d = data as { issue: { comments: { nodes: RawComment[]; pageInfo: PageInfo } } | null };
+        if (d.issue === null || d.issue === undefined) {
+          throw new Error(`Issue "${issueId}" not found.`);
+        }
+        return d.issue.comments;
       }
     };
 
@@ -410,10 +415,16 @@ export async function handleCommentCommand(
   const [subcommand, ...rest] = positionals;
 
   if (subcommand === "list") {
-    if (rest.length > 0) {
-      return emitValidationError("comment list does not accept positional arguments.", options);
+    if (rest.length > 1) {
+      return emitValidationError("comment list accepts at most one issue argument.", options);
     }
-    return handleCommentList(options);
+    if (rest[0] !== undefined && options.issue !== undefined) {
+      return emitValidationError(
+        "mixed positional and flag-based issue identifiers are not allowed; provide either <issue> or --issue, not both.",
+        options
+      );
+    }
+    return handleCommentList(rest[0] === undefined ? options : { ...options, issue: rest[0] });
   }
 
   if (subcommand === "create") {
@@ -450,19 +461,4 @@ export async function handleCommentCommand(
 
 function looksLikeIssueIdentifier(value: string): boolean {
   return /^[A-Z][A-Z0-9]+-\d+$/.test(value);
-}
-
-function hasErrors(errors: GraphQLErrorPayload[] | undefined): boolean {
-  return Array.isArray(errors) && errors.length > 0;
-}
-
-function mapGraphQLErrors(errors: GraphQLErrorPayload[] | undefined): Array<{ category: "general"; message: string; details: Record<string, unknown> }> {
-  return (errors ?? []).map((error) => ({
-    category: "general" as const,
-    message: error.message,
-    details: {
-      ...(error.path === undefined ? {} : { path: error.path }),
-      ...(error.extensions === undefined ? {} : { extensions: error.extensions })
-    }
-  }));
 }

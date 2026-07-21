@@ -179,13 +179,14 @@ linearctl project-status delete <id> [--json]          # [destructive]
 ## Comment
 
 ```bash
+linearctl comment list <issue> --json
 linearctl comment list --issue <id> --json
 linearctl comment create --issue <id> (--body <text>|--body-file <path|->) --json
 linearctl comment update <id> (--body <text>|--body-file <path|->) --json
 linearctl comment delete <id> --json              # [destructive]
 ```
 
-When `--issue` is a human-readable issue identifier such as `INF-123`, `comment list` first verifies that the parent issue exists and returns exit 4 / `category: "not-found"` if it does not.
+The positional issue argument and `--issue` are equivalent. When either is a human-readable issue identifier such as `INF-123`, `comment list` first verifies that the parent issue exists and returns exit 4 / `category: "not-found"` if it does not. Comments are read from the issue's own comments connection.
 
 ## Attachment
 

@@ -264,7 +264,7 @@ export const COMMAND_REGISTRY: readonly CommandRegistration[] = [
       "issue", "body", "body-file",
     ],
     subcommands: {
-      list:   { usage: "linearctl comment list --issue <id> [--json]" },
+      list:   { usage: "linearctl comment list (<issue>|--issue <id>) [--json]" },
       create: { usage: "linearctl comment create --issue <id> (--body <text>|--body-file <path|->) [--json]" },
       update: { usage: "linearctl comment update <id> (--body <text>|--body-file <path|->) [--json]" },
       delete: { usage: "linearctl comment delete <id> [--json]" },

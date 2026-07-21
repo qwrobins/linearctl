@@ -91,7 +91,7 @@ Raw GraphQL should not be used merely because it is possible. It is the fallback
 - `linearctl label delete <id> --json`
 
 ### Comments
-- `linearctl comment list --issue <id> --json` — with human-readable issue identifiers, a missing parent issue returns exit 4 / `category: "not-found"` instead of an empty list
+- `linearctl comment list <issue> --json` / `linearctl comment list --issue <id> --json` — reads the issue's comments connection; with human-readable issue identifiers, a missing parent issue returns exit 4 / `category: "not-found"` instead of an empty list
 - `linearctl comment create --issue <id> (--body <text>|--body-file <path|->) --json`
 - `linearctl comment update <id> (--body <text>|--body-file <path|->) --json`
 - `linearctl comment delete <id> --json`
