@@ -231,6 +231,32 @@ describe("handleCommentCommand — comment list", () => {
       output.restore();
     }
   });
+
+  it("returns not-found when a raw issue UUID does not resolve", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-comment-"));
+    const paths = await writeProfileFiles(directory);
+    const issueId = "00000000-0000-0000-0000-000000000000";
+    const fetchImpl = makeFetch({ data: { issue: null } });
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleCommentCommand(["list"], {
+        ...baseOptions(paths),
+        issue: issueId,
+        json: false,
+        jsonEnvelope: true,
+        fetchImpl
+      });
+
+      expect(exitCode).toBe(4);
+      const envelope = JSON.parse(output.stdout.join(""));
+      expect(envelope.ok).toBe(false);
+      expect(envelope.errors[0].category).toBe("not-found");
+      expect(envelope.errors[0].message).toBe(`Issue "${issueId}" not found.`);
+    } finally {
+      output.restore();
+    }
+  });
 });
 
 describe("handleCommentCommand — comment create", () => {

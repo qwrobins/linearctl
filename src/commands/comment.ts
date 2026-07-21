@@ -1,7 +1,7 @@
 import { emitValidationError } from "../core/output/validation-error.js";
 import type { PageInfo } from "../core/output/envelope.js";
 import { ExitCode } from "../core/errors/exit-codes.js";
-import type { FetchLike, GraphQLErrorPayload } from "../core/transport/graphql.js";
+import type { FetchLike } from "../core/transport/graphql.js";
 import { paginateGraphQL, validatePaginationOptions } from "../core/pagination/pagination.js";
 import type { PaginationOptions } from "../core/pagination/pagination.js";
 import { streamPaginateGraphQL } from "../core/pagination/streaming.js";
@@ -215,7 +215,10 @@ async function handleCommentList(options: CommentCommandOptions): Promise<number
       ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl }),
       retry: normalizeRetryOptions(options),
       extractConnection: (data: unknown) => {
-        const d = data as { issue: { comments: { nodes: RawComment[]; pageInfo: PageInfo } } };
+        const d = data as { issue: { comments: { nodes: RawComment[]; pageInfo: PageInfo } } | null };
+        if (d.issue === null || d.issue === undefined) {
+          throw new Error(`Issue "${issueId}" not found.`);
+        }
         return d.issue.comments;
       }
     };
@@ -458,19 +461,4 @@ export async function handleCommentCommand(
 
 function looksLikeIssueIdentifier(value: string): boolean {
   return /^[A-Z][A-Z0-9]+-\d+$/.test(value);
-}
-
-function hasErrors(errors: GraphQLErrorPayload[] | undefined): boolean {
-  return Array.isArray(errors) && errors.length > 0;
-}
-
-function mapGraphQLErrors(errors: GraphQLErrorPayload[] | undefined): Array<{ category: "general"; message: string; details: Record<string, unknown> }> {
-  return (errors ?? []).map((error) => ({
-    category: "general" as const,
-    message: error.message,
-    details: {
-      ...(error.path === undefined ? {} : { path: error.path }),
-      ...(error.extensions === undefined ? {} : { extensions: error.extensions })
-    }
-  }));
 }
