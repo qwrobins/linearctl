@@ -99,6 +99,8 @@ export const OPTION_CATALOG: Record<string, OptionSpec> = {
   position: { type: "string" },
   scope: { type: "string" },
   parent: { type: "string" },
+  related: { type: "string" },
+  type: { type: "string" },
 };
 
 /** Reusable option groups that commands compose from */

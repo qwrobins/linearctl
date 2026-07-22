@@ -44,6 +44,11 @@ Raw GraphQL should not be used merely because it is possible. It is the fallback
 - `linearctl issue attach-slack <identifier> --url <slack-url> [--sync] [--title <text>] --json` — link a Slack thread to an issue (--sync enables bidirectional comment sync)
 - `linearctl issue comment <identifier> (--body <text>|--body-file <path|->) --json` — add a comment to an issue
 
+### Issue relations
+- `linearctl relation list <issue> [--all] [--max <n>] --json` — list both outbound and inbound relations for an issue; each item includes `direction`, `issue`, and `relatedIssue`
+- `linearctl relation create --issue <issue> --related <issue> --type <blocks|duplicate|related|similar> --json` — create a relation after resolving both identifiers; for `duplicate`, `--issue` is the duplicate and `--related` is canonical
+- `linearctl relation delete <relation-id> --json` — delete a relation
+
 ### Bulk operations
 - `linearctl issue bulk-update --ids <id1,id2,...> [--state <id>] [--assignee <id>] [--priority <0-4>] [--estimate <n>] [--label <id>] [--cycle <id>] [--project-milestone <id>|--milestone <id>] --json`
 - `linearctl issue bulk-close --ids <id1,id2,...> [--state <name|id>] --json` — transition issues to a completed/canceled workflow state, matching `issue close`

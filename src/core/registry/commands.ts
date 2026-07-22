@@ -8,6 +8,7 @@ import { handleCycleCommand } from "../../commands/cycle.js";
 import { handleFileCommand } from "../../commands/file.js";
 import { handleGqlCommand } from "../../commands/gql.js";
 import { handleIssueCommand } from "../../commands/issue.js";
+import { handleRelationCommand } from "../../commands/relation.js";
 import { handleCommentCommand } from "../../commands/comment.js";
 import { handleApiCommand } from "../../commands/api.js";
 import { handleAttachmentCommand } from "../../commands/attachment.js";
@@ -75,6 +76,29 @@ export const COMMAND_REGISTRY: readonly CommandRegistration[] = [
         "label", "state", "states", "status", "inputJson", "ids", "body", "bodyFile", "url", "query", "search",
         "filterJson", "createdAfter", "updatedAfter", "completedAfter",
         "cycle", "project", "milestone", "projectMilestone", "orderBy", "orderDir", "parent"),
+    }),
+  },
+
+  // ── Issue Relation ─────────────────────────────────────────────────────
+  {
+    name: "relation",
+    optionKeys: [
+      ...OPTION_GROUPS.global,
+      ...OPTION_GROUPS.streaming,
+      ...OPTION_GROUPS.dryRun,
+      ...OPTION_GROUPS.retry,
+      "all", "max", "limit", "page-size", "issue", "related", "type",
+    ],
+    subcommands: {
+      list:   { usage: "linearctl relation list <issue> [--all] [--max <n>] [--json]" },
+      create: { usage: "linearctl relation create --issue <issue> --related <issue> --type <blocks|duplicate|related|similar> [--json]" },
+      delete: { usage: "linearctl relation delete <relation-id> [--json]" },
+    },
+    handler: handleRelationCommand,
+    buildOptions: (args, env) => ({
+      ...curatedOptions(args, env),
+      ...paginationOptions(args),
+      ...pickFields(args, "issue", "related", "type"),
     }),
   },
 

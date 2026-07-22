@@ -59,7 +59,7 @@ describe("README quickstart documentation", () => {
   });
 
   it("keeps the pinned install example on the current package version", () => {
-    expect(README).toContain("LINEAR_VERSION=v0.8.5");
+    expect(README).toContain("LINEAR_VERSION=v0.8.6");
     expect(README).not.toContain("LINEAR_VERSION=v0.1.0");
   });
 
