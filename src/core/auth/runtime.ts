@@ -1,4 +1,4 @@
-import { mkdir, rmdir, stat } from "node:fs/promises";
+import { mkdir, rmdir, stat, utimes } from "node:fs/promises";
 import type { LinearConfig } from "../config/config-file.js";
 import { loadLinearConfigFile } from "../config/config-file.js";
 import type { LinearConfigPaths } from "../config/paths.js";
@@ -68,23 +68,55 @@ function withCredentialWriteLock<T>(fn: () => Promise<T>): Promise<T> {
 
 const CREDENTIALS_LOCK_TIMEOUT_MS = 10_000;
 const CREDENTIALS_LOCK_STALE_MS = 30_000;
+const CREDENTIALS_LOCK_HEARTBEAT_MS = 10_000;
+
+export interface CredentialsFileLockOptions {
+  /** Lock mtime refresh interval while held (0 disables). Default 10s. */
+  heartbeatMs?: number;
+  /** Age after which an unrefreshed lock is presumed abandoned. Default 30s. */
+  staleMs?: number;
+  /** Max wait to acquire the lock. Default 10s. */
+  timeoutMs?: number;
+}
 
 /**
  * Cross-process mutex on the credentials file, using an adjacent lock
  * directory (mkdir is atomic on POSIX). The in-process queue above cannot
  * stop a second linearctl process from overwriting freshly rotated tokens,
- * so the refresh critical section is serialized on disk as well. Locks
- * older than CREDENTIALS_LOCK_STALE_MS are presumed abandoned by a crashed
- * process and broken.
+ * so the refresh critical section is serialized on disk as well.
+ *
+ * The holder refreshes the lock's mtime on a heartbeat, so a slow token
+ * grant never looks abandoned; only a lock whose mtime has gone unrefreshed
+ * for staleMs (i.e. the holder crashed) is broken by waiters.
  */
-export async function acquireCredentialsFileLock(credentialsFile: string): Promise<() => Promise<void>> {
+export async function acquireCredentialsFileLock(
+  credentialsFile: string,
+  options: CredentialsFileLockOptions = {}
+): Promise<() => Promise<void>> {
+  const heartbeatMs = options.heartbeatMs ?? CREDENTIALS_LOCK_HEARTBEAT_MS;
+  const staleMs = options.staleMs ?? CREDENTIALS_LOCK_STALE_MS;
+  const timeoutMs = options.timeoutMs ?? CREDENTIALS_LOCK_TIMEOUT_MS;
   const lockDir = `${credentialsFile}.lock`;
   const start = Date.now();
 
   for (;;) {
     try {
       await mkdir(lockDir);
+
+      let heartbeat: ReturnType<typeof setInterval> | undefined;
+      if (heartbeatMs > 0) {
+        heartbeat = setInterval(() => {
+          const now = new Date();
+          utimes(lockDir, now, now).catch(() => undefined);
+        }, heartbeatMs);
+        // Never keep the process alive just for the heartbeat.
+        heartbeat.unref();
+      }
+
       return async () => {
+        if (heartbeat !== undefined) {
+          clearInterval(heartbeat);
+        }
         await rmdir(lockDir).catch(() => undefined);
       };
     } catch (error) {
@@ -94,8 +126,8 @@ export async function acquireCredentialsFileLock(credentialsFile: string): Promi
 
       try {
         const stats = await stat(lockDir);
-        if (Date.now() - stats.mtimeMs > CREDENTIALS_LOCK_STALE_MS) {
-          // Stale lock from a crashed process — break it and retry.
+        if (Date.now() - stats.mtimeMs > staleMs) {
+          // Lock whose mtime is no longer refreshed — the holder crashed.
           await rmdir(lockDir).catch(() => undefined);
           continue;
         }
@@ -104,7 +136,7 @@ export async function acquireCredentialsFileLock(credentialsFile: string): Promi
         continue;
       }
 
-      if (Date.now() - start > CREDENTIALS_LOCK_TIMEOUT_MS) {
+      if (Date.now() - start > timeoutMs) {
         throw new Error("timed out waiting for the Linear credentials file lock");
       }
 

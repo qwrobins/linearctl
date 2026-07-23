@@ -285,6 +285,59 @@ describe("acquireCredentialsFileLock", () => {
     await releaseFirst();
   });
 
+  it("does not break an active lock whose holder refreshes it (slow grant)", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-lock-"));
+    const credentialsFile = join(directory, "credentials");
+
+    // Holder refreshes the lock every 50ms; waiters consider it stale after 300ms.
+    const releaseFirst = await acquireCredentialsFileLock(credentialsFile, {
+      heartbeatMs: 50,
+      staleMs: 300
+    });
+
+    let secondAcquiredAt: number | undefined;
+    const startedAt = Date.now();
+    const second = (async () => {
+      const releaseSecond = await acquireCredentialsFileLock(credentialsFile, {
+        staleMs: 300,
+        timeoutMs: 5_000
+      });
+      secondAcquiredAt = Date.now();
+      await releaseSecond();
+    })();
+
+    // Hold the lock well past the stale threshold — the heartbeat must keep it alive.
+    await new Promise((resolve) => setTimeout(resolve, 800));
+    expect(secondAcquiredAt).toBeUndefined();
+
+    await releaseFirst();
+    await second;
+    expect(secondAcquiredAt).toBeDefined();
+    expect(secondAcquiredAt! - startedAt).toBeGreaterThanOrEqual(700);
+  });
+
+  it("breaks an unrefreshed active lock past the stale threshold", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-lock-"));
+    const credentialsFile = join(directory, "credentials");
+
+    // Holder with the heartbeat disabled simulates a wedged process.
+    const releaseFirst = await acquireCredentialsFileLock(credentialsFile, {
+      heartbeatMs: 0,
+      staleMs: 200
+    });
+
+    const startedAt = Date.now();
+    const releaseSecond = await acquireCredentialsFileLock(credentialsFile, {
+      staleMs: 200,
+      timeoutMs: 5_000
+    });
+    // The waiter broke the stale-looking lock after ~200ms.
+    expect(Date.now() - startedAt).toBeLessThan(2_000);
+
+    await releaseSecond();
+    await releaseFirst();
+  });
+
   it("preserves both profiles' tokens when two OS processes refresh concurrently", async () => {
     const directory = await mkdtemp(join(tmpdir(), "linear-cli-lock-"));
     const configFile = join(directory, "config");
