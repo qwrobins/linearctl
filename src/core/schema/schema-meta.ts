@@ -76,24 +76,49 @@ export function computeSchemaFingerprint(schema: Record<string, unknown>): strin
   const typeEntries = types
     .filter((t): t is {
       name: string;
-      fields?: Array<{ name: string; type?: unknown; isDeprecated?: boolean; args?: Array<{ name: string; type?: unknown }> }>;
-      inputFields?: Array<{ name: string; type?: unknown; isDeprecated?: boolean }>;
-      enumValues?: Array<{ name: string; isDeprecated?: boolean }>;
+      fields?: Array<{
+        name: string;
+        description?: string | null;
+        type?: unknown;
+        isDeprecated?: boolean;
+        deprecationReason?: string | null;
+        args?: Array<{ name: string; description?: string | null; type?: unknown }>;
+      }>;
+      inputFields?: Array<{
+        name: string;
+        description?: string | null;
+        type?: unknown;
+        isDeprecated?: boolean;
+        deprecationReason?: string | null;
+      }>;
+      enumValues?: Array<{
+        name: string;
+        description?: string | null;
+        isDeprecated?: boolean;
+        deprecationReason?: string | null;
+      }>;
     } =>
       t !== null && typeof t === "object" && typeof (t as Record<string, unknown>).name === "string"
     )
     .filter((t) => !t.name.startsWith("__"))
     .sort((a, b) => a.name.localeCompare(b.name))
     .map((t) => {
+      // Descriptions and deprecation reasons are included because generated
+      // artifacts (CLI help, manifest deprecation guidance) depend on them.
       const fields = [
         ...(Array.isArray(t.fields) ? t.fields.map((f) => {
           const args = Array.isArray(f.args)
-            ? `(${f.args.map((arg) => `${arg.name}:${formatTypeRef(arg.type)}`).sort().join(",")})`
+            ? `(${f.args.map((arg) => `${arg.name}:${formatTypeRef(arg.type)}:${arg.description ?? ""}`).sort().join(",")})`
             : "";
-          return `${f.name}${args}:${formatTypeRef(f.type)}${f.isDeprecated === true ? " deprecated" : ""}`;
+          const deprecated = f.isDeprecated === true ? ` deprecated:${f.deprecationReason ?? ""}` : "";
+          return `${f.name}${args}:${formatTypeRef(f.type)}${deprecated} desc:${f.description ?? ""}`;
         }) : []),
-        ...(Array.isArray(t.inputFields) ? t.inputFields.map((f) => `${f.name}:${formatTypeRef(f.type)}${f.isDeprecated === true ? " deprecated" : ""}`) : []),
-        ...(Array.isArray(t.enumValues) ? t.enumValues.map((f) => `${f.name}${f.isDeprecated === true ? " deprecated" : ""}`) : [])
+        ...(Array.isArray(t.inputFields) ? t.inputFields.map((f) =>
+          `${f.name}:${formatTypeRef(f.type)}${f.isDeprecated === true ? ` deprecated:${f.deprecationReason ?? ""}` : ""} desc:${f.description ?? ""}`
+        ) : []),
+        ...(Array.isArray(t.enumValues) ? t.enumValues.map((f) =>
+          `${f.name}${f.isDeprecated === true ? ` deprecated:${f.deprecationReason ?? ""}` : ""} desc:${f.description ?? ""}`
+        ) : [])
       ].sort().join(",");
       return fields.length > 0 ? `${t.name}:${fields}` : t.name;
     });

@@ -50,6 +50,21 @@ function oauthCredentialsNeedRefresh(expiresAt: string, now = Date.now()): boole
   return expiresAtMs - now <= TOKEN_REFRESH_BUFFER_MS;
 }
 
+/**
+ * Process-wide queue serializing OAuth refresh + credential writes. Without
+ * it, parallel profile resolutions (e.g. `workspace list`) each refresh from
+ * their own stale snapshot and the last whole-file write discards another
+ * profile's freshly rotated tokens.
+ */
+let credentialWriteQueue: Promise<unknown> = Promise.resolve();
+
+function withCredentialWriteLock<T>(fn: () => Promise<T>): Promise<T> {
+  const run = credentialWriteQueue.then(fn, fn);
+  // Keep the queue alive even when a refresh fails.
+  credentialWriteQueue = run.catch(() => undefined);
+  return run;
+}
+
 export async function resolveStoredProfile(input: ResolveStoredProfileInput): Promise<ResolvedProfile> {
   const [config, credentials] = await Promise.all([
     loadOptionalConfig(input.paths.configFile),
@@ -91,44 +106,64 @@ async function refreshOAuthProfileIfNeeded(
     );
   }
 
-  let tokenResponse;
-  try {
-    tokenResponse = await refreshAccessToken({
-      refreshToken: oauthCreds.refreshToken,
-      clientId: oauthCreds.oauthClientId,
-      ...(input.fetchImpl === undefined ? {} : { fetchImpl: input.fetchImpl })
-    });
-  } catch (error) {
-    if (error instanceof OAuthTokenError) {
-      if (error.errorCode === "invalid_grant") {
-        const recoveredProfile = await recoverConcurrentOAuthRefresh(profile, oauthCreds.refreshToken, input);
-        if (recoveredProfile !== undefined) {
-          return recoveredProfile;
-        }
-      }
+  return withCredentialWriteLock(async () => {
+    // Re-read inside the lock: another refresh (in this process, or a recovery
+    // from a concurrent one) may have already rotated this profile's tokens.
+    const latestStore = await loadOptionalCredentials(input.paths.credentialsFile);
+    const latest = latestStore.profiles[profile.name];
+    const current = latest !== undefined && latest.type === "oauth" ? latest : oauthCreds;
+
+    if (!oauthCredentialsNeedRefresh(current.expiresAt)) {
+      return { ...profile, credentials: current };
+    }
+
+    if (!current.oauthClientId) {
       throw new ProfileResolutionError(
         "profile-missing-credentials",
-        `OAuth token refresh failed for profile "${profile.name}": ${error.message}`
+        `OAuth profile "${profile.name}" is missing oauth_client_id required for token refresh.`
       );
     }
-    throw error;
-  }
 
-  const newExpiresAt = new Date(Date.now() + tokenResponse.expires_in * 1000).toISOString();
-  const refreshedCredentials = {
-    ...oauthCreds,
-    accessToken: tokenResponse.access_token,
-    refreshToken: tokenResponse.refresh_token,
-    expiresAt: newExpiresAt
-  };
+    let tokenResponse;
+    try {
+      tokenResponse = await refreshAccessToken({
+        refreshToken: current.refreshToken,
+        clientId: current.oauthClientId,
+        ...(input.fetchImpl === undefined ? {} : { fetchImpl: input.fetchImpl })
+      });
+    } catch (error) {
+      if (error instanceof OAuthTokenError) {
+        if (error.errorCode === "invalid_grant") {
+          const recoveredProfile = await recoverConcurrentOAuthRefresh(profile, current.refreshToken, input);
+          if (recoveredProfile !== undefined) {
+            return recoveredProfile;
+          }
+        }
+        throw new ProfileResolutionError(
+          "profile-missing-credentials",
+          `OAuth token refresh failed for profile "${profile.name}": ${error.message}`
+        );
+      }
+      throw error;
+    }
 
-  const updatedStore = setCredentialsProfile(credentials, refreshedCredentials);
-  await writeCredentialsFile(input.paths.credentialsFile, updatedStore);
+    const newExpiresAt = new Date(Date.now() + tokenResponse.expires_in * 1000).toISOString();
+    const refreshedCredentials = {
+      ...current,
+      accessToken: tokenResponse.access_token,
+      refreshToken: tokenResponse.refresh_token,
+      expiresAt: newExpiresAt
+    };
 
-  return {
-    ...profile,
-    credentials: refreshedCredentials
-  };
+    // Merge onto the latest store — never write back the stale snapshot.
+    const updatedStore = setCredentialsProfile(latestStore, refreshedCredentials);
+    await writeCredentialsFile(input.paths.credentialsFile, updatedStore);
+
+    return {
+      ...profile,
+      credentials: refreshedCredentials
+    };
+  });
 }
 
 async function recoverConcurrentOAuthRefresh(

@@ -164,4 +164,77 @@ describe("resolveStoredProfile", () => {
       refreshToken: "new-refresh"
     });
   });
+
+  it("keeps both profiles' refreshed tokens when two profiles refresh in parallel", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-auth-runtime-"));
+    const configFile = join(directory, "config");
+    const credentialsFile = join(directory, "credentials");
+    const expired = new Date(Date.now() - 60_000).toISOString();
+
+    await writeLinearConfigFile(configFile, {
+      profiles: { a: {}, b: {} }
+    });
+    await writeCredentialsFile(credentialsFile, {
+      profiles: {
+        a: {
+          profileName: "a",
+          type: "oauth",
+          accessToken: "access-a",
+          refreshToken: "refresh-a",
+          expiresAt: expired,
+          oauthClientId: "client-123"
+        },
+        b: {
+          profileName: "b",
+          type: "oauth",
+          accessToken: "access-b",
+          refreshToken: "refresh-b",
+          expiresAt: expired,
+          oauthClientId: "client-123"
+        }
+      }
+    });
+
+    const fetchImpl = vi.fn(async (_input: unknown, init?: RequestInit) => {
+      const params = new URLSearchParams(String(init?.body ?? ""));
+      const refreshToken = params.get("refresh_token");
+      // Small delay to encourage interleaving between the parallel refreshes.
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      return new Response(JSON.stringify({
+        access_token: `access-${refreshToken}-2`,
+        refresh_token: `${refreshToken}-2`,
+        expires_in: 3600,
+        token_type: "Bearer",
+        scope: "read write"
+      }), { status: 200 });
+    }) as FetchLike;
+
+    const [profileA, profileB] = await Promise.all([
+      resolveStoredProfile({
+        paths: { configFile, credentialsFile },
+        explicitProfile: "a",
+        fetchImpl
+      }),
+      resolveStoredProfile({
+        paths: { configFile, credentialsFile },
+        explicitProfile: "b",
+        fetchImpl
+      })
+    ]);
+
+    expect(profileA.credentials).toMatchObject({ accessToken: "access-refresh-a-2" });
+    expect(profileB.credentials).toMatchObject({ accessToken: "access-refresh-b-2" });
+
+    // The credentials file must contain BOTH refreshed profiles — a stale
+    // whole-file overwrite would lose one of them.
+    const stored = await loadCredentialsFile(credentialsFile);
+    expect(stored.profiles.a).toMatchObject({
+      accessToken: "access-refresh-a-2",
+      refreshToken: "refresh-a-2"
+    });
+    expect(stored.profiles.b).toMatchObject({
+      accessToken: "access-refresh-b-2",
+      refreshToken: "refresh-b-2"
+    });
+  });
 });

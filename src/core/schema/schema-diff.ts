@@ -18,9 +18,11 @@ export interface SchemaDiff {
 
 interface IntrospectionField {
   name: string;
+  description?: string | null;
   type?: unknown;
-  args?: Array<{ name: string; type?: unknown }>;
+  args?: Array<{ name: string; description?: string | null; type?: unknown }>;
   isDeprecated?: boolean;
+  deprecationReason?: string | null;
 }
 
 interface IntrospectionType {
@@ -58,7 +60,9 @@ function extractTypes(schema: unknown): Map<string, IntrospectionType> {
 
 /**
  * Map of field name → signature. The signature captures everything that
- * matters for compatibility: argument types, return type, and deprecation.
+ * matters for compatibility and for generated artifacts: argument types and
+ * descriptions, return type, deprecation status/reason, and description —
+ * the manifest generator consumes these, so changes must invalidate the diff.
  */
 function fieldSignatures(type: IntrospectionType): Map<string, string> {
   const signatures = new Map<string, string>();
@@ -66,24 +70,24 @@ function fieldSignatures(type: IntrospectionType): Map<string, string> {
   if (Array.isArray(type.fields)) {
     for (const f of type.fields) {
       const args = Array.isArray(f.args)
-        ? `(${f.args.map((arg) => `${arg.name}:${formatTypeRef(arg.type)}`).sort().join(",")})`
+        ? `(${f.args.map((arg) => `${arg.name}:${formatTypeRef(arg.type)}:${arg.description ?? ""}`).sort().join(",")})`
         : "";
-      const deprecated = f.isDeprecated === true ? " deprecated" : "";
-      signatures.set(f.name, `${args}:${formatTypeRef(f.type)}${deprecated}`);
+      const deprecated = f.isDeprecated === true ? ` deprecated:${f.deprecationReason ?? ""}` : "";
+      signatures.set(f.name, `${args}:${formatTypeRef(f.type)}${deprecated} desc:${f.description ?? ""}`);
     }
   }
 
   if (Array.isArray(type.inputFields)) {
     for (const f of type.inputFields) {
-      const deprecated = f.isDeprecated === true ? " deprecated" : "";
-      signatures.set(f.name, `input:${formatTypeRef(f.type)}${deprecated}`);
+      const deprecated = f.isDeprecated === true ? ` deprecated:${f.deprecationReason ?? ""}` : "";
+      signatures.set(f.name, `input:${formatTypeRef(f.type)}${deprecated} desc:${f.description ?? ""}`);
     }
   }
 
   if (Array.isArray(type.enumValues)) {
     for (const f of type.enumValues) {
-      const deprecated = f.isDeprecated === true ? " deprecated" : "";
-      signatures.set(f.name, `enum${deprecated}`);
+      const deprecated = f.isDeprecated === true ? ` deprecated:${f.deprecationReason ?? ""}` : "";
+      signatures.set(f.name, `enum${deprecated} desc:${f.description ?? ""}`);
     }
   }
 

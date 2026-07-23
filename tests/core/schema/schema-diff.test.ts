@@ -222,6 +222,54 @@ describe("diffSchemas", () => {
     expect(diff.changedFields).toEqual([{ type: "Issue", field: "id" }]);
     expect(diff.hasBreakingChanges).toBe(true);
   });
+
+  it("detects description-only changes (consumed by generated help)", () => {
+    const makeDescribedSchema = (description: string) => ({
+      __schema: {
+        types: [
+          {
+            kind: "OBJECT",
+            name: "Issue",
+            fields: [
+              { name: "id", description, type: { kind: "SCALAR", name: "ID", ofType: null }, args: [] },
+            ],
+          },
+        ],
+      },
+    });
+
+    const diff = diffSchemas(makeDescribedSchema("old text"), makeDescribedSchema("new text"));
+
+    expect(diff.changedFields).toEqual([{ type: "Issue", field: "id" }]);
+    expect(diff.addedFields).toEqual([]);
+    expect(diff.removedFields).toEqual([]);
+  });
+
+  it("detects deprecation reason changes", () => {
+    const makeReasonSchema = (deprecationReason: string) => ({
+      __schema: {
+        types: [
+          {
+            kind: "OBJECT",
+            name: "Issue",
+            fields: [
+              {
+                name: "id",
+                type: { kind: "SCALAR", name: "ID", ofType: null },
+                args: [],
+                isDeprecated: true,
+                deprecationReason
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    const diff = diffSchemas(makeReasonSchema("use uuid"), makeReasonSchema("use id2"));
+
+    expect(diff.changedFields).toEqual([{ type: "Issue", field: "id" }]);
+  });
 });
 
 describe("formatDiffSummary", () => {
