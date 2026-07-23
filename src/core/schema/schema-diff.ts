@@ -58,36 +58,54 @@ function extractTypes(schema: unknown): Map<string, IntrospectionType> {
   return map;
 }
 
+interface FieldSignatures {
+  /** Argument types and return type — changes here can break existing queries. */
+  structural: string;
+  /** Descriptions and deprecation state — consumed by generated artifacts but non-breaking. */
+  metadata: string;
+}
+
 /**
- * Map of field name → signature. The signature captures everything that
- * matters for compatibility and for generated artifacts: argument types and
- * descriptions, return type, deprecation status/reason, and description —
- * the manifest generator consumes these, so changes must invalidate the diff.
+ * Map of field name → signatures. Both parts matter for drift detection (the
+ * manifest generator consumes descriptions/deprecations), but only the
+ * structural part is treated as a breaking change.
  */
-function fieldSignatures(type: IntrospectionType): Map<string, string> {
-  const signatures = new Map<string, string>();
+function fieldSignatures(type: IntrospectionType): Map<string, FieldSignatures> {
+  const signatures = new Map<string, FieldSignatures>();
 
   if (Array.isArray(type.fields)) {
     for (const f of type.fields) {
-      const args = Array.isArray(f.args)
-        ? `(${f.args.map((arg) => `${arg.name}:${formatTypeRef(arg.type)}:${arg.description ?? ""}`).sort().join(",")})`
+      const structuralArgs = Array.isArray(f.args)
+        ? `(${f.args.map((arg) => `${arg.name}:${formatTypeRef(arg.type)}`).sort().join(",")})`
+        : "";
+      const metadataArgs = Array.isArray(f.args)
+        ? f.args.map((arg) => `${arg.name}:${arg.description ?? ""}`).sort().join(",")
         : "";
       const deprecated = f.isDeprecated === true ? ` deprecated:${f.deprecationReason ?? ""}` : "";
-      signatures.set(f.name, `${args}:${formatTypeRef(f.type)}${deprecated} desc:${f.description ?? ""}`);
+      signatures.set(f.name, {
+        structural: `${structuralArgs}:${formatTypeRef(f.type)}`,
+        metadata: `${metadataArgs}${deprecated} desc:${f.description ?? ""}`
+      });
     }
   }
 
   if (Array.isArray(type.inputFields)) {
     for (const f of type.inputFields) {
       const deprecated = f.isDeprecated === true ? ` deprecated:${f.deprecationReason ?? ""}` : "";
-      signatures.set(f.name, `input:${formatTypeRef(f.type)}${deprecated} desc:${f.description ?? ""}`);
+      signatures.set(f.name, {
+        structural: `input:${formatTypeRef(f.type)}`,
+        metadata: `${deprecated} desc:${f.description ?? ""}`
+      });
     }
   }
 
   if (Array.isArray(type.enumValues)) {
     for (const f of type.enumValues) {
       const deprecated = f.isDeprecated === true ? ` deprecated:${f.deprecationReason ?? ""}` : "";
-      signatures.set(f.name, `enum${deprecated} desc:${f.description ?? ""}`);
+      signatures.set(f.name, {
+        structural: "enum",
+        metadata: `${deprecated} desc:${f.description ?? ""}`
+      });
     }
   }
 
@@ -103,6 +121,7 @@ export function diffSchemas(oldSchema: unknown, newSchema: unknown): SchemaDiff 
   const addedFields: Array<{ type: string; field: string }> = [];
   const removedFields: Array<{ type: string; field: string }> = [];
   const changedFields: Array<{ type: string; field: string }> = [];
+  const structuralChangedFields: Array<{ type: string; field: string }> = [];
   const changedTypeSet = new Set<string>();
 
   // Detect removed types
@@ -131,7 +150,11 @@ export function diffSchemas(oldSchema: unknown, newSchema: unknown): SchemaDiff 
       if (oldSignature === undefined) {
         addedFields.push({ type: name, field });
         changedTypeSet.add(name);
-      } else if (oldSignature !== newSignature) {
+      } else if (oldSignature.structural !== newSignature.structural) {
+        changedFields.push({ type: name, field });
+        structuralChangedFields.push({ type: name, field });
+        changedTypeSet.add(name);
+      } else if (oldSignature.metadata !== newSignature.metadata) {
         changedFields.push({ type: name, field });
         changedTypeSet.add(name);
       }
@@ -150,11 +173,13 @@ export function diffSchemas(oldSchema: unknown, newSchema: unknown): SchemaDiff 
   addedFields.sort((a, b) => a.type.localeCompare(b.type) || a.field.localeCompare(b.field));
   removedFields.sort((a, b) => a.type.localeCompare(b.type) || a.field.localeCompare(b.field));
   changedFields.sort((a, b) => a.type.localeCompare(b.type) || a.field.localeCompare(b.field));
+  structuralChangedFields.sort((a, b) => a.type.localeCompare(b.type) || a.field.localeCompare(b.field));
 
-  // Breaking changes: removed types/fields or changed field signatures
-  // (a changed argument or return type can break existing queries).
+  // Breaking changes: removed types/fields or structural signature changes
+  // (changed argument or return type). Metadata-only changes (descriptions,
+  // deprecation state) still invalidate drift detection but are not breaking.
   const hasBreakingChanges =
-    removedTypes.length > 0 || removedFields.length > 0 || changedFields.length > 0;
+    removedTypes.length > 0 || removedFields.length > 0 || structuralChangedFields.length > 0;
 
   return {
     addedTypes,

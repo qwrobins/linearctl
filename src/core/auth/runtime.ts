@@ -66,7 +66,9 @@ function withCredentialWriteLock<T>(fn: () => Promise<T>): Promise<T> {
   return run;
 }
 
-const CREDENTIALS_LOCK_TIMEOUT_MS = 10_000;
+// The wait must outlast the longest protected critical section: the OAuth
+// token grant may run up to 60s (TOKEN_REQUEST_TIMEOUT_MS), plus margin.
+const CREDENTIALS_LOCK_TIMEOUT_MS = 90_000;
 const CREDENTIALS_LOCK_STALE_MS = 30_000;
 const CREDENTIALS_LOCK_HEARTBEAT_MS = 10_000;
 

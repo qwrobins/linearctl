@@ -220,7 +220,8 @@ describe("diffSchemas", () => {
     const diff = diffSchemas(makeDeprecationSchema(false), makeDeprecationSchema(true));
 
     expect(diff.changedFields).toEqual([{ type: "Issue", field: "id" }]);
-    expect(diff.hasBreakingChanges).toBe(true);
+    // Deprecation is a warning, not a breaking change — queries still work.
+    expect(diff.hasBreakingChanges).toBe(false);
   });
 
   it("detects description-only changes (consumed by generated help)", () => {
@@ -243,6 +244,8 @@ describe("diffSchemas", () => {
     expect(diff.changedFields).toEqual([{ type: "Issue", field: "id" }]);
     expect(diff.addedFields).toEqual([]);
     expect(diff.removedFields).toEqual([]);
+    // Documentation updates invalidate drift detection but are not breaking.
+    expect(diff.hasBreakingChanges).toBe(false);
   });
 
   it("detects deprecation reason changes", () => {
@@ -269,6 +272,30 @@ describe("diffSchemas", () => {
     const diff = diffSchemas(makeReasonSchema("use uuid"), makeReasonSchema("use id2"));
 
     expect(diff.changedFields).toEqual([{ type: "Issue", field: "id" }]);
+    expect(diff.hasBreakingChanges).toBe(false);
+  });
+
+  it("treats structural signature changes as breaking", () => {
+    const makeTypedSchema = (titleType: unknown) => ({
+      __schema: {
+        types: [
+          {
+            kind: "OBJECT",
+            name: "Issue",
+            fields: [
+              { name: "title", type: titleType, args: [] },
+            ],
+          },
+        ],
+      },
+    });
+    const oldSchema = makeTypedSchema({ kind: "SCALAR", name: "String", ofType: null });
+    const newSchema = makeTypedSchema({ kind: "NON_NULL", name: null, ofType: { kind: "SCALAR", name: "String", ofType: null } });
+
+    const diff = diffSchemas(oldSchema, newSchema);
+
+    expect(diff.changedFields).toEqual([{ type: "Issue", field: "title" }]);
+    expect(diff.hasBreakingChanges).toBe(true);
   });
 });
 
