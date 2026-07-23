@@ -3,21 +3,32 @@
  * and produces a structured summary of changes.
  */
 
+import { formatTypeRef } from "./schema-meta.js";
+
 export interface SchemaDiff {
   addedTypes: string[];
   removedTypes: string[];
   addedFields: Array<{ type: string; field: string }>;
   removedFields: Array<{ type: string; field: string }>;
+  /** Fields whose type, arguments, or deprecation status changed. */
+  changedFields: Array<{ type: string; field: string }>;
   changedTypes: number;
   hasBreakingChanges: boolean;
+}
+
+interface IntrospectionField {
+  name: string;
+  type?: unknown;
+  args?: Array<{ name: string; type?: unknown }>;
+  isDeprecated?: boolean;
 }
 
 interface IntrospectionType {
   name: string;
   kind: string;
-  fields?: Array<{ name: string }> | null;
-  inputFields?: Array<{ name: string }> | null;
-  enumValues?: Array<{ name: string }> | null;
+  fields?: IntrospectionField[] | null;
+  inputFields?: IntrospectionField[] | null;
+  enumValues?: IntrospectionField[] | null;
 }
 
 function extractTypes(schema: unknown): Map<string, IntrospectionType> {
@@ -45,18 +56,38 @@ function extractTypes(schema: unknown): Map<string, IntrospectionType> {
   return map;
 }
 
-function fieldNames(type: IntrospectionType): Set<string> {
-  const names = new Set<string>();
+/**
+ * Map of field name → signature. The signature captures everything that
+ * matters for compatibility: argument types, return type, and deprecation.
+ */
+function fieldSignatures(type: IntrospectionType): Map<string, string> {
+  const signatures = new Map<string, string>();
+
   if (Array.isArray(type.fields)) {
-    for (const f of type.fields) names.add(f.name);
+    for (const f of type.fields) {
+      const args = Array.isArray(f.args)
+        ? `(${f.args.map((arg) => `${arg.name}:${formatTypeRef(arg.type)}`).sort().join(",")})`
+        : "";
+      const deprecated = f.isDeprecated === true ? " deprecated" : "";
+      signatures.set(f.name, `${args}:${formatTypeRef(f.type)}${deprecated}`);
+    }
   }
+
   if (Array.isArray(type.inputFields)) {
-    for (const f of type.inputFields) names.add(f.name);
+    for (const f of type.inputFields) {
+      const deprecated = f.isDeprecated === true ? " deprecated" : "";
+      signatures.set(f.name, `input:${formatTypeRef(f.type)}${deprecated}`);
+    }
   }
+
   if (Array.isArray(type.enumValues)) {
-    for (const f of type.enumValues) names.add(f.name);
+    for (const f of type.enumValues) {
+      const deprecated = f.isDeprecated === true ? " deprecated" : "";
+      signatures.set(f.name, `enum${deprecated}`);
+    }
   }
-  return names;
+
+  return signatures;
 }
 
 export function diffSchemas(oldSchema: unknown, newSchema: unknown): SchemaDiff {
@@ -67,6 +98,7 @@ export function diffSchemas(oldSchema: unknown, newSchema: unknown): SchemaDiff 
   const removedTypes: string[] = [];
   const addedFields: Array<{ type: string; field: string }> = [];
   const removedFields: Array<{ type: string; field: string }> = [];
+  const changedFields: Array<{ type: string; field: string }> = [];
   const changedTypeSet = new Set<string>();
 
   // Detect removed types
@@ -86,18 +118,22 @@ export function diffSchemas(oldSchema: unknown, newSchema: unknown): SchemaDiff 
       continue;
     }
 
-    // Compare fields
-    const oldFields = fieldNames(oldType);
-    const newFields = fieldNames(newType);
+    // Compare field signatures
+    const oldFields = fieldSignatures(oldType);
+    const newFields = fieldSignatures(newType);
 
-    for (const field of newFields) {
-      if (!oldFields.has(field)) {
+    for (const [field, newSignature] of newFields) {
+      const oldSignature = oldFields.get(field);
+      if (oldSignature === undefined) {
         addedFields.push({ type: name, field });
+        changedTypeSet.add(name);
+      } else if (oldSignature !== newSignature) {
+        changedFields.push({ type: name, field });
         changedTypeSet.add(name);
       }
     }
 
-    for (const field of oldFields) {
+    for (const field of oldFields.keys()) {
       if (!newFields.has(field)) {
         removedFields.push({ type: name, field });
         changedTypeSet.add(name);
@@ -109,15 +145,19 @@ export function diffSchemas(oldSchema: unknown, newSchema: unknown): SchemaDiff 
   removedTypes.sort();
   addedFields.sort((a, b) => a.type.localeCompare(b.type) || a.field.localeCompare(b.field));
   removedFields.sort((a, b) => a.type.localeCompare(b.type) || a.field.localeCompare(b.field));
+  changedFields.sort((a, b) => a.type.localeCompare(b.type) || a.field.localeCompare(b.field));
 
-  // Breaking changes: removed types or removed fields
-  const hasBreakingChanges = removedTypes.length > 0 || removedFields.length > 0;
+  // Breaking changes: removed types/fields or changed field signatures
+  // (a changed argument or return type can break existing queries).
+  const hasBreakingChanges =
+    removedTypes.length > 0 || removedFields.length > 0 || changedFields.length > 0;
 
   return {
     addedTypes,
     removedTypes,
     addedFields,
     removedFields,
+    changedFields,
     changedTypes: changedTypeSet.size,
     hasBreakingChanges,
   };
@@ -139,6 +179,10 @@ export function formatDiffSummary(diff: SchemaDiff): string {
   if (diff.removedFields.length > 0) {
     const fieldStrs = diff.removedFields.map((f) => `${f.type}.${f.field}`);
     lines.push(`Removed fields (${diff.removedFields.length}): ${fieldStrs.join(", ")}`);
+  }
+  if (diff.changedFields.length > 0) {
+    const fieldStrs = diff.changedFields.map((f) => `${f.type}.${f.field}`);
+    lines.push(`Changed fields (${diff.changedFields.length}): ${fieldStrs.join(", ")}`);
   }
   if (diff.hasBreakingChanges) {
     lines.push("Breaking changes detected.");

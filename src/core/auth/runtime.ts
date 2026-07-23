@@ -41,7 +41,13 @@ export async function loadOptionalCredentials(credentialsFile: string): Promise<
 const TOKEN_REFRESH_BUFFER_MS = 5 * 60 * 1000;
 
 function oauthCredentialsNeedRefresh(expiresAt: string, now = Date.now()): boolean {
-  return new Date(expiresAt).getTime() - now <= TOKEN_REFRESH_BUFFER_MS;
+  const expiresAtMs = new Date(expiresAt).getTime();
+  // An unparseable expiry is treated as expired so the token gets refreshed
+  // instead of being sent until the API rejects it.
+  if (Number.isNaN(expiresAtMs)) {
+    return true;
+  }
+  return expiresAtMs - now <= TOKEN_REFRESH_BUFFER_MS;
 }
 
 export async function resolveStoredProfile(input: ResolveStoredProfileInput): Promise<ResolvedProfile> {

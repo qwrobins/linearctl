@@ -119,4 +119,49 @@ describe("resolveStoredProfile", () => {
       refreshToken: "rotated-refresh"
     });
   });
+
+  it("refreshes OAuth credentials when expiresAt is unparseable", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-auth-runtime-"));
+    const configFile = join(directory, "config");
+    const credentialsFile = join(directory, "credentials");
+
+    await writeLinearConfigFile(configFile, {
+      defaultProfile: "work",
+      profiles: { work: {} }
+    });
+    await writeCredentialsFile(credentialsFile, {
+      profiles: {
+        work: {
+          profileName: "work",
+          type: "oauth",
+          accessToken: "old-access",
+          refreshToken: "old-refresh",
+          expiresAt: "not-a-date",
+          oauthClientId: "client-123"
+        }
+      }
+    });
+
+    const fetchImpl = vi.fn(async () =>
+      new Response(JSON.stringify({
+        access_token: "new-access",
+        refresh_token: "new-refresh",
+        expires_in: 3600,
+        token_type: "Bearer",
+        scope: "read write"
+      }), { status: 200 })
+    ) as FetchLike;
+
+    const profile = await resolveStoredProfile({
+      paths: { configFile, credentialsFile },
+      fetchImpl
+    });
+
+    // An invalid expiry must trigger a refresh rather than send a dead token.
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(profile.credentials).toMatchObject({
+      accessToken: "new-access",
+      refreshToken: "new-refresh"
+    });
+  });
 });

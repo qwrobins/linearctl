@@ -79,4 +79,22 @@ describe("stringifyIni", () => {
       })
     ).toBe("[default]\nprofile = work\n\n[work]\ntype = api_key\napi_key = lin_api_xxx\n");
   });
+
+  it("rejects values containing newlines (INI injection)", () => {
+    expect(() =>
+      stringifyIni({
+        work: { workspace: "acme\n[evil]\napi_key = stolen" }
+      })
+    ).toThrow(/must not contain newlines/);
+  });
+
+  it("rejects section names containing newlines or brackets", () => {
+    expect(() => stringifyIni({ "a\nb": { k: "v" } })).toThrow(/must not contain newlines/);
+    expect(() => stringifyIni({ "a]b": { k: "v" } })).toThrow(/must not contain brackets/);
+  });
+
+  it("rejects keys containing '=' or newlines", () => {
+    expect(() => stringifyIni({ work: { "a=b": "v" } })).toThrow(/must not contain '='/);
+    expect(() => stringifyIni({ work: { "a\nb": "v" } })).toThrow(/must not contain newlines/);
+  });
 });

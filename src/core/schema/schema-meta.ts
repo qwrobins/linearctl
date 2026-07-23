@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import bundledMeta from "../../generated/manifest/schema-meta.json" with { type: "json" };
@@ -75,9 +76,9 @@ export function computeSchemaFingerprint(schema: Record<string, unknown>): strin
   const typeEntries = types
     .filter((t): t is {
       name: string;
-      fields?: Array<{ name: string; type?: unknown; args?: Array<{ name: string; type?: unknown }> }>;
-      inputFields?: Array<{ name: string; type?: unknown }>;
-      enumValues?: Array<{ name: string }>;
+      fields?: Array<{ name: string; type?: unknown; isDeprecated?: boolean; args?: Array<{ name: string; type?: unknown }> }>;
+      inputFields?: Array<{ name: string; type?: unknown; isDeprecated?: boolean }>;
+      enumValues?: Array<{ name: string; isDeprecated?: boolean }>;
     } =>
       t !== null && typeof t === "object" && typeof (t as Record<string, unknown>).name === "string"
     )
@@ -89,10 +90,10 @@ export function computeSchemaFingerprint(schema: Record<string, unknown>): strin
           const args = Array.isArray(f.args)
             ? `(${f.args.map((arg) => `${arg.name}:${formatTypeRef(arg.type)}`).sort().join(",")})`
             : "";
-          return `${f.name}${args}:${formatTypeRef(f.type)}`;
+          return `${f.name}${args}:${formatTypeRef(f.type)}${f.isDeprecated === true ? " deprecated" : ""}`;
         }) : []),
-        ...(Array.isArray(t.inputFields) ? t.inputFields.map((f) => `${f.name}:${formatTypeRef(f.type)}`) : []),
-        ...(Array.isArray(t.enumValues) ? t.enumValues.map((f) => f.name) : [])
+        ...(Array.isArray(t.inputFields) ? t.inputFields.map((f) => `${f.name}:${formatTypeRef(f.type)}${f.isDeprecated === true ? " deprecated" : ""}`) : []),
+        ...(Array.isArray(t.enumValues) ? t.enumValues.map((f) => `${f.name}${f.isDeprecated === true ? " deprecated" : ""}`) : [])
       ].sort().join(",");
       return fields.length > 0 ? `${t.name}:${fields}` : t.name;
     });
@@ -102,16 +103,11 @@ export function computeSchemaFingerprint(schema: Record<string, unknown>): strin
   }
 
   const input = typeEntries.join("\n");
-  let hash = 0;
-  for (let i = 0; i < input.length; i++) {
-    const char = input.charCodeAt(i);
-    hash = ((hash << 5) - hash + char) | 0;
-  }
-  const hex = (hash >>> 0).toString(16).padStart(8, "0");
+  const hex = createHash("sha256").update(input).digest("hex");
   return `introspect-${hex}`;
 }
 
-function formatTypeRef(type: unknown): string {
+export function formatTypeRef(type: unknown): string {
   if (type === null || typeof type !== "object" || Array.isArray(type)) {
     return "";
   }

@@ -70,6 +70,17 @@ jobs:
         with:
           ref: ${{ github.event.inputs.tag || github.ref }}
 
+      - name: Validate tag format
+        env:
+          TAG_NAME: ${{ github.event.inputs.tag || github.ref_name }}
+        run: |
+          # The tag is interpolated into shell commands (sed programs, heredocs)
+          # later in this workflow, so it must be a plain version tag.
+          if ! echo "$TAG_NAME" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
+            echo "Error: tag '$TAG_NAME' is not a valid version tag (expected vX.Y.Z or vX.Y.Z-suffix)" >&2
+            exit 1
+          fi
+
       - name: Validate tag matches package.json version
         env:
           TAG_NAME: ${{ github.event.inputs.tag || github.ref_name }}

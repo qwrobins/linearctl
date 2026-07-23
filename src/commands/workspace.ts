@@ -69,53 +69,67 @@ async function handleWorkspaceList(options: WorkspaceCommandOptions): Promise<nu
     ...Object.keys(credentials.profiles)
   ]);
 
-  let updatedConfig = config;
-  const workspaces: WorkspaceListEntry[] = [];
+  // Query all profiles in parallel — each request is independent, and per-profile
+  // failures are isolated so one unreachable profile can't block the listing.
+  const entries = await Promise.all(
+    [...profileNames].sort().map(async (profileName) => {
+      const metadata = config.profiles[profileName] ?? {};
+      const credential = credentials.profiles[profileName];
+      let resolvedMetadata = metadata;
 
-  for (const profileName of [...profileNames].sort()) {
-    const metadata = config.profiles[profileName] ?? {};
-    const credential = credentials.profiles[profileName];
-    let resolvedMetadata = metadata;
-
-    if (
-      credential !== undefined &&
-      (metadata.workspace === undefined || metadata.workspaceId === undefined || metadata.userEmail === undefined)
-    ) {
-      const ctx = new CommandContext({
-        json: options.json,
-        jsonEnvelope: options.jsonEnvelope,
-        profile: profileName,
-        configFile: options.configFile,
-        credentialsFile: options.credentialsFile,
-        env: options.env,
-        ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl }),
-      });
-      try {
-        const response = await ctx.graphql<ViewerWorkspaceResponse>(
-          "query WorkspaceListViewer { viewer { email organization { id name } } }"
-        );
-        if (!ctx.hasErrors(response.body.errors)) {
-          resolvedMetadata = {
-            ...metadata,
-            ...(response.body.data?.viewer.organization?.name === undefined ? {} : { workspace: response.body.data.viewer.organization.name }),
-            ...(response.body.data?.viewer.organization?.id === undefined ? {} : { workspaceId: response.body.data.viewer.organization.id }),
-            ...(response.body.data?.viewer.email === undefined ? {} : { userEmail: response.body.data.viewer.email })
-          };
-          updatedConfig = setProfileMetadata(updatedConfig, profileName, resolvedMetadata);
+      if (
+        credential !== undefined &&
+        (metadata.workspace === undefined || metadata.workspaceId === undefined || metadata.userEmail === undefined)
+      ) {
+        const ctx = new CommandContext({
+          json: options.json,
+          jsonEnvelope: options.jsonEnvelope,
+          profile: profileName,
+          configFile: options.configFile,
+          credentialsFile: options.credentialsFile,
+          env: options.env,
+          ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl }),
+        });
+        try {
+          const response = await ctx.graphql<ViewerWorkspaceResponse>(
+            "query WorkspaceListViewer { viewer { email organization { id name } } }"
+          );
+          if (!ctx.hasErrors(response.body.errors)) {
+            resolvedMetadata = {
+              ...metadata,
+              ...(response.body.data?.viewer.organization?.name === undefined ? {} : { workspace: response.body.data.viewer.organization.name }),
+              ...(response.body.data?.viewer.organization?.id === undefined ? {} : { workspaceId: response.body.data.viewer.organization.id }),
+              ...(response.body.data?.viewer.email === undefined ? {} : { userEmail: response.body.data.viewer.email })
+            };
+          }
+        } catch {
+          // Keep listing local profile data even if one profile cannot be contacted.
         }
-      } catch {
-        // Keep listing local profile data even if one profile cannot be contacted.
       }
-    }
 
-    workspaces.push({
-      profile: profileName,
-      workspace: resolvedMetadata.workspace ?? null,
-      workspaceId: resolvedMetadata.workspaceId ?? null,
-      userEmail: resolvedMetadata.userEmail ?? null,
-      authType: credential?.type ?? "missing"
-    });
+      return {
+        profileName,
+        metadataUpdated: resolvedMetadata !== metadata,
+        resolvedMetadata,
+        entry: {
+          profile: profileName,
+          workspace: resolvedMetadata.workspace ?? null,
+          workspaceId: resolvedMetadata.workspaceId ?? null,
+          userEmail: resolvedMetadata.userEmail ?? null,
+          authType: credential?.type ?? "missing"
+        } satisfies WorkspaceListEntry
+      };
+    })
+  );
+
+  // Apply metadata updates in a deterministic (sorted) order.
+  let updatedConfig = config;
+  for (const { profileName, metadataUpdated, resolvedMetadata } of entries) {
+    if (metadataUpdated) {
+      updatedConfig = setProfileMetadata(updatedConfig, profileName, resolvedMetadata);
+    }
   }
+  const workspaces = entries.map(({ entry }) => entry);
 
   if (JSON.stringify(updatedConfig) !== JSON.stringify(config)) {
     await writeLinearConfigFile(options.configFile, updatedConfig);

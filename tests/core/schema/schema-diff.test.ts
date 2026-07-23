@@ -152,6 +152,76 @@ describe("diffSchemas", () => {
     expect(diff.removedTypes).toEqual([]);
     expect(diff.changedTypes).toBe(0);
   });
+
+  it("detects field type changes", () => {
+    const makeTypedSchema = (titleType: unknown) => ({
+      __schema: {
+        types: [
+          {
+            kind: "OBJECT",
+            name: "Issue",
+            fields: [
+              { name: "id", type: { kind: "SCALAR", name: "String", ofType: null }, args: [] },
+              { name: "title", type: titleType, args: [] },
+            ],
+          },
+        ],
+      },
+    });
+    const oldSchema = makeTypedSchema({ kind: "SCALAR", name: "String", ofType: null });
+    const newSchema = makeTypedSchema({ kind: "NON_NULL", name: null, ofType: { kind: "SCALAR", name: "String", ofType: null } });
+
+    const diff = diffSchemas(oldSchema, newSchema);
+
+    expect(diff.changedFields).toEqual([{ type: "Issue", field: "title" }]);
+    expect(diff.addedFields).toEqual([]);
+    expect(diff.removedFields).toEqual([]);
+    expect(diff.hasBreakingChanges).toBe(true);
+  });
+
+  it("detects field argument changes", () => {
+    const makeArgsSchema = (args: Array<{ name: string; type?: unknown }>) => ({
+      __schema: {
+        types: [
+          {
+            kind: "OBJECT",
+            name: "Query",
+            fields: [{ name: "issues", type: { kind: "OBJECT", name: "IssueConnection", ofType: null }, args }],
+          },
+        ],
+      },
+    });
+    const oldSchema = makeArgsSchema([{ name: "first", type: { kind: "SCALAR", name: "Int", ofType: null } }]);
+    const newSchema = makeArgsSchema([
+      { name: "first", type: { kind: "SCALAR", name: "Int", ofType: null } },
+      { name: "filter", type: { kind: "INPUT_OBJECT", name: "IssueFilter", ofType: null } },
+    ]);
+
+    const diff = diffSchemas(oldSchema, newSchema);
+
+    expect(diff.changedFields).toEqual([{ type: "Query", field: "issues" }]);
+  });
+
+  it("detects deprecation changes", () => {
+    const makeDeprecationSchema = (isDeprecated: boolean) => ({
+      __schema: {
+        types: [
+          {
+            kind: "OBJECT",
+            name: "Issue",
+            fields: [
+              { name: "id", type: { kind: "SCALAR", name: "ID", ofType: null }, args: [], isDeprecated },
+            ],
+          },
+        ],
+      },
+    });
+
+    const diff = diffSchemas(makeDeprecationSchema(false), makeDeprecationSchema(true));
+
+    expect(diff.changedFields).toEqual([{ type: "Issue", field: "id" }]);
+    expect(diff.hasBreakingChanges).toBe(true);
+  });
 });
 
 describe("formatDiffSummary", () => {
@@ -166,6 +236,7 @@ describe("formatDiffSummary", () => {
       removedTypes: ["OldType"],
       addedFields: [],
       removedFields: [{ type: "Issue", field: "legacy" }],
+      changedFields: [],
       changedTypes: 3,
       hasBreakingChanges: true,
     });

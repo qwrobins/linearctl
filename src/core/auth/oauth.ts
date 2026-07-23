@@ -94,25 +94,42 @@ function tokenErrorMessage(operation: "exchange" | "refresh", status: number, er
   return `${label} failed with HTTP ${status}${errorCode === undefined ? "" : ` (${errorCode})`}`;
 }
 
-export async function exchangeCode(params: ExchangeCodeParams): Promise<TokenResponse> {
-  const fetchImpl = params.fetchImpl ?? fetch;
-  const response = await fetchImpl(LINEAR_TOKEN_URL, {
-    method: "POST",
-    headers: { "content-type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      grant_type: "authorization_code",
-      code: params.code,
-      code_verifier: params.codeVerifier,
-      client_id: params.clientId,
-      redirect_uri: params.redirectUri
-    }).toString()
-  });
+const TOKEN_REQUEST_TIMEOUT_MS = 60_000;
+
+async function postTokenRequest(
+  operation: "exchange" | "refresh",
+  body: URLSearchParams,
+  fetchImpl: FetchLike
+): Promise<TokenResponse> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => {
+    controller.abort();
+  }, TOKEN_REQUEST_TIMEOUT_MS);
+
+  let response: Response;
+  try {
+    response = await fetchImpl(LINEAR_TOKEN_URL, {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: body.toString(),
+      signal: controller.signal
+    });
+  } catch (error) {
+    if (controller.signal.aborted) {
+      throw new OAuthTokenError(
+        `${operation === "exchange" ? "Token exchange" : "Token refresh"} timed out after ${Math.round(TOKEN_REQUEST_TIMEOUT_MS / 1000)}s`
+      );
+    }
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
 
   if (!response.ok) {
     const text = await response.text();
     const errorCode = parseTokenError(text);
     throw new OAuthTokenError(
-      tokenErrorMessage("exchange", response.status, errorCode),
+      tokenErrorMessage(operation, response.status, errorCode),
       response.status,
       errorCode
     );
@@ -121,27 +138,28 @@ export async function exchangeCode(params: ExchangeCodeParams): Promise<TokenRes
   return (await response.json()) as TokenResponse;
 }
 
+export async function exchangeCode(params: ExchangeCodeParams): Promise<TokenResponse> {
+  return postTokenRequest(
+    "exchange",
+    new URLSearchParams({
+      grant_type: "authorization_code",
+      code: params.code,
+      code_verifier: params.codeVerifier,
+      client_id: params.clientId,
+      redirect_uri: params.redirectUri
+    }),
+    params.fetchImpl ?? fetch
+  );
+}
+
 export async function refreshAccessToken(params: RefreshTokenParams): Promise<TokenResponse> {
-  const fetchImpl = params.fetchImpl ?? fetch;
-  const response = await fetchImpl(LINEAR_TOKEN_URL, {
-    method: "POST",
-    headers: { "content-type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
+  return postTokenRequest(
+    "refresh",
+    new URLSearchParams({
       grant_type: "refresh_token",
       refresh_token: params.refreshToken,
       client_id: params.clientId
-    }).toString()
-  });
-
-  if (!response.ok) {
-    const text = await response.text();
-    const errorCode = parseTokenError(text);
-    throw new OAuthTokenError(
-      tokenErrorMessage("refresh", response.status, errorCode),
-      response.status,
-      errorCode
-    );
-  }
-
-  return (await response.json()) as TokenResponse;
+    }),
+    params.fetchImpl ?? fetch
+  );
 }

@@ -194,8 +194,13 @@ async function handleTeamGet(
     );
 
     if (ctx.hasErrors(response.body.errors)) {
+      // If the identifier is already a UUID, re-querying with the same ID
+      // would fail identically — report the original error.
+      if (looksLikeId(identifier)) {
+        return ctx.emitFailure(ctx.mapGraphQLErrors(response.body.errors));
+      }
       const resolverOpts = await ctx.resolverOptions();
-      const teamId = looksLikeId(identifier) ? identifier : await resolveTeamId(identifier, resolverOpts);
+      const teamId = await resolveTeamId(identifier, resolverOpts);
       response = await ctx.graphql<{ team: RawTeam | null }>(TEAM_GET_QUERY, { id: teamId });
       if (ctx.hasErrors(response.body.errors)) {
         return ctx.emitFailure(ctx.mapGraphQLErrors(response.body.errors));

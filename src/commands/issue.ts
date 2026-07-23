@@ -955,6 +955,9 @@ async function handleIssueUpdate(
         `query IssueTeam($id: String!) { issue(id: $id) { team { id } } }`,
         { id: identifier }
       );
+      if (ctx.hasErrors(issueData.body.errors)) {
+        return ctx.emitFailure(ctx.mapGraphQLErrors(issueData.body.errors));
+      }
       issueTeamId = issueData.body.data?.issue?.team?.id;
       if (issueTeamId === undefined) {
         return emitValidationError(`Could not find issue "${identifier}" or its team for name resolution.`, options);
@@ -1073,6 +1076,9 @@ async function handleIssueClose(
         `query StateCheck($id: String!) { workflowState(id: $id) { id name type } }`,
         { id: targetStateId }
       );
+      if (ctx.hasErrors(stateCheck.body.errors)) {
+        return ctx.emitFailure(ctx.mapGraphQLErrors(stateCheck.body.errors));
+      }
       const stateType = stateCheck.body.data?.workflowState?.type;
       if (stateType !== "completed" && stateType !== "canceled") {
         return emitError(
@@ -1087,7 +1093,7 @@ async function handleIssueClose(
         workflowStates: { nodes: Array<{ id: string; name: string; type: string; position: number }> }
       }>(
         `query CompletedStates($filter: WorkflowStateFilter!) {
-          workflowStates(first: 10, filter: $filter) {
+          workflowStates(first: 250, filter: $filter) {
             nodes { id name type position }
           }
         }`,
@@ -1428,11 +1434,18 @@ async function executeBulk(
   return exitCode;
 }
 
+/** Caches per-team terminal-state resolution across a bulk-close run. */
+interface BulkCloseCache {
+  /** Resolved target state per team ID (options.state is fixed for the run). */
+  stateByTeam: Map<string, { id: string; name: string }>;
+}
+
 async function closeIssueForBulk(
   identifier: string,
   options: IssueCommandOptions,
   ctx: CommandContext,
-  resolverOpts: Awaited<ReturnType<CommandContext["resolverOptions"]>>
+  resolverOpts: Awaited<ReturnType<CommandContext["resolverOptions"]>>,
+  cache: BulkCloseCache
 ): Promise<{ identifier: string; [key: string]: unknown }> {
   const issueData = await ctx.graphql<{ issue: { team: { id: string } } | null }>(
     `query IssueTeam($id: String!) { issue(id: $id) { team { id } } }`,
@@ -1451,7 +1464,11 @@ async function closeIssueForBulk(
   let targetStateId: string;
   let targetStateName: string;
 
-  if (options.state !== undefined) {
+  const cachedState = cache.stateByTeam.get(teamId);
+  if (cachedState !== undefined) {
+    targetStateId = cachedState.id;
+    targetStateName = cachedState.name;
+  } else if (options.state !== undefined) {
     targetStateId = looksLikeId(options.state)
       ? options.state
       : await resolveStateId(options.state, teamId, resolverOpts);
@@ -1463,6 +1480,9 @@ async function closeIssueForBulk(
       `query StateCheck($id: String!) { workflowState(id: $id) { id name type } }`,
       { id: targetStateId }
     );
+    if (ctx.hasErrors(stateCheck.body.errors)) {
+      throw new Error(stateCheck.body.errors?.[0]?.message ?? "Failed to verify workflow state");
+    }
     const stateType = stateCheck.body.data?.workflowState?.type;
     if (stateType !== "completed" && stateType !== "canceled") {
       throw new Error(
@@ -1470,12 +1490,13 @@ async function closeIssueForBulk(
       );
     }
     targetStateName = stateCheck.body.data?.workflowState?.name ?? options.state;
+    cache.stateByTeam.set(teamId, { id: targetStateId, name: targetStateName });
   } else {
     const statesData = await ctx.graphql<{
       workflowStates: { nodes: Array<{ id: string; name: string; type: string; position: number }> }
     }>(
       `query CompletedStates($filter: WorkflowStateFilter!) {
-        workflowStates(first: 10, filter: $filter) {
+        workflowStates(first: 250, filter: $filter) {
           nodes { id name type position }
         }
       }`,
@@ -1495,6 +1516,7 @@ async function closeIssueForBulk(
     }
     targetStateId = completedState.id;
     targetStateName = completedState.name;
+    cache.stateByTeam.set(teamId, { id: targetStateId, name: targetStateName });
   }
 
   const response = await ctx.graphql<{
@@ -1576,6 +1598,9 @@ async function handleBulkUpdate(options: IssueCommandOptions): Promise<number> {
     if (options.label !== undefined && !looksLikeId(options.label)) {
       input.labelIds = [await resolveLabelId(options.label, undefined, resolverOpts)];
     }
+    // State names are resolved per team — cache so issues sharing a team
+    // don't each pay for a resolution query.
+    const stateIdByTeam = new Map<string, string>();
     return await executeBulk(
       identifiers,
       async (id) => {
@@ -1592,7 +1617,14 @@ async function handleBulkUpdate(options: IssueCommandOptions): Promise<number> {
           if (teamId === undefined) {
             throw new Error(`Could not find issue "${id}" or its team for state resolution.`);
           }
-          issueInput.stateId = await resolveStateId(options.state, teamId, resolverOpts);
+          const cachedStateId = stateIdByTeam.get(teamId);
+          if (cachedStateId !== undefined) {
+            issueInput.stateId = cachedStateId;
+          } else {
+            const resolvedStateId = await resolveStateId(options.state, teamId, resolverOpts);
+            issueInput.stateId = resolvedStateId;
+            stateIdByTeam.set(teamId, resolvedStateId);
+          }
         }
 
         const response = await ctx.graphql<{
@@ -1635,9 +1667,10 @@ async function handleBulkClose(options: IssueCommandOptions): Promise<number> {
 
   try {
     const resolverOpts = await ctx.resolverOptions();
+    const cache: BulkCloseCache = { stateByTeam: new Map() };
     return await executeBulk(
       identifiers,
-      async (id) => closeIssueForBulk(id, options, ctx, resolverOpts),
+      async (id) => closeIssueForBulk(id, options, ctx, resolverOpts, cache),
       options
     );
   } catch (error) {

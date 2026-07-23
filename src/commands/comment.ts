@@ -287,9 +287,25 @@ async function handleCommentCreate(options: CommentCommandOptions): Promise<numb
   const ctx = buildContext(options);
 
   try {
+    // commentCreate requires a UUID — resolve human-readable identifiers first.
+    let issueId = options.issue;
+    if (looksLikeIssueIdentifier(options.issue)) {
+      const issueResponse = await ctx.graphql<{ issue: { id: string } | null }>(
+        COMMENT_LIST_ISSUE_LOOKUP_QUERY,
+        { id: options.issue }
+      );
+      if (ctx.hasErrors(issueResponse.body.errors)) {
+        return ctx.emitFailure(ctx.mapGraphQLErrors(issueResponse.body.errors));
+      }
+      if (issueResponse.body.data?.issue?.id === undefined) {
+        return ctx.emitNotFound(`Issue "${options.issue}" not found.`);
+      }
+      issueId = issueResponse.body.data.issue.id;
+    }
+
     const response = await ctx.graphql<{
       commentCreate: { success: boolean; comment: RawComment | null };
-    }>(COMMENT_CREATE_MUTATION, { input: { issueId: options.issue, body } });
+    }>(COMMENT_CREATE_MUTATION, { input: { issueId, body } });
 
     if (
       ctx.hasErrors(response.body.errors) ||

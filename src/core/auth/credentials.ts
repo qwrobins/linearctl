@@ -82,7 +82,9 @@ export function removeCredentialsProfile(
   const profiles = Object.create(null) as Record<string, ProfileCredentials>;
 
   for (const [existingProfileName, profileCredentials] of Object.entries(credentials.profiles)) {
-    if (normalizeAndValidateProfileName(existingProfileName) !== trimmedProfileName) {
+    // Compare by trimmed name only — a hand-edited credentials file may hold
+    // names that would fail full validation, and removing must not throw.
+    if (existingProfileName.trim() !== trimmedProfileName) {
       profiles[existingProfileName] = profileCredentials;
     }
   }

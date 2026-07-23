@@ -127,7 +127,8 @@ export async function regenerateSchema(options: RegenerateOptions): Promise<Rege
     diff.addedTypes.length > 0 ||
     diff.removedTypes.length > 0 ||
     diff.addedFields.length > 0 ||
-    diff.removedFields.length > 0;
+    diff.removedFields.length > 0 ||
+    diff.changedFields.length > 0;
 
   // 4. Write schema files
   const schemaVersion = extractSchemaVersion(liveSchema);
@@ -187,4 +188,6 @@ async function main(): Promise<void> {
   }
 }
 
-main();
+if (import.meta.main === true) {
+  await main();
+}
