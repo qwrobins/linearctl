@@ -248,20 +248,20 @@ describe("acquireCredentialsFileLock", () => {
     const directory = await mkdtemp(join(tmpdir(), "linear-cli-lock-"));
     const credentialsFile = join(directory, "credentials");
 
-    const release = await acquireCredentialsFileLock(credentialsFile);
+    const first = await acquireCredentialsFileLock(credentialsFile);
 
     let secondAcquired = false;
     const second = (async () => {
-      const releaseSecond = await acquireCredentialsFileLock(credentialsFile);
+      const secondLock = await acquireCredentialsFileLock(credentialsFile);
       secondAcquired = true;
-      await releaseSecond();
+      await secondLock.release();
     })();
 
     // While the first lock is held, the competing acquirer must wait.
     await new Promise((resolve) => setTimeout(resolve, 150));
     expect(secondAcquired).toBe(false);
 
-    await release();
+    await first.release();
     await second;
     expect(secondAcquired).toBe(true);
   });
@@ -275,14 +275,14 @@ describe("acquireCredentialsFileLock", () => {
     const oldDate = new Date(Date.now() - 60_000);
     await utimes(`${credentialsFile}.lock`, oldDate, oldDate);
 
-    const release = await acquireCredentialsFileLock(credentialsFile);
-    await release();
+    const lock = await acquireCredentialsFileLock(credentialsFile);
+    await lock.release();
 
     // A fresh lock (not stale) must NOT be broken — the next acquirer waits.
-    const releaseFirst = await acquireCredentialsFileLock(credentialsFile);
+    const freshLock = await acquireCredentialsFileLock(credentialsFile);
     const stats = await stat(`${credentialsFile}.lock`);
     expect(Date.now() - stats.mtimeMs).toBeLessThan(30_000);
-    await releaseFirst();
+    await freshLock.release();
   });
 
   it("does not break an active lock whose holder refreshes it (slow grant)", async () => {
@@ -290,7 +290,7 @@ describe("acquireCredentialsFileLock", () => {
     const credentialsFile = join(directory, "credentials");
 
     // Holder refreshes the lock every 50ms; waiters consider it stale after 300ms.
-    const releaseFirst = await acquireCredentialsFileLock(credentialsFile, {
+    const first = await acquireCredentialsFileLock(credentialsFile, {
       heartbeatMs: 50,
       staleMs: 300
     });
@@ -298,19 +298,19 @@ describe("acquireCredentialsFileLock", () => {
     let secondAcquiredAt: number | undefined;
     const startedAt = Date.now();
     const second = (async () => {
-      const releaseSecond = await acquireCredentialsFileLock(credentialsFile, {
+      const secondLock = await acquireCredentialsFileLock(credentialsFile, {
         staleMs: 300,
         timeoutMs: 5_000
       });
       secondAcquiredAt = Date.now();
-      await releaseSecond();
+      await secondLock.release();
     })();
 
     // Hold the lock well past the stale threshold — the heartbeat must keep it alive.
     await new Promise((resolve) => setTimeout(resolve, 800));
     expect(secondAcquiredAt).toBeUndefined();
 
-    await releaseFirst();
+    await first.release();
     await second;
     expect(secondAcquiredAt).toBeDefined();
     expect(secondAcquiredAt! - startedAt).toBeGreaterThanOrEqual(700);
@@ -321,21 +321,21 @@ describe("acquireCredentialsFileLock", () => {
     const credentialsFile = join(directory, "credentials");
 
     // Holder with the heartbeat disabled simulates a wedged process.
-    const releaseFirst = await acquireCredentialsFileLock(credentialsFile, {
+    const first = await acquireCredentialsFileLock(credentialsFile, {
       heartbeatMs: 0,
       staleMs: 200
     });
 
     const startedAt = Date.now();
-    const releaseSecond = await acquireCredentialsFileLock(credentialsFile, {
+    const secondLock = await acquireCredentialsFileLock(credentialsFile, {
       staleMs: 200,
       timeoutMs: 5_000
     });
     // The waiter broke the stale-looking lock after ~200ms.
     expect(Date.now() - startedAt).toBeLessThan(2_000);
 
-    await releaseSecond();
-    await releaseFirst();
+    await secondLock.release();
+    await first.release();
   });
 
   it("does not remove a lock re-acquired by a waiter when the stale holder releases", async () => {
@@ -343,30 +343,53 @@ describe("acquireCredentialsFileLock", () => {
     const credentialsFile = join(directory, "credentials");
 
     // Stalled holder (no heartbeat) — its lock goes stale and gets broken.
-    const releaseStalled = await acquireCredentialsFileLock(credentialsFile, {
+    const stalled = await acquireCredentialsFileLock(credentialsFile, {
       heartbeatMs: 0,
       staleMs: 200
     });
 
     // Waiter breaks the stale lock and becomes the new owner.
-    const releaseWaiter = await acquireCredentialsFileLock(credentialsFile, {
+    const waiter = await acquireCredentialsFileLock(credentialsFile, {
       staleMs: 200,
       timeoutMs: 5_000
     });
 
     // The stalled holder releases — it must NOT remove the waiter's lock.
-    await releaseStalled();
+    await stalled.release();
 
     // A third acquirer must still see the lock as held by the waiter.
     await expect(
       acquireCredentialsFileLock(credentialsFile, { staleMs: 60_000, timeoutMs: 300 })
     ).rejects.toThrow(/timed out waiting/);
 
-    await releaseWaiter();
+    await waiter.release();
 
     // After the real owner releases, the lock is free again.
-    const releaseThird = await acquireCredentialsFileLock(credentialsFile, { timeoutMs: 1_000 });
-    await releaseThird();
+    const third = await acquireCredentialsFileLock(credentialsFile, { timeoutMs: 1_000 });
+    await third.release();
+  });
+
+  it("fails the fencing check once the lock has been broken as stale", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-lock-"));
+    const credentialsFile = join(directory, "credentials");
+
+    const stalled = await acquireCredentialsFileLock(credentialsFile, {
+      heartbeatMs: 0,
+      staleMs: 200
+    });
+
+    // Waiter breaks the stale lock and becomes the new owner.
+    const waiter = await acquireCredentialsFileLock(credentialsFile, {
+      staleMs: 200,
+      timeoutMs: 5_000
+    });
+
+    // The resumed stalled holder must not pass the fencing check before a write.
+    await expect(stalled.assertOwned()).rejects.toThrow(/lock was lost/);
+    await expect(waiter.assertOwned()).resolves.toBeUndefined();
+
+    await stalled.release();
+    await waiter.release();
   });
 
   it("preserves both profiles' tokens when two OS processes refresh concurrently", async () => {

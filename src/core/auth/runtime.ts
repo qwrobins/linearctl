@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, readFile, rm, stat, utimes, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, rm, stat, utimes, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { LinearConfig } from "../config/config-file.js";
 import { loadLinearConfigFile } from "../config/config-file.js";
@@ -79,24 +79,37 @@ export interface CredentialsFileLockOptions {
   heartbeatMs?: number;
   /** Age after which an unrefreshed lock is presumed abandoned. Default 30s. */
   staleMs?: number;
-  /** Max wait to acquire the lock. Default 10s. */
+  /** Max wait to acquire the lock. Default 90s. */
   timeoutMs?: number;
+}
+
+export interface CredentialsFileLock {
+  /**
+   * Fencing check: throws when this process no longer owns the lock (e.g. it
+   * was broken as stale while a stalled holder was paused). Call before the
+   * guarded write so a resumed-but-broken holder fails instead of clobbering.
+   */
+  assertOwned(): Promise<void>;
+  release(): Promise<void>;
 }
 
 /**
  * Cross-process mutex on the credentials file, using an adjacent lock
- * directory (mkdir is atomic on POSIX). The in-process queue above cannot
- * stop a second linearctl process from overwriting freshly rotated tokens,
- * so the refresh critical section is serialized on disk as well.
+ * directory (mkdir/rename are atomic on POSIX). The in-process queue above
+ * cannot stop a second linearctl process from overwriting freshly rotated
+ * tokens, so the refresh critical section is serialized on disk as well.
  *
- * The holder refreshes the lock's mtime on a heartbeat, so a slow token
- * grant never looks abandoned; only a lock whose mtime has gone unrefreshed
- * for staleMs (i.e. the holder crashed) is broken by waiters.
+ * Protocol: the holder writes an ownership token into the lock and refreshes
+ * the lock's mtime on a heartbeat (only while it still owns the lock), so a
+ * slow token grant never looks abandoned. A waiter breaks a lock whose mtime
+ * went unrefreshed for staleMs by atomically renaming it aside — a heartbeat
+ * resuming mid-break can no longer refresh the moved path. Release removes
+ * the directory only while our token is still inside.
  */
 export async function acquireCredentialsFileLock(
   credentialsFile: string,
   options: CredentialsFileLockOptions = {}
-): Promise<() => Promise<void>> {
+): Promise<CredentialsFileLock> {
   const heartbeatMs = options.heartbeatMs ?? CREDENTIALS_LOCK_HEARTBEAT_MS;
   const staleMs = options.staleMs ?? CREDENTIALS_LOCK_STALE_MS;
   const timeoutMs = options.timeoutMs ?? CREDENTIALS_LOCK_TIMEOUT_MS;
@@ -108,34 +121,67 @@ export async function acquireCredentialsFileLock(
   for (;;) {
     try {
       await mkdir(lockDir);
-      // Ownership token: release only removes the directory while it still
-      // holds OUR token, so a stale-broken-and-reacquired lock (owned by a
-      // waiter) is never deleted by the previous holder's release.
       await writeFile(ownerFile, token, "utf8");
 
       let heartbeat: ReturnType<typeof setInterval> | undefined;
       if (heartbeatMs > 0) {
         heartbeat = setInterval(() => {
-          const now = new Date();
-          utimes(lockDir, now, now).catch(() => undefined);
+          void (async () => {
+            // Refresh only while we still own the lock — never touch the
+            // mtime of a directory a waiter has broken and re-acquired.
+            try {
+              const currentOwner = await readFile(ownerFile, "utf8");
+              if (currentOwner !== token) {
+                if (heartbeat !== undefined) {
+                  clearInterval(heartbeat);
+                  heartbeat = undefined;
+                }
+                return;
+              }
+              const now = new Date();
+              await utimes(lockDir, now, now);
+            } catch {
+              // Lock directory gone (broken or released) — stop heartbeating.
+              if (heartbeat !== undefined) {
+                clearInterval(heartbeat);
+                heartbeat = undefined;
+              }
+            }
+          })();
         }, heartbeatMs);
         // Never keep the process alive just for the heartbeat.
         heartbeat.unref();
       }
 
-      return async () => {
-        if (heartbeat !== undefined) {
-          clearInterval(heartbeat);
-        }
-        try {
-          const currentOwner = await readFile(ownerFile, "utf8");
-          if (currentOwner === token) {
-            await rm(lockDir, { recursive: true, force: true });
+      const lock: CredentialsFileLock = {
+        assertOwned: async () => {
+          let currentOwner: string;
+          try {
+            currentOwner = await readFile(ownerFile, "utf8");
+          } catch {
+            throw new Error("credentials file lock was lost before the guarded write");
           }
-        } catch {
-          // Lock already gone (e.g. broken as stale) — nothing to release.
+          if (currentOwner !== token) {
+            throw new Error("credentials file lock was lost before the guarded write");
+          }
+        },
+        release: async () => {
+          if (heartbeat !== undefined) {
+            clearInterval(heartbeat);
+            heartbeat = undefined;
+          }
+          try {
+            const currentOwner = await readFile(ownerFile, "utf8");
+            if (currentOwner === token) {
+              await rm(lockDir, { recursive: true, force: true });
+            }
+          } catch {
+            // Lock already gone (e.g. broken as stale) — nothing to release.
+          }
         }
       };
+
+      return lock;
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
         throw error;
@@ -144,9 +190,19 @@ export async function acquireCredentialsFileLock(
       try {
         const stats = await stat(lockDir);
         if (Date.now() - stats.mtimeMs > staleMs) {
-          // Lock whose mtime is no longer refreshed — the holder crashed.
-          await rm(lockDir, { recursive: true, force: true }).catch(() => undefined);
-          continue;
+          // Lock whose mtime is no longer refreshed — the holder crashed or
+          // is hopelessly stalled. Rename is atomic: if the holder's
+          // heartbeat resumes mid-break, its ownership check fails on the
+          // moved path and it cannot refresh or remove our future lock.
+          const brokenAside = `${lockDir}.stale-${process.pid}-${randomUUID()}`;
+          try {
+            await rename(lockDir, brokenAside);
+            await rm(brokenAside, { recursive: true, force: true }).catch(() => undefined);
+            continue;
+          } catch {
+            // Lock vanished or was replaced between stat and rename — retry.
+            continue;
+          }
         }
       } catch {
         // Lock vanished between attempts — retry immediately.
@@ -206,7 +262,7 @@ async function refreshOAuthProfileIfNeeded(
   return withCredentialWriteLock(async () => {
     // The on-disk lock serializes the whole read→grant→write section across
     // processes; the in-process queue above only covers this process.
-    const releaseLock = await acquireCredentialsFileLock(input.paths.credentialsFile);
+    const lock = await acquireCredentialsFileLock(input.paths.credentialsFile);
     try {
       // Re-read inside the lock: another refresh (in this process, another
       // process, or a recovery from a concurrent one) may have already
@@ -257,6 +313,10 @@ async function refreshOAuthProfileIfNeeded(
         expiresAt: newExpiresAt
       };
 
+      // Fencing: if our stalled lock was broken and re-acquired while the
+      // grant was in flight, fail instead of clobbering the new owner's work.
+      await lock.assertOwned();
+
       // Merge onto the store read under the lock — never write back a stale
       // snapshot that would discard another profile's rotated tokens.
       const updatedStore = setCredentialsProfile(latestStore, refreshedCredentials);
@@ -267,7 +327,7 @@ async function refreshOAuthProfileIfNeeded(
         credentials: refreshedCredentials
       };
     } finally {
-      await releaseLock();
+      await lock.release();
     }
   });
 }
