@@ -9,7 +9,13 @@ import {
   setCredentialsProfile,
   writeCredentialsFile
 } from "../core/auth/credentials.js";
-import { isNotFoundError, loadOptionalConfig, loadOptionalCredentials, resolveStoredProfile, updateCredentialsStore } from "../core/auth/runtime.js";
+import {
+  isNotFoundError,
+  loadOptionalConfig,
+  loadOptionalCredentials,
+  resolveStoredProfile,
+  withCredentialsStoreTransaction
+} from "../core/auth/runtime.js";
 import type { LinearConfig, ProfileMetadata } from "../core/config/config-file.js";
 import {
   clearDefaultProfile,
@@ -114,10 +120,8 @@ interface ViewerValidationResponse {
 
 interface PersistAuthStateInput {
   nextConfig: LinearConfig;
-  /** Applied to the latest store inside the serialized credentials update. */
+  /** Applied to the latest store inside the cross-process transaction. */
   mutateCredentials: (latest: CredentialsStore) => CredentialsStore;
-  /** Inverse of mutateCredentials, used if the config write fails. */
-  rollbackCredentials: (latest: CredentialsStore) => CredentialsStore;
   configFile: string;
   credentialsFile: string;
 }
@@ -215,17 +219,18 @@ async function validateApiKey(
 }
 
 async function persistAuthState(input: PersistAuthStateInput): Promise<void> {
-  // Both the write and the rollback merge onto the latest store (serialized
-  // with concurrent in-process OAuth refreshes) instead of replacing the
-  // file with a stale snapshot.
-  await updateCredentialsStore(input.credentialsFile, input.mutateCredentials);
-
-  try {
-    await writeLinearConfigFile(input.configFile, input.nextConfig);
-  } catch (error) {
-    await updateCredentialsStore(input.credentialsFile, input.rollbackCredentials);
-    throw error;
-  }
+  // Keep the credentials lock through config persistence. If config writing
+  // fails, restoring the snapshot happens before any login, logout, or token
+  // refresh can update the store, so rollback cannot erase a newer value.
+  await withCredentialsStoreTransaction(input.credentialsFile, async (latest, write) => {
+    await write(input.mutateCredentials(latest));
+    try {
+      await writeLinearConfigFile(input.configFile, input.nextConfig);
+    } catch (error) {
+      await write(latest);
+      throw error;
+    }
+  });
 }
 
 function buildAuthStatus(config: LinearConfig, credentials: CredentialsStore): AuthStatus {
@@ -444,10 +449,7 @@ async function handleOAuthLogin(options: AuthCommandOptions): Promise<number> {
   }
 
   const expiresAt = new Date(Date.now() + tokenResponse.expires_in * 1000).toISOString();
-  const [config, credentials] = await Promise.all([
-    loadOptionalConfig(options.configFile),
-    loadOptionalCredentials(options.credentialsFile)
-  ]);
+  const config = await loadOptionalConfig(options.configFile);
 
   const newProfileCredentials = {
     profileName,
@@ -481,14 +483,9 @@ async function handleOAuthLogin(options: AuthCommandOptions): Promise<number> {
     updatedConfig = setDefaultProfile(updatedConfig, profileName);
   }
 
-  const previousEntry = credentials.profiles[profileName];
   await persistAuthState({
     nextConfig: updatedConfig,
     mutateCredentials: (latest) => setCredentialsProfile(latest, newProfileCredentials),
-    rollbackCredentials: (latest) =>
-      previousEntry === undefined
-        ? removeCredentialsProfile(latest, profileName)
-        : setCredentialsProfile(latest, previousEntry),
     configFile: options.configFile,
     credentialsFile: options.credentialsFile
   });
@@ -606,10 +603,7 @@ async function handleLogin(options: AuthCommandOptions, extraPositionals: string
     return ExitCode.AuthenticationError;
   }
 
-  const [config, credentials] = await Promise.all([
-    loadOptionalConfig(options.configFile),
-    loadOptionalCredentials(options.credentialsFile)
-  ]);
+  const config = await loadOptionalConfig(options.configFile);
   const newProfileCredentials = {
     profileName,
     type: "api_key" as const,
@@ -639,14 +633,9 @@ async function handleLogin(options: AuthCommandOptions, extraPositionals: string
     updatedConfig = setDefaultProfile(updatedConfig, profileName);
   }
 
-  const previousEntry = credentials.profiles[profileName];
   await persistAuthState({
     nextConfig: updatedConfig,
     mutateCredentials: (latest) => setCredentialsProfile(latest, newProfileCredentials),
-    rollbackCredentials: (latest) =>
-      previousEntry === undefined
-        ? removeCredentialsProfile(latest, profileName)
-        : setCredentialsProfile(latest, previousEntry),
     configFile: options.configFile,
     credentialsFile: options.credentialsFile
   });
@@ -698,14 +687,9 @@ async function handleLogout(options: AuthCommandOptions, extraPositionals: strin
     updatedConfig = clearDefaultProfile(updatedConfig);
   }
 
-  const previousEntry = credentials.profiles[profileName];
   await persistAuthState({
     nextConfig: updatedConfig,
     mutateCredentials: (latest) => removeCredentialsProfile(latest, profileName),
-    rollbackCredentials: (latest) =>
-      previousEntry === undefined
-        ? latest
-        : setCredentialsProfile(latest, previousEntry),
     configFile: options.configFile,
     credentialsFile: options.credentialsFile
   });

@@ -136,7 +136,7 @@ Raw GraphQL should not be used merely because it is possible. It is the fallback
 - `linearctl auth logout --profile <name>`
 - `linearctl auth switch <profile>`
 - `linearctl auth whoami --json`
-- OAuth refresh tolerates concurrent CLI invocations by re-reading credentials after `invalid_grant`; token errors omit raw response bodies.
+- OAuth refresh, login, and logout serialize credentials-file updates across CLI processes; token errors omit raw response bodies.
 
 ### Workspace
 - `linearctl workspace list --json`

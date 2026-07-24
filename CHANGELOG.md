@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.7] - 2026-07-23
+
+### Fixed
+
+- Hardened artifact installation, authenticated network requests, configuration serialization, and release workflows.
+- Corrected schema drift detection, command validation, identifier resolution, attachment/comment behavior, and credential edge cases.
+- Improved bulk operation and workspace listing performance.
+- Serialized OAuth refresh, login, and logout credential updates across processes without allowing failed config rollback to overwrite newer credentials.
+
 ## [0.8.6] - 2026-07-21
 
 ### Added
