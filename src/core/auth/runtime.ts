@@ -171,13 +171,28 @@ export async function acquireCredentialsFileLock(
             clearInterval(heartbeat);
             heartbeat = undefined;
           }
+          // Move the directory aside atomically — only one party can win this
+          // rename — then verify ownership inside the moved directory. If a
+          // waiter re-acquired the canonical path first, restore it untouched
+          // instead of deleting the replacement owner's lock.
+          const trash = `${lockDir}.releasing-${process.pid}-${randomUUID()}`;
           try {
-            const currentOwner = await readFile(ownerFile, "utf8");
-            if (currentOwner === token) {
-              await rm(lockDir, { recursive: true, force: true });
-            }
+            await rename(lockDir, trash);
           } catch {
             // Lock already gone (e.g. broken as stale) — nothing to release.
+            return;
+          }
+          let currentOwner: string | undefined;
+          try {
+            currentOwner = await readFile(join(trash, "owner"), "utf8");
+          } catch {
+            currentOwner = undefined;
+          }
+          if (currentOwner === token) {
+            await rm(trash, { recursive: true, force: true }).catch(() => undefined);
+          } else {
+            // Not ours (or owner unknown) — put it back.
+            await rename(trash, lockDir).catch(() => undefined);
           }
         }
       };

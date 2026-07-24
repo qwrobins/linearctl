@@ -191,6 +191,26 @@ describe("computeSchemaFingerprint", () => {
     );
   });
 
+  it("changes when only an argument default value changes", () => {
+    const makeSchema = (defaultValue?: string) => ({
+      types: [
+        {
+          name: "Query",
+          fields: [
+            {
+              name: "issues",
+              type: { kind: "OBJECT", name: "IssueConnection" },
+              args: [{ name: "first", type: { kind: "SCALAR", name: "Int" }, ...(defaultValue === undefined ? {} : { defaultValue }) }]
+            }
+          ]
+        }
+      ]
+    });
+
+    expect(computeSchemaFingerprint(makeSchema("50"))).not.toBe(computeSchemaFingerprint(makeSchema("25")));
+    expect(computeSchemaFingerprint(makeSchema("50"))).not.toBe(computeSchemaFingerprint(makeSchema()));
+  });
+
   it("produces a sha256 hex fingerprint", () => {
     const fingerprint = computeSchemaFingerprint({
       types: [{ name: "Query", fields: [{ name: "viewer", type: { kind: "SCALAR", name: "String" } }] }]

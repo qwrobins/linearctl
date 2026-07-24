@@ -102,6 +102,31 @@ interface FieldComparison {
   breaking: boolean;
 }
 
+/**
+ * Default-value change detection. Losing a default on a NON_NULL input makes
+ * it strictly required (breaking); any other default change is reported but
+ * not breaking (graphql-js "dangerous change" class).
+ */
+function compareInputValueDefaults(oldValue: IntrospectionInputValue, newValue: IntrospectionInputValue): FieldComparison {
+  const oldHasDefault = oldValue.defaultValue !== null && oldValue.defaultValue !== undefined;
+  const newHasDefault = newValue.defaultValue !== null && newValue.defaultValue !== undefined;
+
+  if (!oldHasDefault && !newHasDefault) {
+    return { changed: false, breaking: false };
+  }
+
+  if (oldHasDefault && newHasDefault && oldValue.defaultValue === newValue.defaultValue) {
+    return { changed: false, breaking: false };
+  }
+
+  const breaking =
+    oldHasDefault &&
+    !newHasDefault &&
+    asTypeRef(newValue.type)?.kind === "NON_NULL";
+
+  return { changed: true, breaking };
+}
+
 function compareOutputField(oldField: IntrospectionField, newField: IntrospectionField): FieldComparison {
   let changed = false;
   let breaking = false;
@@ -134,6 +159,13 @@ function compareOutputField(oldField: IntrospectionField, newField: Introspectio
     }
     if ((oldArg.description ?? "") !== (newArg.description ?? "")) {
       changed = true;
+    }
+    const defaults = compareInputValueDefaults(oldArg, newArg);
+    if (defaults.changed) {
+      changed = true;
+    }
+    if (defaults.breaking) {
+      breaking = true;
     }
   }
 
@@ -174,6 +206,14 @@ function compareInputField(oldField: IntrospectionInputValue, newField: Introspe
 
   if ((oldField.description ?? "") !== (newField.description ?? "")) {
     changed = true;
+  }
+
+  const defaults = compareInputValueDefaults(oldField, newField);
+  if (defaults.changed) {
+    changed = true;
+  }
+  if (defaults.breaking) {
+    breaking = true;
   }
 
   const oldDeprecation = oldField.isDeprecated === true ? (oldField.deprecationReason ?? "") : null;

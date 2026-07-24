@@ -370,6 +370,64 @@ describe("diffSchemas", () => {
     expect(diff.hasBreakingChanges).toBe(true);
   });
 
+  it("marks losing a default on a NON_NULL argument as breaking", () => {
+    const makeArgsSchema = (args: Array<{ name: string; type?: unknown; defaultValue?: unknown }>) => ({
+      __schema: {
+        types: [
+          {
+            kind: "OBJECT",
+            name: "Query",
+            fields: [{ name: "issues", type: { kind: "OBJECT", name: "IssueConnection", ofType: null }, args }],
+          },
+        ],
+      },
+    });
+    const nonNullArg = { kind: "NON_NULL", name: null, ofType: { kind: "SCALAR", name: "Int", ofType: null } };
+
+    const losesDefault = diffSchemas(
+      makeArgsSchema([{ name: "first", type: nonNullArg, defaultValue: "50" }]),
+      makeArgsSchema([{ name: "first", type: nonNullArg }])
+    );
+    expect(losesDefault.changedFields).toEqual([{ type: "Query", field: "issues" }]);
+    expect(losesDefault.hasBreakingChanges).toBe(true);
+
+    // Nullable argument losing its default: reported, not breaking.
+    const nullableArg = { kind: "SCALAR", name: "Int", ofType: null };
+    const nullableLosesDefault = diffSchemas(
+      makeArgsSchema([{ name: "first", type: nullableArg, defaultValue: "50" }]),
+      makeArgsSchema([{ name: "first", type: nullableArg }])
+    );
+    expect(nullableLosesDefault.changedFields).toEqual([{ type: "Query", field: "issues" }]);
+    expect(nullableLosesDefault.hasBreakingChanges).toBe(false);
+
+    // Default value change: reported, not breaking.
+    const defaultChanged = diffSchemas(
+      makeArgsSchema([{ name: "first", type: nullableArg, defaultValue: "50" }]),
+      makeArgsSchema([{ name: "first", type: nullableArg, defaultValue: "25" }])
+    );
+    expect(defaultChanged.changedFields).toEqual([{ type: "Query", field: "issues" }]);
+    expect(defaultChanged.hasBreakingChanges).toBe(false);
+  });
+
+  it("marks losing a default on a NON_NULL input field as breaking", () => {
+    const makeInputSchema = (inputFields: Array<{ name: string; type?: unknown; defaultValue?: unknown }>) => ({
+      __schema: {
+        types: [
+          { kind: "INPUT_OBJECT", name: "IssueFilter", inputFields },
+        ],
+      },
+    });
+    const nonNullField = { kind: "NON_NULL", name: null, ofType: { kind: "SCALAR", name: "String", ofType: null } };
+
+    const diff = diffSchemas(
+      makeInputSchema([{ name: "term", type: nonNullField, defaultValue: "\"\"" }]),
+      makeInputSchema([{ name: "term", type: nonNullField }])
+    );
+
+    expect(diff.changedFields).toEqual([{ type: "IssueFilter", field: "term" }]);
+    expect(diff.hasBreakingChanges).toBe(true);
+  });
+
   it("marks an added required input field as breaking, optional as safe", () => {
     const makeInputSchema = (inputFields: Array<{ name: string; type?: unknown; defaultValue?: unknown }>) => ({
       __schema: {
