@@ -174,6 +174,13 @@ function parsePositiveInt(value: string, flagName: string): number {
   return parseInt(value, 10);
 }
 
+function parseNonNegativeInt(value: string, flagName: string): number {
+  if (!/^(0|[1-9]\d*)$/.test(value)) {
+    throw new Error(`--${flagName} must be a non-negative integer`);
+  }
+  return parseInt(value, 10);
+}
+
 function toParsedCliArguments(values: Record<string, unknown>, positionals: string[]): ParsedCliArguments {
   let help = false;
   let json = false;
@@ -296,7 +303,7 @@ function toParsedCliArguments(values: Record<string, unknown>, positionals: stri
     ...(typeof values.related === "string" ? { related: values.related } : {}),
     ...(typeof values.type === "string" ? { type: values.type } : {}),
     noRetry: values["no-retry"] === true,
-    ...(typeof values["max-retries"] === "string" ? { maxRetries: parsePositiveInt(values["max-retries"], "max-retries") } : {}),
+    ...(typeof values["max-retries"] === "string" ? { maxRetries: parseNonNegativeInt(values["max-retries"], "max-retries") } : {}),
     positionals
   };
 }
@@ -458,10 +465,25 @@ function withTimeout(fetchImpl: FetchLike, timeoutMs: number): FetchLike {
       controller.abort();
     }, timeoutMs);
 
+    // Link any caller-provided signal so both abort paths work: executeGraphQL
+    // now attaches its own (long) timeout signal, and without forwarding it
+    // this wrapper could not abort the request — leaving the process alive
+    // until the inner timeout fires after the command has finished.
+    const upstream = init?.signal;
+    if (upstream !== undefined && upstream !== null) {
+      if (upstream.aborted) {
+        controller.abort();
+      } else {
+        upstream.addEventListener("abort", () => {
+          controller.abort();
+        }, { once: true });
+      }
+    }
+
     try {
       return await fetchImpl(input, {
         ...init,
-        signal: init?.signal ?? controller.signal
+        signal: controller.signal
       });
     } finally {
       clearTimeout(timeout);

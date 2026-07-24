@@ -153,8 +153,13 @@ async function handleUserGet(
     );
 
     if (ctx.hasErrors(response.body.errors)) {
+      // If the identifier is already a UUID, re-querying with the same ID
+      // would fail identically — report the original error.
+      if (looksLikeId(identifier)) {
+        return ctx.emitFailure(ctx.mapGraphQLErrors(response.body.errors));
+      }
       const resolverOpts = await ctx.resolverOptions();
-      const userId = looksLikeId(identifier) ? identifier : await resolveUserId(identifier, resolverOpts);
+      const userId = await resolveUserId(identifier, resolverOpts);
       response = await ctx.graphql<{ user: RawUser | null }>(USER_GET_QUERY, { id: userId });
       if (ctx.hasErrors(response.body.errors)) {
         return ctx.emitFailure(ctx.mapGraphQLErrors(response.body.errors));

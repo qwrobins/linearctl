@@ -304,28 +304,20 @@ function resolveCollisions(entries: ApiCommandEntry[]): ApiCommandEntry[] {
   const result: ApiCommandEntry[] = [];
 
   for (const group of seen.values()) {
-    const first = group[0];
-    if (first === undefined) {
-      continue;
-    }
-
     if (group.length === 1) {
-      result.push(first);
+      result.push(group[0]!);
       continue;
     }
 
     // Sort by canonicality: exact singular/plural first, CRUD mutations, then helpers
     group.sort((a, b) => canonicalityScore(a) - canonicalityScore(b));
 
-    // Keep the first (most canonical) on the short name
-    result.push(first);
+    // Keep the most canonical entry on the short name
+    const [first, ...rest] = group;
+    result.push(first!);
 
     // Assign others an explicit operation name derived from the original field name
-    for (let i = 1; i < group.length; i++) {
-      const entry = group[i];
-      if (entry === undefined) {
-        continue;
-      }
+    for (const entry of rest) {
       const newOp = camelToKebab(entry.graphqlField);
       const updated: ApiCommandEntry = {
         ...entry,

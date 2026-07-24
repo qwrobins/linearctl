@@ -47,7 +47,7 @@ Options:
 
 ### Token refresh
 
-OAuth tokens expire. The CLI auto-refreshes expired tokens during profile resolution (within a 5-minute window before expiry). Refreshed tokens are written back to the credentials file.
+OAuth tokens expire. The CLI auto-refreshes expired tokens during profile resolution (within a 5-minute window before expiry). Refreshed tokens are written back to the credentials file. Refresh, login, and logout updates are serialized across CLI processes so concurrent commands cannot overwrite one another's credential changes.
 
 ## Setting the default profile
 

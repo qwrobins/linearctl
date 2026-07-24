@@ -85,12 +85,14 @@ export function searchManifest(manifest: ApiCommandManifest, term: string): ApiC
 // ---------------------------------------------------------------------------
 
 function printApiHelp(manifest: ApiCommandManifest): void {
-  const resources = [...new Set(manifest.map((e) => e.resource))].sort();
+  const counts = new Map<string, number>();
+  for (const e of manifest) {
+    counts.set(e.resource, (counts.get(e.resource) ?? 0) + 1);
+  }
   process.stdout.write("linearctl api <resource> <operation>\n\n");
   process.stdout.write("Available resources:\n");
-  for (const r of resources) {
-    const count = manifest.filter((e) => e.resource === r).length;
-    process.stdout.write(`  ${r}  (${count} operation${count !== 1 ? "s" : ""})\n`);
+  for (const [resource, count] of [...counts.entries()].sort(([a], [b]) => a.localeCompare(b))) {
+    process.stdout.write(`  ${resource}  (${count} operation${count !== 1 ? "s" : ""})\n`);
   }
   process.stdout.write("\nUse: linearctl api <resource> --help for operations\n");
   process.stdout.write("Use: linearctl api search <term> to search commands\n");
@@ -132,7 +134,7 @@ function printOperationHelp(entry: ApiCommandEntry): void {
     for (const arg of args) {
       const required = entry.requiredArgs.some((requiredArg) => requiredArg.name === arg.name);
       process.stdout.write(`  ${arg.name}: ${arg.typeName}${required ? " (required)" : ""}\n`);
-      if (arg.description !== "") {
+      if (arg.description !== null && arg.description !== "") {
         process.stdout.write(`    ${arg.description}\n`);
       }
     }
@@ -294,13 +296,13 @@ export async function handleApiCommand(
 
   const [resource, operation, ...rest] = positionals;
 
-  // linear api --help (with no positionals)
+  // linearctl api --help (with no positionals)
   if (resource === undefined) {
     printApiHelp(manifest);
     return ExitCode.Success;
   }
 
-  // linear api search <term>
+  // linearctl api search <term>
   if (resource === "search") {
     const term = operation;
     if (term === undefined || term === "") {
@@ -318,7 +320,7 @@ export async function handleApiCommand(
     return ExitCode.Success;
   }
 
-  // linear api <resource> --help (no operation)
+  // linearctl api <resource> --help (no operation)
   if (operation === undefined) {
     printResourceHelp(manifest, resource);
     // Return exit 5 if resource is unknown
@@ -332,9 +334,9 @@ export async function handleApiCommand(
     // Check if resource exists at all
     const resourceExists = manifest.some((e) => e.resource === resource);
     if (!resourceExists) {
-      return emitValidationError(`unknown resource '${resource}'. Use 'linear api --help' to list resources.`, { ...options, sourceLayer: "generated" });
+      return emitValidationError(`unknown resource '${resource}'. Use 'linearctl api --help' to list resources.`, { ...options, sourceLayer: "generated" });
     }
-    return emitValidationError(`unknown operation '${operation}' for resource '${resource}'. Use 'linear api ${resource} --help' to list operations.`, { ...options, sourceLayer: "generated" });
+    return emitValidationError(`unknown operation '${operation}' for resource '${resource}'. Use 'linearctl api ${resource} --help' to list operations.`, { ...options, sourceLayer: "generated" });
   }
 
   if (rest.length > 0) {
@@ -349,7 +351,15 @@ export async function handleApiCommand(
   // Validate input mode vs provided flags
   if (entry.inputMode === "id" || entry.inputMode === "id-plus-json") {
     if (options.id === undefined) {
-      return emitValidationError(`--id is required for 'linear api ${resource} ${operation}'.`, { ...options, sourceLayer: "generated" });
+      return emitValidationError(`--id is required for 'linearctl api ${resource} ${operation}'.`, { ...options, sourceLayer: "generated" });
+    }
+  } else if (options.id !== undefined) {
+    return emitValidationError(`--id is not supported for 'linearctl api ${resource} ${operation}'.`, { ...options, sourceLayer: "generated" });
+  }
+
+  if (entry.inputMode === "none" || entry.inputMode === "id") {
+    if (options.inputJson !== undefined || options.inputFile !== undefined || options.inputStdin) {
+      return emitValidationError(`'linearctl api ${resource} ${operation}' does not accept JSON input.`, { ...options, sourceLayer: "generated" });
     }
   }
 

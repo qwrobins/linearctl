@@ -130,4 +130,92 @@ describe("computeSchemaFingerprint", () => {
 
     expect(computeSchemaFingerprint(nullable)).not.toBe(computeSchemaFingerprint(nonNull));
   });
+
+  it("changes when only a field description changes", () => {
+    const makeSchema = (description: string) => ({
+      types: [
+        {
+          name: "Query",
+          fields: [
+            { name: "viewer", description, type: { kind: "SCALAR", name: "String" } }
+          ]
+        }
+      ]
+    });
+
+    expect(computeSchemaFingerprint(makeSchema("old help text"))).not.toBe(
+      computeSchemaFingerprint(makeSchema("new help text"))
+    );
+  });
+
+  it("changes when only a deprecation reason changes", () => {
+    const makeSchema = (deprecationReason: string) => ({
+      types: [
+        {
+          name: "Query",
+          fields: [
+            {
+              name: "viewer",
+              type: { kind: "SCALAR", name: "String" },
+              isDeprecated: true,
+              deprecationReason
+            }
+          ]
+        }
+      ]
+    });
+
+    expect(computeSchemaFingerprint(makeSchema("use viewerV2"))).not.toBe(
+      computeSchemaFingerprint(makeSchema("use currentUser"))
+    );
+  });
+
+  it("changes when only an argument description changes", () => {
+    const makeSchema = (argDescription: string) => ({
+      types: [
+        {
+          name: "Query",
+          fields: [
+            {
+              name: "issues",
+              type: { kind: "OBJECT", name: "IssueConnection" },
+              args: [{ name: "first", description: argDescription, type: { kind: "SCALAR", name: "Int" } }]
+            }
+          ]
+        }
+      ]
+    });
+
+    expect(computeSchemaFingerprint(makeSchema("page size"))).not.toBe(
+      computeSchemaFingerprint(makeSchema("how many to fetch"))
+    );
+  });
+
+  it("changes when only an argument default value changes", () => {
+    const makeSchema = (defaultValue?: string) => ({
+      types: [
+        {
+          name: "Query",
+          fields: [
+            {
+              name: "issues",
+              type: { kind: "OBJECT", name: "IssueConnection" },
+              args: [{ name: "first", type: { kind: "SCALAR", name: "Int" }, ...(defaultValue === undefined ? {} : { defaultValue }) }]
+            }
+          ]
+        }
+      ]
+    });
+
+    expect(computeSchemaFingerprint(makeSchema("50"))).not.toBe(computeSchemaFingerprint(makeSchema("25")));
+    expect(computeSchemaFingerprint(makeSchema("50"))).not.toBe(computeSchemaFingerprint(makeSchema()));
+  });
+
+  it("produces a sha256 hex fingerprint", () => {
+    const fingerprint = computeSchemaFingerprint({
+      types: [{ name: "Query", fields: [{ name: "viewer", type: { kind: "SCALAR", name: "String" } }] }]
+    });
+
+    expect(fingerprint).toMatch(/^introspect-[0-9a-f]{64}$/);
+  });
 });

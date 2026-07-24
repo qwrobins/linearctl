@@ -142,6 +142,26 @@ describe("handleAttachmentCommand — attachment list", () => {
       output.restore();
     }
   });
+
+  it("fails instead of printing an empty list when the issue does not exist", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-attachment-"));
+    const paths = await writeProfileFiles(directory);
+    const fetchImpl = makeFetch({ data: { issue: null } });
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleAttachmentCommand(["list"], {
+        ...baseOptions(paths),
+        issue: "issue-1",
+        fetchImpl
+      });
+
+      expect(exitCode).toBe(4);
+      expect(output.stderr.join("")).toContain("not found");
+    } finally {
+      output.restore();
+    }
+  });
 });
 
 describe("handleAttachmentCommand — attachment create", () => {
@@ -157,7 +177,7 @@ describe("handleAttachmentCommand — attachment create", () => {
     try {
       const exitCode = await handleAttachmentCommand(["create"], {
         ...baseOptions(paths),
-        issue: "issue-1",
+        issue: "7c9e2b64-8f2a-4f6e-9b1d-2e5a6c8d0e1f",
         url: "https://example.com/new.pdf",
         title: "New doc",
         fetchImpl
@@ -167,6 +187,59 @@ describe("handleAttachmentCommand — attachment create", () => {
       const parsed = JSON.parse(output.stdout.join(""));
       expect(parsed.title).toBe("New doc");
       expect(parsed.id).toBe("attachment-uuid-1");
+    } finally {
+      output.restore();
+    }
+  });
+
+  it("resolves a human-readable issue identifier before creating", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-attachment-"));
+    const paths = await writeProfileFiles(directory);
+    const createdAttachment = makeRawAttachment({ title: "New doc" });
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        data: { issue: { id: "issue-uuid-1" } }
+      }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        data: { attachmentCreate: { success: true, attachment: createdAttachment } }
+      }), { status: 200 })) as FetchLike;
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleAttachmentCommand(["create"], {
+        ...baseOptions(paths),
+        issue: "INF-2975",
+        url: "https://example.com/new.pdf",
+        title: "New doc",
+        fetchImpl
+      });
+
+      expect(exitCode).toBe(0);
+      expect(fetchImpl).toHaveBeenCalledTimes(2);
+      const secondCall = (fetchImpl as ReturnType<typeof vi.fn>).mock.calls[1] as [string, RequestInit];
+      const body = JSON.parse(secondCall[1].body as string) as { variables: { input: { issueId: string } } };
+      expect(body.variables.input.issueId).toBe("issue-uuid-1");
+    } finally {
+      output.restore();
+    }
+  });
+
+  it("returns exit code 4 when the issue identifier does not exist", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-attachment-"));
+    const paths = await writeProfileFiles(directory);
+    const fetchImpl = makeFetch({ data: { issue: null } });
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleAttachmentCommand(["create"], {
+        ...baseOptions(paths),
+        issue: "INF-9999",
+        url: "https://example.com/new.pdf",
+        title: "New doc",
+        fetchImpl
+      });
+
+      expect(exitCode).toBe(4);
     } finally {
       output.restore();
     }

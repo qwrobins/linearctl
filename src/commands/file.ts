@@ -89,7 +89,11 @@ async function fetchWithHostValidatedRedirects(
   init: RequestInit
 ): Promise<Response> {
   let currentUrl = url;
-  const originalHost = new URL(url).host;
+  const originalUrl = new URL(url);
+  if (originalUrl.protocol !== "https:") {
+    throw new Error("File request URL must use HTTPS.");
+  }
+  const originalHost = originalUrl.host;
   let currentInit: RequestInit = init;
 
   for (let redirectCount = 0; redirectCount <= MAX_FILE_REDIRECTS; redirectCount++) {
@@ -112,8 +116,10 @@ async function fetchWithHostValidatedRedirects(
     }
 
     const parsedNextUrl = new URL(nextUrl);
-    if (parsedNextUrl.protocol !== "https:" && parsedNextUrl.protocol !== "http:") {
-      throw new Error(`File request redirected to unsupported protocol: ${parsedNextUrl.protocol}`);
+    if (parsedNextUrl.protocol !== "https:") {
+      // Credentials or uploaded content may accompany this request — never
+      // allow a redirect to downgrade to plaintext HTTP.
+      throw new Error(`File request redirected to non-HTTPS protocol: ${parsedNextUrl.protocol}`);
     }
 
     if (parsedNextUrl.host !== originalHost) {
@@ -251,7 +257,7 @@ async function handleFileUpload(
 
   let fileBytes: Buffer;
   try {
-    fileBytes = Buffer.from(await readFile(resolvedPath));
+    fileBytes = await readFile(resolvedPath);
   } catch {
     return emitValidationError(`cannot read file: ${resolvedPath}`, options);
   }
@@ -298,7 +304,7 @@ async function handleFileUpload(
     const putResponse = await fetchWithHostValidatedRedirects(fetchImpl, uploadUrl, {
       method: "PUT",
       headers: putHeaders,
-      body: new Uint8Array(fileBytes)
+      body: fileBytes as unknown as BodyInit
     });
 
     if (!putResponse.ok) {
@@ -416,8 +422,8 @@ async function handleFileDownload(
 ): Promise<number> {
   try {
     const parsed = new URL(downloadUrl);
-    if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
-      return emitValidationError("file download only supports HTTP/HTTPS URLs.", options);
+    if (parsed.protocol !== "https:") {
+      return emitValidationError("file download only supports HTTPS URLs (credentials are sent with the request).", options);
     }
     if (parsed.hostname !== "uploads.linear.app") {
       return emitValidationError("file download only supports uploads.linear.app URLs.", options);

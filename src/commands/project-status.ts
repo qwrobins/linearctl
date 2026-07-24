@@ -356,14 +356,15 @@ async function handleProjectStatusDelete(statusId: string, options: ProjectStatu
       );
     }
 
-    const result = { id: statusId, deleted: true };
+    // Linear archives project statuses rather than deleting them.
+    const result = { id: statusId, archived: true };
 
     if (options.jsonEnvelope) {
       return ctx.emitSuccess(result);
     } else if (options.json) {
       process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     } else {
-      process.stdout.write(`Deleted project status ${statusId}\n`);
+      process.stdout.write(`Archived project status ${statusId}\n`);
     }
 
     return ExitCode.Success;

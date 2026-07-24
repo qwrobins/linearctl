@@ -1,6 +1,7 @@
 import type { ProfileCredentials } from "../auth/credentials.js";
 
 export const DEFAULT_LINEAR_GRAPHQL_URL = "https://api.linear.app/graphql";
+export const DEFAULT_REQUEST_TIMEOUT_MS = 120_000;
 
 export type FetchLike = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
 
@@ -10,6 +11,44 @@ export interface GraphQLRequestInput {
   credentials: Pick<ProfileCredentials, "type"> & Partial<ProfileCredentials>;
   apiUrl?: string;
   fetchImpl?: FetchLike;
+  /** Request timeout in milliseconds. Defaults to DEFAULT_REQUEST_TIMEOUT_MS. */
+  timeoutMs?: number;
+}
+
+function isLoopbackHostname(hostname: string): boolean {
+  return (
+    hostname === "localhost" ||
+    hostname === "127.0.0.1" ||
+    hostname === "::1" ||
+    hostname === "[::1]"
+  );
+}
+
+/**
+ * Credentials are sent to whatever URL the request targets, so only HTTPS is
+ * allowed (plain HTTP is accepted for loopback addresses to support local
+ * testing and proxies).
+ */
+export function assertSecureApiUrl(apiUrl: string): void {
+  let parsed: URL;
+  try {
+    parsed = new URL(apiUrl);
+  } catch {
+    throw new GraphQLTransportError(`Linear API URL is not a valid URL: ${apiUrl}`, "http");
+  }
+
+  if (parsed.protocol === "https:") {
+    return;
+  }
+
+  if (parsed.protocol === "http:" && isLoopbackHostname(parsed.hostname)) {
+    return;
+  }
+
+  throw new GraphQLTransportError(
+    `Linear API URL must use HTTPS because credentials are sent with each request: ${apiUrl}`,
+    "http"
+  );
 }
 
 export interface GraphQLResponse<TData> {
@@ -46,19 +85,43 @@ export class GraphQLTransportError extends Error {
 
 export async function executeGraphQL<TData>(input: GraphQLRequestInput): Promise<ExecutedGraphQLResponse<TData>> {
   const fetchImpl = input.fetchImpl ?? fetch;
-  const response = await fetchImpl(input.apiUrl ?? DEFAULT_LINEAR_GRAPHQL_URL, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      authorization: authorizationHeader(input.credentials)
-    },
-    body: JSON.stringify({
-      query: input.query,
-      ...(input.variables === undefined ? {} : { variables: input.variables })
-    })
-  });
+  const apiUrl = input.apiUrl ?? DEFAULT_LINEAR_GRAPHQL_URL;
+  assertSecureApiUrl(apiUrl);
 
-  const responseText = await response.text();
+  const timeoutMs = input.timeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
+  const controller = new AbortController();
+  const timer = setTimeout(() => {
+    controller.abort();
+  }, timeoutMs);
+
+  let response: Response;
+  let responseText: string;
+  try {
+    response = await fetchImpl(apiUrl, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: authorizationHeader(input.credentials)
+      },
+      body: JSON.stringify({
+        query: input.query,
+        ...(input.variables === undefined ? {} : { variables: input.variables })
+      }),
+      signal: controller.signal
+    });
+
+    responseText = await response.text();
+  } catch (error) {
+    if (controller.signal.aborted) {
+      throw new GraphQLTransportError(
+        `Linear GraphQL request timed out after ${Math.round(timeoutMs / 1000)}s`,
+        "http"
+      );
+    }
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
   let responseBody: GraphQLResponse<TData> | undefined;
   let parseError: GraphQLTransportError | undefined;
 

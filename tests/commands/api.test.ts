@@ -624,7 +624,7 @@ describe("handleApiCommand", () => {
       expect(parsed.errors).toEqual([
         {
           category: "validation",
-          message: "--id is required for 'linear api issue get'."
+          message: "--id is required for 'linearctl api issue get'."
         }
       ]);
       expect(parsed.meta.sourceLayer).toBe("generated");

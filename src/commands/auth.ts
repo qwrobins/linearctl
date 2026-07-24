@@ -9,7 +9,13 @@ import {
   setCredentialsProfile,
   writeCredentialsFile
 } from "../core/auth/credentials.js";
-import { isNotFoundError, loadOptionalConfig, loadOptionalCredentials, resolveStoredProfile } from "../core/auth/runtime.js";
+import {
+  isNotFoundError,
+  loadOptionalConfig,
+  loadOptionalCredentials,
+  resolveStoredProfile,
+  withCredentialsStoreTransaction
+} from "../core/auth/runtime.js";
 import type { LinearConfig, ProfileMetadata } from "../core/config/config-file.js";
 import {
   clearDefaultProfile,
@@ -113,9 +119,9 @@ interface ViewerValidationResponse {
 }
 
 interface PersistAuthStateInput {
-  previousCredentials: CredentialsStore;
   nextConfig: LinearConfig;
-  nextCredentials: CredentialsStore;
+  /** Applied to the latest store inside the cross-process transaction. */
+  mutateCredentials: (latest: CredentialsStore) => CredentialsStore;
   configFile: string;
   credentialsFile: string;
 }
@@ -213,14 +219,18 @@ async function validateApiKey(
 }
 
 async function persistAuthState(input: PersistAuthStateInput): Promise<void> {
-  await writeCredentialsFile(input.credentialsFile, input.nextCredentials);
-
-  try {
-    await writeLinearConfigFile(input.configFile, input.nextConfig);
-  } catch (error) {
-    await writeCredentialsFile(input.credentialsFile, input.previousCredentials);
-    throw error;
-  }
+  // Keep the credentials lock through config persistence. If config writing
+  // fails, restoring the snapshot happens before any login, logout, or token
+  // refresh can update the store, so rollback cannot erase a newer value.
+  await withCredentialsStoreTransaction(input.credentialsFile, async (latest, write) => {
+    await write(input.mutateCredentials(latest));
+    try {
+      await writeLinearConfigFile(input.configFile, input.nextConfig);
+    } catch (error) {
+      await write(latest);
+      throw error;
+    }
+  });
 }
 
 function buildAuthStatus(config: LinearConfig, credentials: CredentialsStore): AuthStatus {
@@ -439,20 +449,17 @@ async function handleOAuthLogin(options: AuthCommandOptions): Promise<number> {
   }
 
   const expiresAt = new Date(Date.now() + tokenResponse.expires_in * 1000).toISOString();
-  const [config, credentials] = await Promise.all([
-    loadOptionalConfig(options.configFile),
-    loadOptionalCredentials(options.credentialsFile)
-  ]);
+  const config = await loadOptionalConfig(options.configFile);
 
-  const updatedCredentials = setCredentialsProfile(credentials, {
+  const newProfileCredentials = {
     profileName,
-    type: "oauth",
+    type: "oauth" as const,
     accessToken: tokenResponse.access_token,
     refreshToken: tokenResponse.refresh_token,
     expiresAt,
     scopes: tokenResponse.scope,
     oauthClientId: clientId.trim()
-  });
+  };
 
   let updatedConfig = config.profiles[profileName] === undefined
     ? setProfileMetadata(config, profileName, {})
@@ -477,9 +484,8 @@ async function handleOAuthLogin(options: AuthCommandOptions): Promise<number> {
   }
 
   await persistAuthState({
-    previousCredentials: credentials,
     nextConfig: updatedConfig,
-    nextCredentials: updatedCredentials,
+    mutateCredentials: (latest) => setCredentialsProfile(latest, newProfileCredentials),
     configFile: options.configFile,
     credentialsFile: options.credentialsFile
   });
@@ -597,15 +603,12 @@ async function handleLogin(options: AuthCommandOptions, extraPositionals: string
     return ExitCode.AuthenticationError;
   }
 
-  const [config, credentials] = await Promise.all([
-    loadOptionalConfig(options.configFile),
-    loadOptionalCredentials(options.credentialsFile)
-  ]);
-  const updatedCredentials = setCredentialsProfile(credentials, {
+  const config = await loadOptionalConfig(options.configFile);
+  const newProfileCredentials = {
     profileName,
-    type: "api_key",
+    type: "api_key" as const,
     apiKey
-  });
+  };
   let updatedConfig = config.profiles[profileName] === undefined
     ? setProfileMetadata(config, profileName, {})
     : config;
@@ -631,9 +634,8 @@ async function handleLogin(options: AuthCommandOptions, extraPositionals: string
   }
 
   await persistAuthState({
-    previousCredentials: credentials,
     nextConfig: updatedConfig,
-    nextCredentials: updatedCredentials,
+    mutateCredentials: (latest) => setCredentialsProfile(latest, newProfileCredentials),
     configFile: options.configFile,
     credentialsFile: options.credentialsFile
   });
@@ -679,7 +681,6 @@ async function handleLogout(options: AuthCommandOptions, extraPositionals: strin
   const credentialsRemoved = Object.hasOwn(credentials.profiles, profileName);
   const configRemoved = options.removeConfig && Object.hasOwn(config.profiles, profileName);
   const defaultProfileCleared = config.defaultProfile === profileName;
-  const updatedCredentials = removeCredentialsProfile(credentials, profileName);
   let updatedConfig = options.removeConfig ? removeProfileMetadata(config, profileName) : config;
 
   if (updatedConfig.defaultProfile === profileName) {
@@ -687,9 +688,8 @@ async function handleLogout(options: AuthCommandOptions, extraPositionals: strin
   }
 
   await persistAuthState({
-    previousCredentials: credentials,
     nextConfig: updatedConfig,
-    nextCredentials: updatedCredentials,
+    mutateCredentials: (latest) => removeCredentialsProfile(latest, profileName),
     configFile: options.configFile,
     credentialsFile: options.credentialsFile
   });

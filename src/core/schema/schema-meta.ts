@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import bundledMeta from "../../generated/manifest/schema-meta.json" with { type: "json" };
@@ -75,24 +76,50 @@ export function computeSchemaFingerprint(schema: Record<string, unknown>): strin
   const typeEntries = types
     .filter((t): t is {
       name: string;
-      fields?: Array<{ name: string; type?: unknown; args?: Array<{ name: string; type?: unknown }> }>;
-      inputFields?: Array<{ name: string; type?: unknown }>;
-      enumValues?: Array<{ name: string }>;
+      fields?: Array<{
+        name: string;
+        description?: string | null;
+        type?: unknown;
+        isDeprecated?: boolean;
+        deprecationReason?: string | null;
+        args?: Array<{ name: string; description?: string | null; type?: unknown; defaultValue?: unknown }>;
+      }>;
+      inputFields?: Array<{
+        name: string;
+        description?: string | null;
+        type?: unknown;
+        isDeprecated?: boolean;
+        deprecationReason?: string | null;
+        defaultValue?: unknown;
+      }>;
+      enumValues?: Array<{
+        name: string;
+        description?: string | null;
+        isDeprecated?: boolean;
+        deprecationReason?: string | null;
+      }>;
     } =>
       t !== null && typeof t === "object" && typeof (t as Record<string, unknown>).name === "string"
     )
     .filter((t) => !t.name.startsWith("__"))
     .sort((a, b) => a.name.localeCompare(b.name))
     .map((t) => {
+      // Descriptions and deprecation reasons are included because generated
+      // artifacts (CLI help, manifest deprecation guidance) depend on them.
       const fields = [
         ...(Array.isArray(t.fields) ? t.fields.map((f) => {
           const args = Array.isArray(f.args)
-            ? `(${f.args.map((arg) => `${arg.name}:${formatTypeRef(arg.type)}`).sort().join(",")})`
+            ? `(${f.args.map((arg) => `${arg.name}:${formatTypeRef(arg.type)}:${arg.description ?? ""}:${arg.defaultValue ?? "<no-default>"}`).sort().join(",")})`
             : "";
-          return `${f.name}${args}:${formatTypeRef(f.type)}`;
+          const deprecated = f.isDeprecated === true ? ` deprecated:${f.deprecationReason ?? ""}` : "";
+          return `${f.name}${args}:${formatTypeRef(f.type)}${deprecated} desc:${f.description ?? ""}`;
         }) : []),
-        ...(Array.isArray(t.inputFields) ? t.inputFields.map((f) => `${f.name}:${formatTypeRef(f.type)}`) : []),
-        ...(Array.isArray(t.enumValues) ? t.enumValues.map((f) => f.name) : [])
+        ...(Array.isArray(t.inputFields) ? t.inputFields.map((f) =>
+          `${f.name}:${formatTypeRef(f.type)}:${f.defaultValue ?? "<no-default>"}${f.isDeprecated === true ? ` deprecated:${f.deprecationReason ?? ""}` : ""} desc:${f.description ?? ""}`
+        ) : []),
+        ...(Array.isArray(t.enumValues) ? t.enumValues.map((f) =>
+          `${f.name}${f.isDeprecated === true ? ` deprecated:${f.deprecationReason ?? ""}` : ""} desc:${f.description ?? ""}`
+        ) : [])
       ].sort().join(",");
       return fields.length > 0 ? `${t.name}:${fields}` : t.name;
     });
@@ -102,16 +129,11 @@ export function computeSchemaFingerprint(schema: Record<string, unknown>): strin
   }
 
   const input = typeEntries.join("\n");
-  let hash = 0;
-  for (let i = 0; i < input.length; i++) {
-    const char = input.charCodeAt(i);
-    hash = ((hash << 5) - hash + char) | 0;
-  }
-  const hex = (hash >>> 0).toString(16).padStart(8, "0");
+  const hex = createHash("sha256").update(input).digest("hex");
   return `introspect-${hex}`;
 }
 
-function formatTypeRef(type: unknown): string {
+export function formatTypeRef(type: unknown): string {
   if (type === null || typeof type !== "object" || Array.isArray(type)) {
     return "";
   }

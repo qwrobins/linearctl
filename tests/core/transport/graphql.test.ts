@@ -173,3 +173,76 @@ describe("requestGraphQL", () => {
     ).toThrow("credentials are missing usable auth material");
   });
 });
+
+describe("executeGraphQL — URL security and timeouts", () => {
+  const credentials = {
+    profileName: "work",
+    type: "api_key" as const,
+    apiKey: "lin_api_work"
+  };
+
+  it("rejects non-HTTPS API URLs so credentials are never sent in plaintext", async () => {
+    const fetchImpl = vi.fn(async () => new Response("{}", { status: 200 })) as FetchLike;
+
+    await expect(
+      executeGraphQL({
+        query: "query { viewer { id } }",
+        credentials,
+        apiUrl: "http://evil.example.com/graphql",
+        fetchImpl
+      })
+    ).rejects.toMatchObject({ kind: "http" });
+
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it("rejects invalid API URLs before sending credentials", async () => {
+    const fetchImpl = vi.fn(async () => new Response("{}", { status: 200 })) as FetchLike;
+
+    await expect(
+      executeGraphQL({
+        query: "query { viewer { id } }",
+        credentials,
+        apiUrl: "not a url",
+        fetchImpl
+      })
+    ).rejects.toThrow(/not a valid URL/);
+
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it("allows plain HTTP for loopback addresses (local testing)", async () => {
+    const fetchImpl = vi.fn(async () =>
+      new Response(JSON.stringify({ data: { viewer: { id: "u1" } } }), { status: 200 })
+    ) as FetchLike;
+
+    const response = await executeGraphQL<{ viewer: { id: string } }>({
+      query: "query { viewer { id } }",
+      credentials,
+      apiUrl: "http://127.0.0.1:4000/graphql",
+      fetchImpl
+    });
+
+    expect(response.body.data?.viewer.id).toBe("u1");
+    expect(fetchImpl).toHaveBeenCalledOnce();
+  });
+
+  it("times out hanging requests", async () => {
+    const fetchImpl = vi.fn((_input: unknown, init?: RequestInit) =>
+      new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () => {
+          reject(new DOMException("The operation was aborted.", "AbortError"));
+        });
+      })
+    ) as FetchLike;
+
+    await expect(
+      executeGraphQL({
+        query: "query { viewer { id } }",
+        credentials,
+        fetchImpl,
+        timeoutMs: 5
+      })
+    ).rejects.toThrow(/timed out/);
+  });
+});

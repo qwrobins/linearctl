@@ -72,10 +72,23 @@ export function parseIni(input: string): IniDocument {
   return document;
 }
 
+function assertSafeForIni(value: string, subject: string): void {
+  if (value.includes("\n") || value.includes("\r")) {
+    throw new Error(`${subject} must not contain newlines`);
+  }
+}
+
 export function stringifyIni(document: IniDocument): string {
   const lines: string[] = [];
 
   for (const [sectionName, section] of Object.entries(document)) {
+    // Values may originate from external data (e.g. workspace names from the
+    // API); without validation a newline would inject arbitrary INI content.
+    assertSafeForIni(sectionName, "INI section name");
+    if (sectionName.includes("[") || sectionName.includes("]")) {
+      throw new Error("INI section name must not contain brackets");
+    }
+
     if (lines.length > 0) {
       lines.push("");
     }
@@ -83,6 +96,11 @@ export function stringifyIni(document: IniDocument): string {
     lines.push(`[${sectionName}]`);
 
     for (const [key, value] of Object.entries(section)) {
+      assertSafeForIni(key, "INI key");
+      if (key.includes("=")) {
+        throw new Error("INI key must not contain '='");
+      }
+      assertSafeForIni(value, `INI value for key "${key}"`);
       lines.push(`${key} = ${value}`);
     }
   }

@@ -5,6 +5,22 @@ REPO="qwrobins/linearctl"
 INSTALL_DIR="${LINEAR_INSTALL_DIR:-$HOME/.local/bin}"
 BINARY_NAME="linearctl"
 
+# Temp files are tracked so cleanup runs on every exit path (success, error,
+# interrupt). Paths come from mktemp and never contain spaces.
+TMP_FILES=""
+
+cleanup() {
+  for f in $TMP_FILES; do
+    rm -f "$f"
+  done
+}
+trap cleanup EXIT
+trap 'exit 1' HUP INT TERM
+
+track_tmp() {
+  TMP_FILES="$TMP_FILES $1"
+}
+
 main() {
   os=$(detect_os)
   arch=$(detect_arch)
@@ -29,12 +45,14 @@ main() {
     deb_arch=$(detect_deb_arch)
     deb_name="linearctl_${version#v}_${deb_arch}.deb"
     deb_url="${base_url}/${deb_name}"
-    deb_file=$(mktemp --suffix=.deb)
+    deb_file=$(mktemp "${TMPDIR:-/tmp}/linearctl.XXXXXX.deb")
+    track_tmp "$deb_file"
 
     echo "Installing linearctl ${version} via deb package (${deb_arch})..."
     download "$deb_url" "$deb_file"
+    download_checksums "$checksums_url"
+    verify_checksum "$deb_file" "$deb_name" "$CHECKSUMS_FILE"
     sudo dpkg -i "$deb_file"
-    rm -f "$deb_file"
     echo "Installed ${BINARY_NAME} to /usr/bin/${BINARY_NAME}"
     echo ""
     echo "Update agent skills to match this version:"
@@ -53,15 +71,9 @@ main() {
   # Download binary
   download "$url" "${INSTALL_DIR}/${BINARY_NAME}"
 
-  # Verify checksum
-  checksums_file=$(mktemp)
-  if download "$checksums_url" "$checksums_file" 2>/dev/null; then
-    verify_checksum "${INSTALL_DIR}/${BINARY_NAME}" "$artifact" "$checksums_file"
-    rm -f "$checksums_file"
-  else
-    rm -f "$checksums_file"
-    echo "Warning: could not download checksums, skipping verification" >&2
-  fi
+  # Verify checksum (mandatory — an unverified binary is never installed)
+  download_checksums "$checksums_url"
+  verify_checksum "${INSTALL_DIR}/${BINARY_NAME}" "$artifact" "$CHECKSUMS_FILE"
 
   chmod +x "${INSTALL_DIR}/${BINARY_NAME}"
 
@@ -94,6 +106,18 @@ download() {
   fi
 }
 
+# Downloads checksums.txt into CHECKSUMS_FILE. Fails closed: if the checksums
+# cannot be retrieved, the install aborts rather than skipping verification.
+download_checksums() {
+  checksums_file=$(mktemp)
+  track_tmp "$checksums_file"
+  if ! download "$1" "$checksums_file" 2>/dev/null; then
+    echo "Error: could not download checksums.txt — refusing to install unverified artifacts" >&2
+    exit 1
+  fi
+  CHECKSUMS_FILE="$checksums_file"
+}
+
 verify_checksum() {
   binary_path="$1"
   artifact_name="$2"
@@ -101,8 +125,9 @@ verify_checksum() {
 
   expected=$(awk -v name="$artifact_name" '$2 == name {print $1}' "$checksums_file")
   if [ -z "$expected" ]; then
-    echo "Warning: no checksum found for ${artifact_name}, skipping verification" >&2
-    return 0
+    rm -f "$binary_path"
+    echo "Error: no checksum found for ${artifact_name} in checksums.txt — refusing to install" >&2
+    exit 1
   fi
 
   if command -v sha256sum > /dev/null 2>&1; then
@@ -110,8 +135,9 @@ verify_checksum() {
   elif command -v shasum > /dev/null 2>&1; then
     actual=$(shasum -a 256 "$binary_path" | awk '{print $1}')
   else
-    echo "Warning: sha256sum/shasum not found, skipping verification" >&2
-    return 0
+    rm -f "$binary_path"
+    echo "Error: sha256sum or shasum is required to verify the download — refusing to install" >&2
+    exit 1
   fi
 
   if [ "$actual" != "$expected" ]; then
@@ -158,6 +184,8 @@ detect_arch() {
   esac
 }
 
+# Note: runs in a command-substitution subshell, so it removes its own temp
+# files explicitly (the EXIT trap cannot see files tracked inside a subshell).
 latest_version() {
   api_response=$(mktemp)
 

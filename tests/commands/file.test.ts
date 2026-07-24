@@ -224,7 +224,7 @@ describe("handleFileCommand — file upload", () => {
       });
 
       expect(exitCode).toBe(1);
-      expect(output.stderr.join("")).toContain("unsupported protocol");
+      expect(output.stderr.join("")).toContain("non-HTTPS protocol");
       expect(fetchImpl).toHaveBeenCalledTimes(2);
     } finally {
       output.restore();
@@ -540,6 +540,26 @@ describe("handleFileCommand — file download", () => {
 
       expect(exitCode).toBe(5);
       expect(output.stderr.join("")).toContain("only supports uploads.linear.app URLs");
+    } finally {
+      output.restore();
+    }
+  });
+
+  it("rejects plaintext HTTP URLs so credentials are not sent unencrypted", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-file-"));
+    const paths = await writeProfileFiles(directory);
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleFileCommand(
+        ["download", "http://uploads.linear.app/some-file.png"],
+        {
+          ...baseOptions(paths)
+        }
+      );
+
+      expect(exitCode).toBe(5);
+      expect(output.stderr.join("")).toContain("only supports HTTPS URLs");
     } finally {
       output.restore();
     }

@@ -2169,6 +2169,62 @@ describe("handleIssueCommand — issue bulk-close", () => {
       output.restore();
     }
   });
+
+  it("fetches the completed state once per team, not once per issue", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-issue-"));
+    const paths = await writeProfileFiles(directory);
+    const fetchImpl = vi.fn(async (_url, init) => {
+      const request = JSON.parse(String(init?.body ?? "{}"));
+      const query = String(request.query);
+      if (query.includes("IssueTeam")) {
+        return new Response(JSON.stringify({
+          data: { issue: { team: { id: "team-1" } } }
+        }), { status: 200 });
+      }
+      if (query.includes("CompletedStates")) {
+        return new Response(JSON.stringify({
+          data: {
+            workflowStates: {
+              nodes: [{ id: "state-done", name: "Done", type: "completed", position: 1 }]
+            }
+          }
+        }), { status: 200 });
+      }
+      if (query.includes("issueUpdate")) {
+        return new Response(JSON.stringify({
+          data: {
+            issueUpdate: {
+              success: true,
+              issue: makeRawIssue({
+                identifier: request.variables.id,
+                state: { id: "state-done", name: "Done", type: "completed" }
+              })
+            }
+          }
+        }), { status: 200 });
+      }
+      return new Response(JSON.stringify({
+        data: null,
+        errors: [{ message: "unexpected GraphQL operation" }]
+      }), { status: 200 });
+    }) as unknown as FetchLike;
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleIssueCommand(["bulk-close"], {
+        ...baseOptions(paths),
+        ids: "INF-2975,INF-2976,INF-2977",
+        fetchImpl
+      });
+
+      expect(exitCode).toBe(0);
+      const calls = (fetchImpl as ReturnType<typeof vi.fn>).mock.calls;
+      const completedStatesCalls = calls.filter((call) => String(call[1]?.body).includes("CompletedStates"));
+      expect(completedStatesCalls).toHaveLength(1);
+    } finally {
+      output.restore();
+    }
+  });
 });
 
 describe("handleIssueCommand — issue bulk-archive", () => {

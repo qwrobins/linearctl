@@ -259,7 +259,7 @@ describe("handleProjectStatusCommand — project-status create", () => {
 });
 
 describe("handleProjectStatusCommand — project-status delete", () => {
-  it("returns { id, deleted: true }", async () => {
+  it("returns { id, archived: true }", async () => {
     const directory = await mkdtemp(join(tmpdir(), "linear-cli-ps-"));
     const paths = await writeProfileFiles(directory);
     const fetchImpl = makeFetch({
@@ -276,7 +276,7 @@ describe("handleProjectStatusCommand — project-status delete", () => {
       expect(exitCode).toBe(0);
       const parsed = JSON.parse(output.stdout.join(""));
       expect(parsed.id).toBe("ps-uuid-1");
-      expect(parsed.deleted).toBe(true);
+      expect(parsed.archived).toBe(true);
     } finally {
       output.restore();
     }

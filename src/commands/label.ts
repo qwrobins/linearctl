@@ -173,6 +173,11 @@ async function handleLabelGet(
     );
 
     if (ctx.hasErrors(response.body.errors)) {
+      // If the identifier is already a UUID, re-querying with the same ID
+      // would fail identically — report the original error.
+      if (looksLikeId(identifier)) {
+        return ctx.emitFailure(ctx.mapGraphQLErrors(response.body.errors));
+      }
       const profile = await ctx.resolveProfile();
       const resolverOpts = await ctx.resolverOptions();
       const effectiveTeam = options.allTeams ? undefined : (options.team ?? profile.metadata.defaultTeam);
@@ -181,7 +186,7 @@ async function handleLabelGet(
         : looksLikeId(effectiveTeam)
           ? effectiveTeam
           : await resolveTeamId(effectiveTeam, resolverOpts);
-      const labelId = looksLikeId(identifier) ? identifier : await resolveLabelId(identifier, teamId, resolverOpts);
+      const labelId = await resolveLabelId(identifier, teamId, resolverOpts);
       response = await ctx.graphql<{ issueLabel: RawLabel | null }>(LABEL_GET_QUERY, { id: labelId });
       if (ctx.hasErrors(response.body.errors)) {
         return ctx.emitFailure(ctx.mapGraphQLErrors(response.body.errors));

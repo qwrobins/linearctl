@@ -231,4 +231,26 @@ describe("parseCredentials", () => {
       "credentials profile name cannot be empty"
     );
   });
+
+  it("does not throw when the stored file contains invalid profile names", () => {
+    // A hand-edited credentials file may contain names that fail validation;
+    // removing a different profile must still work.
+    const stored = {
+      profiles: {
+        "bad[name]": {
+          profileName: "bad[name]",
+          type: "api_key",
+          apiKey: "lin_api_bad"
+        },
+        work: {
+          profileName: "work",
+          type: "api_key",
+          apiKey: "lin_api_work"
+        }
+      }
+    } as const;
+
+    const result = removeCredentialsProfile(stored, "work");
+    expect(Object.keys(result.profiles)).toEqual(["bad[name]"]);
+  });
 });

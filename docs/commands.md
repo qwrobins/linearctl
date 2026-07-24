@@ -250,7 +250,7 @@ linearctl auth switch <profile>
 linearctl auth logout --profile <name> [--remove-config]
 ```
 
-OAuth token refresh re-reads credentials after an `invalid_grant` response so concurrent CLI invocations can tolerate one process refreshing the token before another finishes.
+OAuth refresh, login, and logout serialize credentials-file updates across CLI processes so concurrent commands cannot discard another profile's rotated tokens.
 
 See [auth-and-profiles.md](auth-and-profiles.md) for details.
 

@@ -282,6 +282,21 @@ describe("CLI scaffold", () => {
     }
   });
 
+  it("accepts --max-retries 0 (disables retries)", async () => {
+    // Parsing must succeed — the command then fails later on profile
+    // resolution, not with a validation error about the flag.
+    await expect(runCli(["issue", "list", "--max-retries", "0"])).rejects.toMatchObject({
+      stderr: expect.stringContaining("No Linear profile was resolved")
+    });
+  });
+
+  it("rejects negative --max-retries", async () => {
+    await expect(runCli(["issue", "list", "--max-retries=-1"])).rejects.toMatchObject({
+      code: 5,
+      stderr: expect.stringContaining("--max-retries must be a non-negative integer")
+    });
+  });
+
   it("does not treat leading option values as the envelope source layer", async () => {
     try {
       await runCli(["--profile", "api", "issue", "list", "--max", "0", "--json-envelope"]);

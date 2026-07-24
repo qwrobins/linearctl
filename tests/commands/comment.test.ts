@@ -286,6 +286,57 @@ describe("handleCommentCommand — comment create", () => {
     }
   });
 
+  it("resolves a human-readable issue identifier before creating", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-comment-"));
+    const paths = await writeProfileFiles(directory);
+    const createdComment = makeRawComment({ body: "New comment text" });
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        data: { issue: { id: "issue-uuid-1" } }
+      }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        data: { commentCreate: { success: true, comment: createdComment } }
+      }), { status: 200 })) as FetchLike;
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleCommentCommand(["create"], {
+        ...baseOptions(paths),
+        issue: "INF-2975",
+        body: "New comment text",
+        fetchImpl
+      });
+
+      expect(exitCode).toBe(0);
+      expect(fetchImpl).toHaveBeenCalledTimes(2);
+      const secondCall = (fetchImpl as ReturnType<typeof vi.fn>).mock.calls[1] as [string, RequestInit];
+      const body = JSON.parse(secondCall[1].body as string) as { variables: { input: { issueId: string } } };
+      expect(body.variables.input.issueId).toBe("issue-uuid-1");
+    } finally {
+      output.restore();
+    }
+  });
+
+  it("returns exit code 4 when the issue identifier does not exist", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-comment-"));
+    const paths = await writeProfileFiles(directory);
+    const fetchImpl = makeFetch({ data: { issue: null } });
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleCommentCommand(["create"], {
+        ...baseOptions(paths),
+        issue: "INF-9999",
+        body: "New comment text",
+        fetchImpl
+      });
+
+      expect(exitCode).toBe(4);
+    } finally {
+      output.restore();
+    }
+  });
+
   it("reads --body-file into the comment create input", async () => {
     const directory = await mkdtemp(join(tmpdir(), "linear-cli-comment-"));
     const paths = await writeProfileFiles(directory);

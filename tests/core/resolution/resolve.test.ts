@@ -431,7 +431,7 @@ describe("resolveProjectId", () => {
     });
   });
 
-  it("falls back to unscoped project lookup when team-scoped lookup misses", async () => {
+  it("does not widen to an unscoped lookup when team-scoped lookup misses", async () => {
     const fetchImpl = vi.fn()
       .mockResolvedValueOnce(new Response(JSON.stringify({
         data: {
@@ -440,27 +440,12 @@ describe("resolveProjectId", () => {
             nodes: []
           }
         }
-      }), { status: 200 }))
-      .mockResolvedValueOnce(new Response(JSON.stringify({
-        data: {
-          projects: {
-            pageInfo: { hasNextPage: false, endCursor: null },
-            nodes: [
-              {
-                id: "project-2",
-                name: "UAT-cwi",
-                teams: { nodes: [{ id: "team-2", key: "OPS", name: "Ops" }] }
-              }
-            ]
-          }
-        }
       }), { status: 200 })) as FetchLike;
 
-    const result = await resolveProjectId("UAT-cwi", "team-1", makeOptions(fetchImpl));
-    expect(result).toBe("project-2");
+    // A team-scoped miss must not silently match a project in another team.
+    await expect(resolveProjectId("UAT-cwi", "team-1", makeOptions(fetchImpl)))
+      .rejects.toThrow('No project found matching "UAT-cwi" in team team-1');
 
-    const secondCall = (fetchImpl as ReturnType<typeof vi.fn>).mock.calls[1] as [string, RequestInit];
-    const body = JSON.parse(secondCall[1].body as string) as { variables: Record<string, unknown> };
-    expect(body.variables.filter).toEqual({ name: { containsIgnoreCase: "UAT-cwi" } });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 });

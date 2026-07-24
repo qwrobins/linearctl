@@ -8,6 +8,7 @@ import { streamPaginateGraphQL } from "../core/pagination/streaming.js";
 import { emitDryRunResult } from "../core/output/dry-run.js";
 import { normalizeRetryOptions } from "../core/transport/retry.js";
 import { CommandContext } from "../core/runtime/command-context.js";
+import { looksLikeId } from "../core/resolution/resolve.js";
 
 export interface AttachmentCommandOptions {
   json: boolean;
@@ -191,6 +192,9 @@ async function handleAttachmentList(options: AttachmentCommandOptions): Promise<
           issue?: { attachments: { nodes: RawAttachment[]; pageInfo: PageInfo } } | null;
           attachments?: { nodes: RawAttachment[]; pageInfo: PageInfo };
         };
+        if (d.issue === null) {
+          throw new Error(`Issue "${options.issue ?? ""}" not found.`);
+        }
         return d.issue?.attachments ?? d.attachments ?? { nodes: [], pageInfo: { hasNextPage: false, endCursor: null } };
       }
     };
@@ -240,8 +244,9 @@ async function handleAttachmentCreate(options: AttachmentCommandOptions): Promis
     return emitValidationError("--url is required for attachment create.", options);
   }
 
+  const trimmedUrl = options.url.trim();
   try {
-    const parsed = new URL(options.url.trim());
+    const parsed = new URL(trimmedUrl);
     if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
       return emitValidationError("--url must be a valid http/https URL.", options);
     }
@@ -252,17 +257,34 @@ async function handleAttachmentCreate(options: AttachmentCommandOptions): Promis
   if (options.title === undefined || options.title.trim() === "") {
     return emitValidationError("--title is required for attachment create.", options);
   }
+  const trimmedTitle = options.title.trim();
 
   if (options.dryRun === true) {
-    return emitDryRunResult("create", "attachment", { issueId: options.issue, url: options.url, title: options.title }, options);
+    return emitDryRunResult("create", "attachment", { issueId: options.issue, url: trimmedUrl, title: trimmedTitle }, options);
   }
 
   const ctx = buildContext(options);
 
   try {
+    // attachmentCreate requires a UUID — resolve human-readable identifiers first.
+    let issueId = options.issue;
+    if (!looksLikeId(issueId)) {
+      const issueResponse = await ctx.graphql<{ issue: { id: string } | null }>(
+        `query AttachmentCreateIssueLookup($id: String!) { issue(id: $id) { id } }`,
+        { id: options.issue }
+      );
+      if (ctx.hasErrors(issueResponse.body.errors)) {
+        return ctx.emitFailure(ctx.mapGraphQLErrors(issueResponse.body.errors));
+      }
+      if (issueResponse.body.data?.issue?.id === undefined) {
+        return ctx.emitNotFound(`Issue "${options.issue}" not found.`);
+      }
+      issueId = issueResponse.body.data.issue.id;
+    }
+
     const response = await ctx.graphql<{
       attachmentCreate: { success: boolean; attachment: RawAttachment | null };
-    }>(ATTACHMENT_CREATE_MUTATION, { input: { issueId: options.issue, url: options.url, title: options.title } });
+    }>(ATTACHMENT_CREATE_MUTATION, { input: { issueId, url: trimmedUrl, title: trimmedTitle } });
 
     if (
       ctx.hasErrors(response.body.errors) ||
