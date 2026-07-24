@@ -109,13 +109,13 @@ export function computeSchemaFingerprint(schema: Record<string, unknown>): strin
       const fields = [
         ...(Array.isArray(t.fields) ? t.fields.map((f) => {
           const args = Array.isArray(f.args)
-            ? `(${f.args.map((arg) => `${arg.name}:${formatTypeRef(arg.type)}:${arg.description ?? ""}:${arg.defaultValue ?? ""}`).sort().join(",")})`
+            ? `(${f.args.map((arg) => `${arg.name}:${formatTypeRef(arg.type)}:${arg.description ?? ""}:${arg.defaultValue ?? "<no-default>"}`).sort().join(",")})`
             : "";
           const deprecated = f.isDeprecated === true ? ` deprecated:${f.deprecationReason ?? ""}` : "";
           return `${f.name}${args}:${formatTypeRef(f.type)}${deprecated} desc:${f.description ?? ""}`;
         }) : []),
         ...(Array.isArray(t.inputFields) ? t.inputFields.map((f) =>
-          `${f.name}:${formatTypeRef(f.type)}:${f.defaultValue ?? ""}${f.isDeprecated === true ? ` deprecated:${f.deprecationReason ?? ""}` : ""} desc:${f.description ?? ""}`
+          `${f.name}:${formatTypeRef(f.type)}:${f.defaultValue ?? "<no-default>"}${f.isDeprecated === true ? ` deprecated:${f.deprecationReason ?? ""}` : ""} desc:${f.description ?? ""}`
         ) : []),
         ...(Array.isArray(t.enumValues) ? t.enumValues.map((f) =>
           `${f.name}${f.isDeprecated === true ? ` deprecated:${f.deprecationReason ?? ""}` : ""} desc:${f.description ?? ""}`

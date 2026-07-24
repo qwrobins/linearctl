@@ -9,7 +9,7 @@ import {
   setCredentialsProfile,
   writeCredentialsFile
 } from "../core/auth/credentials.js";
-import { acquireCredentialsFileLock, isNotFoundError, loadOptionalConfig, loadOptionalCredentials, resolveStoredProfile } from "../core/auth/runtime.js";
+import { isNotFoundError, loadOptionalConfig, loadOptionalCredentials, resolveStoredProfile, updateCredentialsStore } from "../core/auth/runtime.js";
 import type { LinearConfig, ProfileMetadata } from "../core/config/config-file.js";
 import {
   clearDefaultProfile,
@@ -113,10 +113,11 @@ interface ViewerValidationResponse {
 }
 
 interface PersistAuthStateInput {
-  previousCredentials: CredentialsStore;
   nextConfig: LinearConfig;
-  /** Applied to the latest store read under the credentials lock. */
+  /** Applied to the latest store inside the serialized credentials update. */
   mutateCredentials: (latest: CredentialsStore) => CredentialsStore;
+  /** Inverse of mutateCredentials, used if the config write fails. */
+  rollbackCredentials: (latest: CredentialsStore) => CredentialsStore;
   configFile: string;
   credentialsFile: string;
 }
@@ -214,26 +215,15 @@ async function validateApiKey(
 }
 
 async function persistAuthState(input: PersistAuthStateInput): Promise<void> {
-  // Serialize with concurrent OAuth refreshes in other processes: apply the
-  // login/logout mutation to the latest store under the same file lock the
-  // refresh path holds, so neither side overwrites the other's changes.
-  const lock = await acquireCredentialsFileLock(input.credentialsFile);
-  try {
-    const latest = await loadOptionalCredentials(input.credentialsFile);
-    await writeCredentialsFile(input.credentialsFile, input.mutateCredentials(latest));
-  } finally {
-    await lock.release();
-  }
+  // Both the write and the rollback merge onto the latest store (serialized
+  // with concurrent in-process OAuth refreshes) instead of replacing the
+  // file with a stale snapshot.
+  await updateCredentialsStore(input.credentialsFile, input.mutateCredentials);
 
   try {
     await writeLinearConfigFile(input.configFile, input.nextConfig);
   } catch (error) {
-    const rollbackLock = await acquireCredentialsFileLock(input.credentialsFile);
-    try {
-      await writeCredentialsFile(input.credentialsFile, input.previousCredentials);
-    } finally {
-      await rollbackLock.release();
-    }
+    await updateCredentialsStore(input.credentialsFile, input.rollbackCredentials);
     throw error;
   }
 }
@@ -491,10 +481,14 @@ async function handleOAuthLogin(options: AuthCommandOptions): Promise<number> {
     updatedConfig = setDefaultProfile(updatedConfig, profileName);
   }
 
+  const previousEntry = credentials.profiles[profileName];
   await persistAuthState({
-    previousCredentials: credentials,
     nextConfig: updatedConfig,
     mutateCredentials: (latest) => setCredentialsProfile(latest, newProfileCredentials),
+    rollbackCredentials: (latest) =>
+      previousEntry === undefined
+        ? removeCredentialsProfile(latest, profileName)
+        : setCredentialsProfile(latest, previousEntry),
     configFile: options.configFile,
     credentialsFile: options.credentialsFile
   });
@@ -645,10 +639,14 @@ async function handleLogin(options: AuthCommandOptions, extraPositionals: string
     updatedConfig = setDefaultProfile(updatedConfig, profileName);
   }
 
+  const previousEntry = credentials.profiles[profileName];
   await persistAuthState({
-    previousCredentials: credentials,
     nextConfig: updatedConfig,
     mutateCredentials: (latest) => setCredentialsProfile(latest, newProfileCredentials),
+    rollbackCredentials: (latest) =>
+      previousEntry === undefined
+        ? removeCredentialsProfile(latest, profileName)
+        : setCredentialsProfile(latest, previousEntry),
     configFile: options.configFile,
     credentialsFile: options.credentialsFile
   });
@@ -700,10 +698,14 @@ async function handleLogout(options: AuthCommandOptions, extraPositionals: strin
     updatedConfig = clearDefaultProfile(updatedConfig);
   }
 
+  const previousEntry = credentials.profiles[profileName];
   await persistAuthState({
-    previousCredentials: credentials,
     nextConfig: updatedConfig,
     mutateCredentials: (latest) => removeCredentialsProfile(latest, profileName),
+    rollbackCredentials: (latest) =>
+      previousEntry === undefined
+        ? latest
+        : setCredentialsProfile(latest, previousEntry),
     configFile: options.configFile,
     credentialsFile: options.credentialsFile
   });

@@ -69,27 +69,49 @@ async function handleWorkspaceList(options: WorkspaceCommandOptions): Promise<nu
     ...Object.keys(credentials.profiles)
   ]);
 
-  // Query all profiles in parallel — each request is independent, and per-profile
-  // failures are isolated so one unreachable profile can't block the listing.
+  // Phase 1 (sequential): resolve each profile that needs a metadata fetch.
+  // Resolution can trigger an OAuth refresh, which rewrites the credentials
+  // file — doing this serially keeps refreshes ordered while the actual
+  // viewer queries below still run in parallel.
+  const pending = [...profileNames].sort().map((profileName) => {
+    const metadata = config.profiles[profileName] ?? {};
+    const credential = credentials.profiles[profileName];
+    const needsFetch =
+      credential !== undefined &&
+      (metadata.workspace === undefined || metadata.workspaceId === undefined || metadata.userEmail === undefined);
+
+    return { profileName, metadata, credential, needsFetch };
+  });
+
+  const contexts = new Map<string, CommandContext>();
+  for (const { profileName, needsFetch } of pending) {
+    if (!needsFetch) {
+      continue;
+    }
+    const ctx = new CommandContext({
+      json: options.json,
+      jsonEnvelope: options.jsonEnvelope,
+      profile: profileName,
+      configFile: options.configFile,
+      credentialsFile: options.credentialsFile,
+      env: options.env,
+      ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl }),
+    });
+    try {
+      await ctx.resolveProfile();
+      contexts.set(profileName, ctx);
+    } catch {
+      // Profile cannot be resolved/refreshed — fall back to local metadata.
+    }
+  }
+
+  // Phase 2 (parallel): run the independent viewer queries concurrently.
   const entries = await Promise.all(
-    [...profileNames].sort().map(async (profileName) => {
-      const metadata = config.profiles[profileName] ?? {};
-      const credential = credentials.profiles[profileName];
+    pending.map(async ({ profileName, metadata, credential }) => {
       let resolvedMetadata = metadata;
 
-      if (
-        credential !== undefined &&
-        (metadata.workspace === undefined || metadata.workspaceId === undefined || metadata.userEmail === undefined)
-      ) {
-        const ctx = new CommandContext({
-          json: options.json,
-          jsonEnvelope: options.jsonEnvelope,
-          profile: profileName,
-          configFile: options.configFile,
-          credentialsFile: options.credentialsFile,
-          env: options.env,
-          ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl }),
-        });
+      const ctx = contexts.get(profileName);
+      if (ctx !== undefined) {
         try {
           const response = await ctx.graphql<ViewerWorkspaceResponse>(
             "query WorkspaceListViewer { viewer { email organization { id name } } }"
