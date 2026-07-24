@@ -68,9 +68,10 @@ function withCredentialWriteLock<T>(fn: () => Promise<T>): Promise<T> {
   return run;
 }
 
-// The wait must outlast the longest protected critical section: the OAuth
-// token grant may run up to 60s (TOKEN_REQUEST_TIMEOUT_MS), plus margin.
-const CREDENTIALS_LOCK_TIMEOUT_MS = 90_000;
+// The wait must outlast the longest protected critical section: a refresh
+// grant (up to 60s, TOKEN_REQUEST_TIMEOUT_MS) plus a possible recovery grant
+// after invalid_grant (another 60s), plus margin.
+const CREDENTIALS_LOCK_TIMEOUT_MS = 150_000;
 const CREDENTIALS_LOCK_STALE_MS = 30_000;
 const CREDENTIALS_LOCK_HEARTBEAT_MS = 10_000;
 
@@ -79,7 +80,7 @@ export interface CredentialsFileLockOptions {
   heartbeatMs?: number;
   /** Age after which an unrefreshed lock is presumed abandoned. Default 30s. */
   staleMs?: number;
-  /** Max wait to acquire the lock. Default 90s. */
+  /** Max wait to acquire the lock. Default 150s (outlasts refresh + recovery grants). */
   timeoutMs?: number;
 }
 
