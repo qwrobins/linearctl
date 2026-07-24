@@ -293,7 +293,7 @@ async function refreshOAuthProfileIfNeeded(
       } catch (error) {
         if (error instanceof OAuthTokenError) {
           if (error.errorCode === "invalid_grant") {
-            const recoveredProfile = await recoverConcurrentOAuthRefresh(profile, current.refreshToken, input);
+            const recoveredProfile = await recoverConcurrentOAuthRefresh(profile, current.refreshToken, input, lock);
             if (recoveredProfile !== undefined) {
               return recoveredProfile;
             }
@@ -336,7 +336,8 @@ async function refreshOAuthProfileIfNeeded(
 async function recoverConcurrentOAuthRefresh(
   profile: ResolvedProfile,
   staleRefreshToken: string,
-  input: ResolveStoredProfileInput
+  input: ResolveStoredProfileInput,
+  lock: CredentialsFileLock
 ): Promise<ResolvedProfile | undefined> {
   const latestCredentials = await loadOptionalCredentials(input.paths.credentialsFile);
   const latestProfile = resolveProfile({
@@ -378,6 +379,12 @@ async function recoverConcurrentOAuthRefresh(
     refreshToken: tokenResponse.refresh_token,
     expiresAt: new Date(Date.now() + tokenResponse.expires_in * 1000).toISOString()
   };
+
+  // Same fencing as the primary refresh path: if our lock was broken while
+  // the recovery grant was in flight, fail instead of clobbering the new
+  // owner's freshly rotated tokens.
+  await lock.assertOwned();
+
   const updatedStore = setCredentialsProfile(latestCredentials, refreshedCredentials);
   await writeCredentialsFile(input.paths.credentialsFile, updatedStore);
 
