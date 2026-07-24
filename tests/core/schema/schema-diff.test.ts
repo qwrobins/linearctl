@@ -176,7 +176,8 @@ describe("diffSchemas", () => {
     expect(diff.changedFields).toEqual([{ type: "Issue", field: "title" }]);
     expect(diff.addedFields).toEqual([]);
     expect(diff.removedFields).toEqual([]);
-    expect(diff.hasBreakingChanges).toBe(true);
+    // nullable → NON_NULL on an output field is covariant-safe.
+    expect(diff.hasBreakingChanges).toBe(false);
   });
 
   it("detects field argument changes", () => {
@@ -200,6 +201,75 @@ describe("diffSchemas", () => {
     const diff = diffSchemas(oldSchema, newSchema);
 
     expect(diff.changedFields).toEqual([{ type: "Query", field: "issues" }]);
+    // Adding an optional argument is backward-compatible.
+    expect(diff.hasBreakingChanges).toBe(false);
+  });
+
+  it("marks an added required argument as breaking", () => {
+    const makeArgsSchema = (args: Array<{ name: string; type?: unknown; defaultValue?: unknown }>) => ({
+      __schema: {
+        types: [
+          {
+            kind: "OBJECT",
+            name: "Query",
+            fields: [{ name: "issues", type: { kind: "OBJECT", name: "IssueConnection", ofType: null }, args }],
+          },
+        ],
+      },
+    });
+    const oldSchema = makeArgsSchema([]);
+    const newSchema = makeArgsSchema([
+      { name: "filter", type: { kind: "NON_NULL", name: null, ofType: { kind: "INPUT_OBJECT", name: "IssueFilter", ofType: null } } },
+    ]);
+
+    const diff = diffSchemas(oldSchema, newSchema);
+
+    expect(diff.changedFields).toEqual([{ type: "Query", field: "issues" }]);
+    expect(diff.hasBreakingChanges).toBe(true);
+  });
+
+  it("does not mark an added argument with a default as breaking", () => {
+    const makeArgsSchema = (args: Array<{ name: string; type?: unknown; defaultValue?: unknown }>) => ({
+      __schema: {
+        types: [
+          {
+            kind: "OBJECT",
+            name: "Query",
+            fields: [{ name: "issues", type: { kind: "OBJECT", name: "IssueConnection", ofType: null }, args }],
+          },
+        ],
+      },
+    });
+    const oldSchema = makeArgsSchema([]);
+    const newSchema = makeArgsSchema([
+      { name: "first", type: { kind: "NON_NULL", name: null, ofType: { kind: "SCALAR", name: "Int", ofType: null } }, defaultValue: "50" },
+    ]);
+
+    const diff = diffSchemas(oldSchema, newSchema);
+
+    expect(diff.changedFields).toEqual([{ type: "Query", field: "issues" }]);
+    expect(diff.hasBreakingChanges).toBe(false);
+  });
+
+  it("marks a removed argument as breaking", () => {
+    const makeArgsSchema = (args: Array<{ name: string; type?: unknown }>) => ({
+      __schema: {
+        types: [
+          {
+            kind: "OBJECT",
+            name: "Query",
+            fields: [{ name: "issues", type: { kind: "OBJECT", name: "IssueConnection", ofType: null }, args }],
+          },
+        ],
+      },
+    });
+    const oldSchema = makeArgsSchema([{ name: "first", type: { kind: "SCALAR", name: "Int", ofType: null } }]);
+    const newSchema = makeArgsSchema([]);
+
+    const diff = diffSchemas(oldSchema, newSchema);
+
+    expect(diff.changedFields).toEqual([{ type: "Query", field: "issues" }]);
+    expect(diff.hasBreakingChanges).toBe(true);
   });
 
   it("detects deprecation changes", () => {
@@ -289,13 +359,41 @@ describe("diffSchemas", () => {
         ],
       },
     });
-    const oldSchema = makeTypedSchema({ kind: "SCALAR", name: "String", ofType: null });
-    const newSchema = makeTypedSchema({ kind: "NON_NULL", name: null, ofType: { kind: "SCALAR", name: "String", ofType: null } });
+    // NON_NULL → nullable on an output field can return null where clients
+    // were guaranteed a value — breaking.
+    const oldSchema = makeTypedSchema({ kind: "NON_NULL", name: null, ofType: { kind: "SCALAR", name: "String", ofType: null } });
+    const newSchema = makeTypedSchema({ kind: "SCALAR", name: "String", ofType: null });
 
     const diff = diffSchemas(oldSchema, newSchema);
 
     expect(diff.changedFields).toEqual([{ type: "Issue", field: "title" }]);
     expect(diff.hasBreakingChanges).toBe(true);
+  });
+
+  it("marks an added required input field as breaking, optional as safe", () => {
+    const makeInputSchema = (inputFields: Array<{ name: string; type?: unknown; defaultValue?: unknown }>) => ({
+      __schema: {
+        types: [
+          { kind: "INPUT_OBJECT", name: "IssueCreateInput", inputFields },
+        ],
+      },
+    });
+
+    const requiredAdded = diffSchemas(
+      makeInputSchema([]),
+      makeInputSchema([
+        { name: "title", type: { kind: "NON_NULL", name: null, ofType: { kind: "SCALAR", name: "String", ofType: null } } }
+      ])
+    );
+    expect(requiredAdded.hasBreakingChanges).toBe(true);
+
+    const optionalAdded = diffSchemas(
+      makeInputSchema([]),
+      makeInputSchema([
+        { name: "description", type: { kind: "SCALAR", name: "String", ofType: null } }
+      ])
+    );
+    expect(optionalAdded.hasBreakingChanges).toBe(false);
   });
 });
 

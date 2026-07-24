@@ -1,6 +1,15 @@
 /**
  * Schema diff utility — compares two GraphQL introspection results
  * and produces a structured summary of changes.
+ *
+ * Breaking-change detection follows graphql-js semantics:
+ * - Output positions (field return types): the new type must be a subtype
+ *   of the old (nullable → NON_NULL is safe; the reverse is breaking).
+ * - Input positions (arguments, input fields): the old type must be a
+ *   subtype of the new (required → optional is safe; the reverse is breaking).
+ * - Adding an argument/input field is breaking only when it is required
+ *   (NON_NULL without a default); removing one is always breaking.
+ * - Description and deprecation changes are reported but never breaking.
  */
 
 import { formatTypeRef } from "./schema-meta.js";
@@ -16,11 +25,20 @@ export interface SchemaDiff {
   hasBreakingChanges: boolean;
 }
 
+interface IntrospectionInputValue {
+  name: string;
+  description?: string | null;
+  type?: unknown;
+  defaultValue?: unknown;
+  isDeprecated?: boolean;
+  deprecationReason?: string | null;
+}
+
 interface IntrospectionField {
   name: string;
   description?: string | null;
   type?: unknown;
-  args?: Array<{ name: string; description?: string | null; type?: unknown }>;
+  args?: IntrospectionInputValue[];
   isDeprecated?: boolean;
   deprecationReason?: string | null;
 }
@@ -29,8 +47,142 @@ interface IntrospectionType {
   name: string;
   kind: string;
   fields?: IntrospectionField[] | null;
-  inputFields?: IntrospectionField[] | null;
+  inputFields?: IntrospectionInputValue[] | null;
   enumValues?: IntrospectionField[] | null;
+}
+
+interface TypeRefLike {
+  kind?: string;
+  name?: string | null;
+  ofType?: TypeRefLike | null;
+}
+
+function asTypeRef(type: unknown): TypeRefLike | undefined {
+  if (type === null || typeof type !== "object" || Array.isArray(type)) {
+    return undefined;
+  }
+  return type as TypeRefLike;
+}
+
+/** Mirrors graphql-js isTypeSubTypeOf on introspection type references. */
+function isTypeSubTypeOf(subType: unknown, superType: unknown): boolean {
+  const sub = asTypeRef(subType);
+  const sup = asTypeRef(superType);
+
+  if (sup === undefined || sub === undefined) {
+    // Unknown shape — treat as different only if the rendered refs differ.
+    return formatTypeRef(subType) === formatTypeRef(superType);
+  }
+
+  if (sup.kind === "NON_NULL") {
+    return sub.kind === "NON_NULL" && isTypeSubTypeOf(sub.ofType, sup.ofType);
+  }
+  if (sub.kind === "NON_NULL") {
+    return isTypeSubTypeOf(sub.ofType, sup);
+  }
+  if (sup.kind === "LIST") {
+    return sub.kind === "LIST" && isTypeSubTypeOf(sub.ofType, sup.ofType);
+  }
+  if (sub.kind === "LIST") {
+    return false;
+  }
+  return sub.name != null && sub.name === sup.name;
+}
+
+/** An input value is required when NON_NULL and it declares no default. */
+function isRequiredInput(value: IntrospectionInputValue): boolean {
+  return (
+    asTypeRef(value.type)?.kind === "NON_NULL" &&
+    (value.defaultValue === null || value.defaultValue === undefined)
+  );
+}
+
+interface FieldComparison {
+  changed: boolean;
+  breaking: boolean;
+}
+
+function compareOutputField(oldField: IntrospectionField, newField: IntrospectionField): FieldComparison {
+  let changed = false;
+  let breaking = false;
+
+  // Return type (output position): new must be a subtype of old.
+  if (formatTypeRef(oldField.type) !== formatTypeRef(newField.type)) {
+    changed = true;
+    if (!isTypeSubTypeOf(newField.type, oldField.type)) {
+      breaking = true;
+    }
+  }
+
+  const oldArgs = new Map((oldField.args ?? []).map((arg) => [arg.name, arg]));
+  const newArgs = new Map((newField.args ?? []).map((arg) => [arg.name, arg]));
+
+  for (const [argName, oldArg] of oldArgs) {
+    const newArg = newArgs.get(argName);
+    if (newArg === undefined) {
+      // Removed argument — existing queries may pass it.
+      changed = true;
+      breaking = true;
+      continue;
+    }
+    if (formatTypeRef(oldArg.type) !== formatTypeRef(newArg.type)) {
+      changed = true;
+      // Input position: old must be a subtype of new.
+      if (!isTypeSubTypeOf(oldArg.type, newArg.type)) {
+        breaking = true;
+      }
+    }
+    if ((oldArg.description ?? "") !== (newArg.description ?? "")) {
+      changed = true;
+    }
+  }
+
+  for (const [argName, newArg] of newArgs) {
+    if (!oldArgs.has(argName)) {
+      changed = true;
+      // Adding a required argument breaks existing calls; optional is safe.
+      if (isRequiredInput(newArg)) {
+        breaking = true;
+      }
+    }
+  }
+
+  if ((oldField.description ?? "") !== (newField.description ?? "")) {
+    changed = true;
+  }
+
+  const oldDeprecation = oldField.isDeprecated === true ? (oldField.deprecationReason ?? "") : null;
+  const newDeprecation = newField.isDeprecated === true ? (newField.deprecationReason ?? "") : null;
+  if (oldDeprecation !== newDeprecation) {
+    changed = true;
+  }
+
+  return { changed, breaking };
+}
+
+function compareInputField(oldField: IntrospectionInputValue, newField: IntrospectionInputValue): FieldComparison {
+  let changed = false;
+  let breaking = false;
+
+  if (formatTypeRef(oldField.type) !== formatTypeRef(newField.type)) {
+    changed = true;
+    // Input position: old must be a subtype of new.
+    if (!isTypeSubTypeOf(oldField.type, newField.type)) {
+      breaking = true;
+    }
+  }
+
+  if ((oldField.description ?? "") !== (newField.description ?? "")) {
+    changed = true;
+  }
+
+  const oldDeprecation = oldField.isDeprecated === true ? (oldField.deprecationReason ?? "") : null;
+  const newDeprecation = newField.isDeprecated === true ? (newField.deprecationReason ?? "") : null;
+  if (oldDeprecation !== newDeprecation) {
+    changed = true;
+  }
+
+  return { changed, breaking };
 }
 
 function extractTypes(schema: unknown): Map<string, IntrospectionType> {
@@ -58,58 +210,14 @@ function extractTypes(schema: unknown): Map<string, IntrospectionType> {
   return map;
 }
 
-interface FieldSignatures {
-  /** Argument types and return type — changes here can break existing queries. */
-  structural: string;
-  /** Descriptions and deprecation state — consumed by generated artifacts but non-breaking. */
-  metadata: string;
-}
-
-/**
- * Map of field name → signatures. Both parts matter for drift detection (the
- * manifest generator consumes descriptions/deprecations), but only the
- * structural part is treated as a breaking change.
- */
-function fieldSignatures(type: IntrospectionType): Map<string, FieldSignatures> {
-  const signatures = new Map<string, FieldSignatures>();
-
-  if (Array.isArray(type.fields)) {
-    for (const f of type.fields) {
-      const structuralArgs = Array.isArray(f.args)
-        ? `(${f.args.map((arg) => `${arg.name}:${formatTypeRef(arg.type)}`).sort().join(",")})`
-        : "";
-      const metadataArgs = Array.isArray(f.args)
-        ? f.args.map((arg) => `${arg.name}:${arg.description ?? ""}`).sort().join(",")
-        : "";
-      const deprecated = f.isDeprecated === true ? ` deprecated:${f.deprecationReason ?? ""}` : "";
-      signatures.set(f.name, {
-        structural: `${structuralArgs}:${formatTypeRef(f.type)}`,
-        metadata: `${metadataArgs}${deprecated} desc:${f.description ?? ""}`
-      });
+function indexByName<T extends { name: string }>(list: Array<T> | null | undefined): Map<string, T> {
+  const map = new Map<string, T>();
+  if (Array.isArray(list)) {
+    for (const item of list) {
+      map.set(item.name, item);
     }
   }
-
-  if (Array.isArray(type.inputFields)) {
-    for (const f of type.inputFields) {
-      const deprecated = f.isDeprecated === true ? ` deprecated:${f.deprecationReason ?? ""}` : "";
-      signatures.set(f.name, {
-        structural: `input:${formatTypeRef(f.type)}`,
-        metadata: `${deprecated} desc:${f.description ?? ""}`
-      });
-    }
-  }
-
-  if (Array.isArray(type.enumValues)) {
-    for (const f of type.enumValues) {
-      const deprecated = f.isDeprecated === true ? ` deprecated:${f.deprecationReason ?? ""}` : "";
-      signatures.set(f.name, {
-        structural: "enum",
-        metadata: `${deprecated} desc:${f.description ?? ""}`
-      });
-    }
-  }
-
-  return signatures;
+  return map;
 }
 
 export function diffSchemas(oldSchema: unknown, newSchema: unknown): SchemaDiff {
@@ -121,8 +229,8 @@ export function diffSchemas(oldSchema: unknown, newSchema: unknown): SchemaDiff 
   const addedFields: Array<{ type: string; field: string }> = [];
   const removedFields: Array<{ type: string; field: string }> = [];
   const changedFields: Array<{ type: string; field: string }> = [];
-  const structuralChangedFields: Array<{ type: string; field: string }> = [];
   const changedTypeSet = new Set<string>();
+  let breakingFieldChange = false;
 
   // Detect removed types
   for (const name of oldTypes.keys()) {
@@ -141,28 +249,85 @@ export function diffSchemas(oldSchema: unknown, newSchema: unknown): SchemaDiff 
       continue;
     }
 
-    // Compare field signatures
-    const oldFields = fieldSignatures(oldType);
-    const newFields = fieldSignatures(newType);
-
-    for (const [field, newSignature] of newFields) {
-      const oldSignature = oldFields.get(field);
-      if (oldSignature === undefined) {
-        addedFields.push({ type: name, field });
+    // Output fields
+    const oldFields = indexByName(oldType.fields);
+    const newFields = indexByName(newType.fields);
+    for (const [fieldName, newField] of newFields) {
+      const oldField = oldFields.get(fieldName);
+      if (oldField === undefined) {
+        addedFields.push({ type: name, field: fieldName });
         changedTypeSet.add(name);
-      } else if (oldSignature.structural !== newSignature.structural) {
-        changedFields.push({ type: name, field });
-        structuralChangedFields.push({ type: name, field });
+        continue;
+      }
+      const comparison = compareOutputField(oldField, newField);
+      if (comparison.changed) {
+        changedFields.push({ type: name, field: fieldName });
         changedTypeSet.add(name);
-      } else if (oldSignature.metadata !== newSignature.metadata) {
-        changedFields.push({ type: name, field });
+      }
+      if (comparison.breaking) {
+        breakingFieldChange = true;
+      }
+    }
+    for (const fieldName of oldFields.keys()) {
+      if (!newFields.has(fieldName)) {
+        removedFields.push({ type: name, field: fieldName });
         changedTypeSet.add(name);
       }
     }
 
-    for (const field of oldFields.keys()) {
-      if (!newFields.has(field)) {
-        removedFields.push({ type: name, field });
+    // Input fields
+    const oldInputFields = indexByName(oldType.inputFields);
+    const newInputFields = indexByName(newType.inputFields);
+    for (const [fieldName, newField] of newInputFields) {
+      const oldField = oldInputFields.get(fieldName);
+      if (oldField === undefined) {
+        addedFields.push({ type: name, field: fieldName });
+        changedTypeSet.add(name);
+        // Adding a required input field breaks existing input objects.
+        if (isRequiredInput(newField)) {
+          breakingFieldChange = true;
+        }
+        continue;
+      }
+      const comparison = compareInputField(oldField, newField);
+      if (comparison.changed) {
+        changedFields.push({ type: name, field: fieldName });
+        changedTypeSet.add(name);
+      }
+      if (comparison.breaking) {
+        breakingFieldChange = true;
+      }
+    }
+    for (const fieldName of oldInputFields.keys()) {
+      if (!newInputFields.has(fieldName)) {
+        removedFields.push({ type: name, field: fieldName });
+        changedTypeSet.add(name);
+      }
+    }
+
+    // Enum values
+    const oldValues = indexByName(oldType.enumValues);
+    const newValues = indexByName(newType.enumValues);
+    for (const [valueName, newValue] of newValues) {
+      const oldValue = oldValues.get(valueName);
+      if (oldValue === undefined) {
+        addedFields.push({ type: name, field: valueName });
+        changedTypeSet.add(name);
+        continue;
+      }
+      const oldDeprecation = oldValue.isDeprecated === true ? (oldValue.deprecationReason ?? "") : null;
+      const newDeprecation = newValue.isDeprecated === true ? (newValue.deprecationReason ?? "") : null;
+      if (
+        (oldValue.description ?? "") !== (newValue.description ?? "") ||
+        oldDeprecation !== newDeprecation
+      ) {
+        changedFields.push({ type: name, field: valueName });
+        changedTypeSet.add(name);
+      }
+    }
+    for (const valueName of oldValues.keys()) {
+      if (!newValues.has(valueName)) {
+        removedFields.push({ type: name, field: valueName });
         changedTypeSet.add(name);
       }
     }
@@ -173,13 +338,12 @@ export function diffSchemas(oldSchema: unknown, newSchema: unknown): SchemaDiff 
   addedFields.sort((a, b) => a.type.localeCompare(b.type) || a.field.localeCompare(b.field));
   removedFields.sort((a, b) => a.type.localeCompare(b.type) || a.field.localeCompare(b.field));
   changedFields.sort((a, b) => a.type.localeCompare(b.type) || a.field.localeCompare(b.field));
-  structuralChangedFields.sort((a, b) => a.type.localeCompare(b.type) || a.field.localeCompare(b.field));
 
-  // Breaking changes: removed types/fields or structural signature changes
-  // (changed argument or return type). Metadata-only changes (descriptions,
-  // deprecation state) still invalidate drift detection but are not breaking.
+  // Breaking changes: removed types/fields or breaking signature changes.
+  // Metadata-only changes (descriptions, deprecation state) still invalidate
+  // drift detection but are not breaking.
   const hasBreakingChanges =
-    removedTypes.length > 0 || removedFields.length > 0 || structuralChangedFields.length > 0;
+    removedTypes.length > 0 || removedFields.length > 0 || breakingFieldChange;
 
   return {
     addedTypes,
