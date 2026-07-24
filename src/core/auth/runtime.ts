@@ -1,4 +1,6 @@
-import { mkdir, rmdir, stat, utimes } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import { mkdir, readFile, rm, stat, utimes, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import type { LinearConfig } from "../config/config-file.js";
 import { loadLinearConfigFile } from "../config/config-file.js";
 import type { LinearConfigPaths } from "../config/paths.js";
@@ -99,11 +101,17 @@ export async function acquireCredentialsFileLock(
   const staleMs = options.staleMs ?? CREDENTIALS_LOCK_STALE_MS;
   const timeoutMs = options.timeoutMs ?? CREDENTIALS_LOCK_TIMEOUT_MS;
   const lockDir = `${credentialsFile}.lock`;
+  const ownerFile = join(lockDir, "owner");
+  const token = `${process.pid}:${randomUUID()}`;
   const start = Date.now();
 
   for (;;) {
     try {
       await mkdir(lockDir);
+      // Ownership token: release only removes the directory while it still
+      // holds OUR token, so a stale-broken-and-reacquired lock (owned by a
+      // waiter) is never deleted by the previous holder's release.
+      await writeFile(ownerFile, token, "utf8");
 
       let heartbeat: ReturnType<typeof setInterval> | undefined;
       if (heartbeatMs > 0) {
@@ -119,7 +127,14 @@ export async function acquireCredentialsFileLock(
         if (heartbeat !== undefined) {
           clearInterval(heartbeat);
         }
-        await rmdir(lockDir).catch(() => undefined);
+        try {
+          const currentOwner = await readFile(ownerFile, "utf8");
+          if (currentOwner === token) {
+            await rm(lockDir, { recursive: true, force: true });
+          }
+        } catch {
+          // Lock already gone (e.g. broken as stale) — nothing to release.
+        }
       };
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
@@ -130,7 +145,7 @@ export async function acquireCredentialsFileLock(
         const stats = await stat(lockDir);
         if (Date.now() - stats.mtimeMs > staleMs) {
           // Lock whose mtime is no longer refreshed — the holder crashed.
-          await rmdir(lockDir).catch(() => undefined);
+          await rm(lockDir, { recursive: true, force: true }).catch(() => undefined);
           continue;
         }
       } catch {

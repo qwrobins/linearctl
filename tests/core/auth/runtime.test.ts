@@ -338,6 +338,37 @@ describe("acquireCredentialsFileLock", () => {
     await releaseFirst();
   });
 
+  it("does not remove a lock re-acquired by a waiter when the stale holder releases", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-lock-"));
+    const credentialsFile = join(directory, "credentials");
+
+    // Stalled holder (no heartbeat) — its lock goes stale and gets broken.
+    const releaseStalled = await acquireCredentialsFileLock(credentialsFile, {
+      heartbeatMs: 0,
+      staleMs: 200
+    });
+
+    // Waiter breaks the stale lock and becomes the new owner.
+    const releaseWaiter = await acquireCredentialsFileLock(credentialsFile, {
+      staleMs: 200,
+      timeoutMs: 5_000
+    });
+
+    // The stalled holder releases — it must NOT remove the waiter's lock.
+    await releaseStalled();
+
+    // A third acquirer must still see the lock as held by the waiter.
+    await expect(
+      acquireCredentialsFileLock(credentialsFile, { staleMs: 60_000, timeoutMs: 300 })
+    ).rejects.toThrow(/timed out waiting/);
+
+    await releaseWaiter();
+
+    // After the real owner releases, the lock is free again.
+    const releaseThird = await acquireCredentialsFileLock(credentialsFile, { timeoutMs: 1_000 });
+    await releaseThird();
+  });
+
   it("preserves both profiles' tokens when two OS processes refresh concurrently", async () => {
     const directory = await mkdtemp(join(tmpdir(), "linear-cli-lock-"));
     const configFile = join(directory, "config");
