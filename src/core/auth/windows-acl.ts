@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import { realpath } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
 
@@ -89,19 +90,21 @@ function parseIcaclsEntries(filePath: string, output: string): AclEntry[] {
 
 export async function secureWindowsCredentialsFile(filePath: string): Promise<void> {
   const identity = await currentWindowsIdentity();
+  const resolvedPath = await realpath(filePath);
   await runIcacls([
-    filePath,
+    resolvedPath,
     "/inheritance:r",
     "/grant:r",
     `*${identity.sid}:(F)`,
     "/q"
   ]);
-  await runIcacls([filePath, "/setowner", `*${identity.sid}`, "/q"]);
+  await runIcacls([resolvedPath, "/setowner", `*${identity.sid}`, "/q"]);
 }
 
 export async function assertWindowsCredentialsFileAcl(filePath: string): Promise<void> {
   const identity = await currentWindowsIdentity();
-  const entries = parseIcaclsEntries(filePath, await runIcacls([filePath]));
+  const resolvedPath = await realpath(filePath);
+  const entries = parseIcaclsEntries(resolvedPath, await runIcacls([resolvedPath]));
 
   const isPrivate = entries.length === 1 &&
     entries[0]!.principal.toLowerCase() === identity.account.toLowerCase() &&
@@ -116,5 +119,5 @@ export async function assertWindowsCredentialsFileAcl(filePath: string): Promise
   }
 
   // Ownership is part of the policy: a different owner could rewrite the DACL.
-  await runIcacls([filePath, "/setowner", `*${identity.sid}`, "/q"]);
+  await runIcacls([resolvedPath, "/setowner", `*${identity.sid}`, "/q"]);
 }
