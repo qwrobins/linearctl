@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.8] - 2026-08-01
+
+### Added
+
+- Added Windows x64 CI and release binaries, a checksum-verifying PowerShell installer, and native Windows installation documentation.
+- Added Windows credential protection using non-inheriting, current-user-only ACLs while preserving strict `0600` enforcement on Unix.
+
+### Changed
+
+- Made asset copying and cross-process tests portable across Windows, Linux, and macOS.
+
 ## [0.8.7] - 2026-07-23
 
 ### Fixed

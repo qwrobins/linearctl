@@ -2,6 +2,25 @@
 
 ## Install
 
+Linux and macOS:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/qwrobins/linearctl/main/install.sh | sh
+```
+
+Windows PowerShell:
+
+```powershell
+$installer = Join-Path ([IO.Path]::GetTempPath()) "install-linearctl.ps1"
+Invoke-WebRequest https://raw.githubusercontent.com/qwrobins/linearctl/main/install.ps1 -OutFile $installer
+& $installer -AddToPath
+Remove-Item $installer
+```
+
+The Windows installer verifies the published SHA-256 checksum and installs to `%LOCALAPPDATA%\Programs\linearctl\bin` by default. Pass `-InstallDir` or set `LINEAR_INSTALL_DIR` to override it.
+
+To build from source instead:
+
 Build the standalone binary:
 
 ```bash
@@ -13,6 +32,8 @@ This produces `dist/linearctl`. Copy it somewhere on your `PATH`:
 ```bash
 cp dist/linearctl ~/.local/bin/linearctl
 ```
+
+On Windows the output is `dist\linearctl.exe`; copy that file to a directory on your user `PATH`.
 
 The binary is self-contained. End users do not need Bun installed.
 
@@ -38,6 +59,8 @@ Store your Linear API key in an environment variable. Create one at [Linear API 
 export LINEAR_API_KEY=lin_api_...
 linearctl auth login --profile work --api-key-env LINEAR_API_KEY
 ```
+
+PowerShell uses `$env:LINEAR_API_KEY = "lin_api_..."` before the same login command.
 
 Or pipe it via stdin:
 
@@ -99,6 +122,8 @@ Or via environment variable:
 export LINEAR_PROFILE=personal
 linearctl issue list --json
 ```
+
+In PowerShell, use `$env:LINEAR_PROFILE = "personal"`.
 
 ## Set a default team
 

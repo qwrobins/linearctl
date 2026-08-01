@@ -1,11 +1,12 @@
 import { execFile } from "node:child_process";
-import { chmod, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { Readable } from "node:stream";
 import { describe, expect, it, vi } from "vitest";
 import { main } from "../../src/cli/main.js";
+import { writeCredentialsFile } from "../../src/core/auth/credentials.js";
 import { COMMAND_REGISTRY } from "../../src/core/registry/commands.js";
 
 const CLI_PATH = "src/cli/main.ts";
@@ -339,12 +340,11 @@ describe("CLI scaffold", () => {
         ""
       ].join("\n")
     );
-    await writeFile(
-      credentialsFile,
-      ["[work]", "type = api_key", "api_key = lin_api_work", ""].join("\n"),
-      { mode: 0o600 }
-    );
-    await chmod(credentialsFile, 0o600);
+    await writeCredentialsFile(credentialsFile, {
+      profiles: {
+        work: { profileName: "work", type: "api_key", apiKey: "lin_api_work" }
+      }
+    });
 
     const { stdout: output } = await runCliRaw([
       "auth",
@@ -388,21 +388,12 @@ describe("CLI scaffold", () => {
         ""
       ].join("\n")
     );
-    await writeFile(
-      credentialsFile,
-      [
-        "[personal]",
-        "type = api_key",
-        "api_key = lin_api_personal",
-        "",
-        "[work]",
-        "type = api_key",
-        "api_key = lin_api_work",
-        ""
-      ].join("\n"),
-      { mode: 0o600 }
-    );
-    await chmod(credentialsFile, 0o600);
+    await writeCredentialsFile(credentialsFile, {
+      profiles: {
+        personal: { profileName: "personal", type: "api_key", apiKey: "lin_api_personal" },
+        work: { profileName: "work", type: "api_key", apiKey: "lin_api_work" }
+      }
+    });
     const originalCredentials = await readFile(credentialsFile, "utf8");
 
     const { stdout: output } = await runCliRaw([

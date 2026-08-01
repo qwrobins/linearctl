@@ -3,6 +3,10 @@ import type { FileHandle } from "node:fs/promises";
 import type { IniDocument } from "../config/ini.js";
 import { parseIni, stringifyIni } from "../config/ini.js";
 import { writeFileAtomically } from "../config/atomic-file.js";
+import {
+  assertWindowsCredentialsFileAcl,
+  secureWindowsCredentialsFile
+} from "./windows-acl.js";
 
 export type CredentialType = "api_key" | "oauth";
 
@@ -159,7 +163,11 @@ export async function loadCredentialsFile(
   if (options.checkPermissions ?? true) {
     const handle = await open(credentialsFile, "r");
     try {
-      await assertCredentialsFileHandlePermissions(handle);
+      if (process.platform === "win32") {
+        await assertWindowsCredentialsFileAcl(credentialsFile);
+      } else {
+        await assertCredentialsFileHandlePermissions(handle);
+      }
       return parseCredentials(parseIni(await handle.readFile({ encoding: "utf8" })));
     } finally {
       await handle.close();
@@ -173,10 +181,18 @@ export async function writeCredentialsFile(
   credentialsFile: string,
   credentials: CredentialsStore
 ): Promise<void> {
-  await writeFileAtomically(credentialsFile, stringifyCredentials(credentials), { mode: 0o600 });
+  await writeFileAtomically(credentialsFile, stringifyCredentials(credentials), {
+    mode: 0o600,
+    ...(process.platform === "win32" ? { secureFile: secureWindowsCredentialsFile } : {})
+  });
 }
 
 export async function assertCredentialsFilePermissions(credentialsFile: string): Promise<void> {
+  if (process.platform === "win32") {
+    await assertWindowsCredentialsFileAcl(credentialsFile);
+    return;
+  }
+
   const handle = await open(credentialsFile, "r");
   try {
     await assertCredentialsFileHandlePermissions(handle);

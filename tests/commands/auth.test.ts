@@ -4,7 +4,11 @@ import { join } from "node:path";
 import { Readable } from "node:stream";
 import { describe, expect, it, vi } from "vitest";
 import { handleAuthCommand } from "../../src/commands/auth.js";
-import { loadCredentialsFile } from "../../src/core/auth/credentials.js";
+import {
+  assertCredentialsFilePermissions,
+  loadCredentialsFile,
+  writeCredentialsFile
+} from "../../src/core/auth/credentials.js";
 import { loadLinearConfigFile } from "../../src/core/config/config-file.js";
 import { GraphQLTransportError } from "../../src/core/transport/graphql.js";
 import type { FetchLike } from "../../src/core/transport/graphql.js";
@@ -100,7 +104,13 @@ describe("handleAuthCommand", () => {
         }
       }
     });
-    expect((await stat(join(directory, "credentials"))).mode & 0o777).toBe(0o600);
+    if (process.platform === "win32") {
+      await expect(
+        assertCredentialsFilePermissions(join(directory, "credentials"))
+      ).resolves.toBeUndefined();
+    } else {
+      expect((await stat(join(directory, "credentials"))).mode & 0o777).toBe(0o600);
+    }
   });
 
   it("logs in with an API key from explicit stdin", async () => {
@@ -180,11 +190,11 @@ describe("handleAuthCommand", () => {
         ""
       ].join("\n")
     );
-    await writeFile(
-      credentialsFile,
-      ["[work]", "type = api_key", "api_key = lin_api_work", ""].join("\n"),
-      { mode: 0o600 }
-    );
+    await writeCredentialsFile(credentialsFile, {
+      profiles: {
+        work: { profileName: "work", type: "api_key", apiKey: "lin_api_work" }
+      }
+    });
 
     await expect(
       handleAuthCommand(
@@ -208,11 +218,11 @@ describe("handleAuthCommand", () => {
       configFile,
       ["[default]", "profile = work", "", "[profile work]", "workspace = main", ""].join("\n")
     );
-    await writeFile(
-      credentialsFile,
-      ["[work]", "type = api_key", "api_key = lin_api_work", ""].join("\n"),
-      { mode: 0o600 }
-    );
+    await writeCredentialsFile(credentialsFile, {
+      profiles: {
+        work: { profileName: "work", type: "api_key", apiKey: "lin_api_work" }
+      }
+    });
 
     const stdoutChunks: string[] = [];
     const spy = vi.spyOn(process.stdout, "write").mockImplementation(((chunk: string | Uint8Array) => {
@@ -287,11 +297,11 @@ describe("handleAuthCommand", () => {
       configFile,
       ["[default]", "profile = work", "", "[profile work]", "workspace = Acme Corp", ""].join("\n")
     );
-    await writeFile(
-      credentialsFile,
-      ["[work]", "type = api_key", "api_key = lin_api_work", ""].join("\n"),
-      { mode: 0o600 }
-    );
+    await writeCredentialsFile(credentialsFile, {
+      profiles: {
+        work: { profileName: "work", type: "api_key", apiKey: "lin_api_work" }
+      }
+    });
 
     const fetchImpl = successfulViewerFetchWithOrg();
     const stdoutChunks: string[] = [];

@@ -30,6 +30,9 @@ jobs:
           - os: macos-latest
             target: bun-darwin-arm64
             artifact: linearctl-darwin-arm64
+          - os: windows-latest
+            target: bun-windows-x64
+            artifact: linearctl-windows-x64.exe
 
     runs-on: ${{ matrix.os }}
 
@@ -45,16 +48,18 @@ jobs:
       - run: bun install --frozen-lockfile
 
       - name: Build binary
-        env:
-          BUILD_TARGET: ${{ matrix.target }}
-          ARTIFACT_NAME: ${{ matrix.artifact }}
-        run: bun build src/cli/main.ts --compile --target="$BUILD_TARGET" --outfile "dist/$ARTIFACT_NAME"
+        run: bun build src/cli/main.ts --compile --target=${{ matrix.target }} --outfile=dist/${{ matrix.artifact }}
 
       - name: Smoke test binary
         if: matrix.target == 'bun-linux-x64' || matrix.target == 'bun-darwin-arm64'
         env:
           ARTIFACT_NAME: ${{ matrix.artifact }}
         run: ./dist/"$ARTIFACT_NAME" --help
+
+      - name: Smoke test Windows binary
+        if: matrix.target == 'bun-windows-x64'
+        shell: pwsh
+        run: .\dist\linearctl-windows-x64.exe --help
 
       - uses: actions/upload-artifact@v4
         with:

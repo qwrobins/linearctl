@@ -76,10 +76,12 @@ describe("parseLinearConfig", () => {
   });
 
   it("uses the documented default paths", () => {
-    expect(defaultLinearConfigPaths("/home/example")).toEqual({
-      configDir: "/home/example/.config/linear",
-      configFile: "/home/example/.config/linear/config",
-      credentialsFile: "/home/example/.config/linear/credentials"
+    const homeDirectory = join("home", "example");
+    const configDirectory = join(homeDirectory, ".config", "linear");
+    expect(defaultLinearConfigPaths(homeDirectory)).toEqual({
+      configDir: configDirectory,
+      configFile: join(configDirectory, "config"),
+      credentialsFile: join(configDirectory, "credentials")
     });
   });
 
@@ -163,7 +165,9 @@ describe("parseLinearConfig", () => {
     expect(await readFile(configFile, "utf8")).toBe(
       ["[default]", "profile = work", "", "[profile work]", "workspace = main", ""].join("\n")
     );
-    expect((await stat(configFile)).mode & 0o777).toBe(0o600);
+    if (process.platform !== "win32") {
+      expect((await stat(configFile)).mode & 0o777).toBe(0o600);
+    }
   });
 
   it("removes profile metadata using a trimmed profile name", () => {

@@ -8,6 +8,7 @@ const AUTH_DOCS = readFileSync("docs/auth-and-profiles.md", "utf8");
 const COMMANDS_DOCS = readFileSync("docs/commands.md", "utf8");
 const GETTING_STARTED = readFileSync("docs/getting-started.md", "utf8");
 const SKILL = readFileSync("skills/linearctl/SKILL.md", "utf8");
+const PACKAGE = JSON.parse(readFileSync("package.json", "utf8")) as { version: string };
 
 function readCommandTable(markdown: string): Map<string, string[]> {
   const table = new Map<string, string[]>();
@@ -59,7 +60,7 @@ describe("README quickstart documentation", () => {
   });
 
   it("keeps the pinned install example on the current package version", () => {
-    expect(README).toContain("LINEAR_VERSION=v0.8.7");
+    expect(README).toContain(`LINEAR_VERSION=v${PACKAGE.version}`);
     expect(README).not.toContain("LINEAR_VERSION=v0.1.0");
   });
 

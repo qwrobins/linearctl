@@ -6,6 +6,8 @@ Three command layers: curated commands for common workflows, a generated API lay
 
 ## Install
 
+### Linux and macOS
+
 ```bash
 curl -fsSL https://raw.githubusercontent.com/qwrobins/linearctl/main/install.sh | sh
 ```
@@ -13,7 +15,7 @@ curl -fsSL https://raw.githubusercontent.com/qwrobins/linearctl/main/install.sh 
 Or install a specific version:
 
 ```bash
-LINEAR_VERSION=v0.8.7 curl -fsSL https://raw.githubusercontent.com/qwrobins/linearctl/main/install.sh | sh
+LINEAR_VERSION=v0.8.8 curl -fsSL https://raw.githubusercontent.com/qwrobins/linearctl/main/install.sh | sh
 ```
 
 On Debian/Ubuntu, the installer automatically uses the `.deb` package. To skip deb and install the raw binary instead:
@@ -22,12 +24,27 @@ On Debian/Ubuntu, the installer automatically uses the `.deb` package. To skip d
 LINEAR_NO_DEB=1 curl -fsSL https://raw.githubusercontent.com/qwrobins/linearctl/main/install.sh | sh
 ```
 
+### Windows
+
+From PowerShell:
+
+```powershell
+$installer = Join-Path ([IO.Path]::GetTempPath()) "install-linearctl.ps1"
+Invoke-WebRequest https://raw.githubusercontent.com/qwrobins/linearctl/main/install.ps1 -OutFile $installer
+& $installer -AddToPath
+Remove-Item $installer
+```
+
+The installer downloads `linearctl-windows-x64.exe`, requires a matching release checksum, and installs it as `linearctl.exe` under `%LOCALAPPDATA%\Programs\linearctl\bin` by default. Pass `-InstallDir C:\path\to\bin` or set `LINEAR_INSTALL_DIR` to choose another directory. Omit `-AddToPath` if you prefer to manage `PATH` yourself.
+
 Or build from source:
 
 ```bash
 bun run build:binary
 cp dist/linearctl ~/.local/bin/linearctl
 ```
+
+On Windows, `bun run build:binary` produces `dist\linearctl.exe`; copy it to a directory on your user `PATH`.
 
 The compiled binary has no runtime dependencies. Building from source requires [Bun](https://bun.sh).
 
@@ -65,6 +82,8 @@ linearctl team get <team-key> --set-default
 ```
 
 Your key is now stored in `~/.config/linear/credentials` (permissions `0600`) and loaded automatically on every run. No env vars to export in your shell profile, no secrets in dotfiles. You only need `LINEAR_API_KEY` for that initial login.
+
+On Windows the same file is `%USERPROFILE%\.config\linear\credentials`. linearctl replaces inherited permissions with a protected ACL that grants full control only to the current Windows user, and refuses to load a credentials file whose ACL is broader.
 
 ### OAuth (browser-based)
 

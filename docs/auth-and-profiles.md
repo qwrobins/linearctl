@@ -6,6 +6,8 @@ The CLI uses named profiles to manage credentials for one or more Linear workspa
 
 Profiles are stored in the credentials file (`~/.config/linear/credentials`). Profile metadata (workspace name, default selection) is stored in the config file (`~/.config/linear/config`). See [File layout](#file-layout) below for the full INI structure.
 
+On Windows these resolve to `%USERPROFILE%\.config\linear\credentials` and `%USERPROFILE%\.config\linear\config`.
+
 ## API key auth
 
 Create an API key at [Linear API settings](https://linear.app/settings/api).
@@ -14,6 +16,13 @@ Store the key in an environment variable and pass the variable name (not the key
 
 ```bash
 export LINEAR_API_KEY=lin_api_...
+linearctl auth login --profile work --api-key-env LINEAR_API_KEY
+```
+
+PowerShell:
+
+```powershell
+$env:LINEAR_API_KEY = "lin_api_..."
 linearctl auth login --profile work --api-key-env LINEAR_API_KEY
 ```
 
@@ -112,7 +121,7 @@ user_email = quentin@example.com
 workspace = Side Project
 ```
 
-**`~/.config/linear/credentials`** — secrets (created with `0600` permissions):
+**`~/.config/linear/credentials`** — secrets (created with `0600` permissions on Unix and a private ACL on Windows):
 
 ```ini
 [work]
@@ -128,6 +137,8 @@ scopes = read write
 oauth_client_id = abc123
 ```
 
+On Windows, the credentials file uses a protected ACL with inheritance disabled and full control granted only to the current Windows account. linearctl validates that ACL before reading secrets and fails closed if another principal has access. The Windows ACL implementation uses the built-in `whoami.exe` and `icacls.exe` system tools; it does not weaken the Unix `0600` policy.
+
 Profile names must match across both files. The `[default]` section in config stores only the active profile name. Unknown keys are allowed and preserved.
 
 ## Config file overrides
@@ -141,7 +152,8 @@ linearctl auth status --config-file /path/to/config --credentials-file /path/to/
 ## Security
 
 - Secrets are never accepted as CLI arguments
-- The credentials file is created with `0600` permissions (owner read/write only)
+- On Unix, the credentials file is created with `0600` permissions (owner read/write only)
+- On Windows, the credentials file ACL disables inheritance and grants full control only to the current user
 - API keys are read from environment variables or stdin
 - OAuth tokens are stored in the credentials file alongside API keys
 - Profile names are validated against INI-breaking characters
