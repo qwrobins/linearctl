@@ -333,7 +333,7 @@ describe("credentials store transactions", () => {
       }
     });
 
-    const runtimeModule = new URL("../../../src/core/auth/runtime.ts", import.meta.url).pathname;
+    const runtimeModule = new URL("../../../src/core/auth/runtime.ts", import.meta.url).href;
     const childScript = join(directory, "refresh-child.ts");
     await writeFile(childScript, `
       import { resolveStoredProfile } from ${JSON.stringify(runtimeModule)};

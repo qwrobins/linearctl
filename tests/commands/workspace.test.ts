@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { handleWorkspaceCommand } from "../../src/commands/workspace.js";
+import { writeCredentialsFile } from "../../src/core/auth/credentials.js";
 
 function baseOptions(directory: string, overrides = {}) {
   return {
@@ -36,20 +37,12 @@ describe("handleWorkspaceCommand", () => {
         ""
       ].join("\n")
     );
-    await writeFile(
-      join(directory, "credentials"),
-      [
-        "[work]",
-        "type = api_key",
-        "api_key = lin_api_work",
-        "",
-        "[personal]",
-        "type = api_key",
-        "api_key = lin_api_personal",
-        ""
-      ].join("\n"),
-      { mode: 0o600 }
-    );
+    await writeCredentialsFile(join(directory, "credentials"), {
+      profiles: {
+        work: { profileName: "work", type: "api_key", apiKey: "lin_api_work" },
+        personal: { profileName: "personal", type: "api_key", apiKey: "lin_api_personal" }
+      }
+    });
 
     const stdoutChunks: string[] = [];
     const spy = vi.spyOn(process.stdout, "write").mockImplementation(((chunk: string | Uint8Array) => {

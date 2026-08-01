@@ -1,9 +1,12 @@
+import { execFile } from "node:child_process";
 import { chmod, mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { promisify } from "node:util";
 import { describe, expect, it } from "vitest";
 import {
   loadCredentialsFile,
+  assertCredentialsFilePermissions,
   parseCredentials,
   removeCredentialsProfile,
   setCredentialsProfile,
@@ -11,6 +14,8 @@ import {
   writeCredentialsFile
 } from "../../../src/core/auth/credentials.js";
 import { parseIni } from "../../../src/core/config/ini.js";
+
+const execFileAsync = promisify(execFile);
 
 describe("parseCredentials", () => {
   it("parses API key and OAuth credential profiles", () => {
@@ -103,16 +108,11 @@ describe("parseCredentials", () => {
   it("loads credentials from disk when permissions are restrictive", async () => {
     const directory = await mkdtemp(join(tmpdir(), "linear-cli-credentials-"));
     const credentialsFile = join(directory, "credentials");
-    await writeFile(
-      credentialsFile,
-      `
-        [work]
-        type = api_key
-        api_key = lin_api_work
-      `,
-      { mode: 0o600 }
-    );
-    await chmod(credentialsFile, 0o600);
+    await writeCredentialsFile(credentialsFile, {
+      profiles: {
+        work: { profileName: "work", type: "api_key", apiKey: "lin_api_work" }
+      }
+    });
 
     await expect(loadCredentialsFile(credentialsFile)).resolves.toEqual({
       profiles: {
@@ -125,7 +125,7 @@ describe("parseCredentials", () => {
     });
   });
 
-  it("rejects credentials files with group or other permissions", async () => {
+  it.skipIf(process.platform === "win32")("rejects credentials files with group or other permissions", async () => {
     const directory = await mkdtemp(join(tmpdir(), "linear-cli-credentials-"));
     const credentialsFile = join(directory, "credentials");
     await writeFile(
@@ -142,6 +142,30 @@ describe("parseCredentials", () => {
       "credentials file permissions must not allow group or other access"
     );
   });
+
+  it.skipIf(process.platform !== "win32")(
+    "rejects Windows credentials files that grant access to another principal",
+    async () => {
+      const directory = await mkdtemp(join(tmpdir(), "linear-cli-credentials-"));
+      const credentialsFile = join(directory, "credentials");
+      await writeCredentialsFile(credentialsFile, {
+        profiles: {
+          work: { profileName: "work", type: "api_key", apiKey: "lin_api_work" }
+        }
+      });
+
+      const windowsDirectory = process.env.SystemRoot ?? "C:\\Windows";
+      await execFileAsync(
+        join(windowsDirectory, "System32", "icacls.exe"),
+        [credentialsFile, "/grant", "*S-1-1-0:(R)"],
+        { windowsHide: true }
+      );
+
+      await expect(loadCredentialsFile(credentialsFile)).rejects.toThrow(
+        "credentials file ACL must disable inheritance and grant full control only to the current Windows user"
+      );
+    }
+  );
 
   it("serializes credentials without unknown fields", () => {
     expect(
@@ -194,7 +218,11 @@ describe("parseCredentials", () => {
     expect(await readFile(credentialsFile, "utf8")).toBe(
       ["[work]", "type = api_key", "api_key = lin_api_work", ""].join("\n")
     );
-    expect((await stat(credentialsFile)).mode & 0o777).toBe(0o600);
+    if (process.platform === "win32") {
+      await expect(assertCredentialsFilePermissions(credentialsFile)).resolves.toBeUndefined();
+    } else {
+      expect((await stat(credentialsFile)).mode & 0o777).toBe(0o600);
+    }
   });
 
   it("trims profile names when mutating credentials", () => {

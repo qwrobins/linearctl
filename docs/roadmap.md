@@ -19,6 +19,7 @@
 - Agent skills (linearctl, linear-raw-gql)
 - CI/CD with GitHub Actions, semver releases, auto-tagging
 - Curl installer for Linux and macOS
+- Native Windows x64 binary builds and checksum-verifying PowerShell installer
 - User-facing documentation
 
 ## Planned
@@ -29,7 +30,6 @@
 - Homebrew formula for macOS
 - Nix package
 - Scoop manifest for Windows
-- Windows binary builds (pending Bun Windows compile support)
 - npm global install (`npm install -g @qwrobins/linearctl`)
 
 ### CLI improvements

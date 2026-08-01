@@ -8,15 +8,16 @@ const AUTH_DOCS = readFileSync("docs/auth-and-profiles.md", "utf8");
 const COMMANDS_DOCS = readFileSync("docs/commands.md", "utf8");
 const GETTING_STARTED = readFileSync("docs/getting-started.md", "utf8");
 const SKILL = readFileSync("skills/linearctl/SKILL.md", "utf8");
+const PACKAGE = JSON.parse(readFileSync("package.json", "utf8")) as { version: string };
 
 function readCommandTable(markdown: string): Map<string, string[]> {
   const table = new Map<string, string[]>();
-  const match = markdown.match(/## Commands\n\n(?<table>(?:\|.*\n)+)/);
+  const match = markdown.match(/## Commands\r?\n\r?\n(?<table>(?:\|.*\r?\n)+)/);
   if (match?.groups?.table === undefined) {
     throw new Error("README command table not found");
   }
 
-  for (const line of match.groups.table.trim().split("\n").slice(2)) {
+  for (const line of match.groups.table.trim().split(/\r?\n/).slice(2)) {
     const cells = line.split("|").slice(1, -1).map((cell) => cell.trim());
     const group = cells[0]?.match(/\[([^\]]+)\]/)?.[1] ?? cells[0];
     const operations = cells[1]
@@ -59,7 +60,7 @@ describe("README quickstart documentation", () => {
   });
 
   it("keeps the pinned install example on the current package version", () => {
-    expect(README).toContain("LINEAR_VERSION=v0.8.7");
+    expect(README).toContain(`LINEAR_VERSION=v${PACKAGE.version}`);
     expect(README).not.toContain("LINEAR_VERSION=v0.1.0");
   });
 

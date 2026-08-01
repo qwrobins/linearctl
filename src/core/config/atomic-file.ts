@@ -4,6 +4,7 @@ import { basename, dirname, join } from "node:path";
 
 export interface AtomicFileWriteOptions {
   mode?: number;
+  secureFile?: (filePath: string) => Promise<void>;
 }
 
 export async function writeFileAtomically(
@@ -18,19 +19,29 @@ export async function writeFileAtomically(
   await mkdir(directory, { recursive: true, mode: 0o700 });
 
   let shouldRemoveTemporaryFile = true;
-  const handle = await open(temporaryPath, "wx", mode);
   try {
-    await handle.writeFile(contents, { encoding: "utf8" });
-    await handle.sync();
-  } finally {
-    await handle.close();
-  }
+    const handle = await open(temporaryPath, "wx", mode);
+    try {
+      // On Windows, secure the empty file before any secret contents are written.
+      if (options.secureFile !== undefined) {
+        await options.secureFile(temporaryPath);
+      }
+      await handle.writeFile(contents, { encoding: "utf8" });
+      await handle.sync();
+    } finally {
+      await handle.close();
+    }
 
-  try {
-    await chmod(temporaryPath, mode);
+    if (options.secureFile === undefined) {
+      await chmod(temporaryPath, mode);
+    }
     await rename(temporaryPath, filePath);
     shouldRemoveTemporaryFile = false;
-    await chmod(filePath, mode);
+    if (options.secureFile === undefined) {
+      await chmod(filePath, mode);
+    } else {
+      await options.secureFile(filePath);
+    }
   } finally {
     if (shouldRemoveTemporaryFile) {
       await rm(temporaryPath, { force: true });
