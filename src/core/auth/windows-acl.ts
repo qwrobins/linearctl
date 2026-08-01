@@ -53,39 +53,32 @@ async function runIcacls(args: string[]): Promise<string> {
 }
 
 interface AclEntry {
-  principal: string;
   permissions: string;
 }
 
-function parseIcaclsEntries(filePath: string, output: string): AclEntry[] {
+function parseIcaclsEntries(output: string): AclEntry[] {
   const lines = output.split(/\r?\n/);
   const entries: AclEntry[] = [];
 
-  for (let index = 0; index < lines.length; index += 1) {
-    let candidate = lines[index]!.trim();
-    if (candidate === "") {
+  for (const line of lines) {
+    const match = line.match(/:((?:\([^)]+\))+)\s*$/);
+    if (match === null) {
       continue;
     }
 
-    if (index === 0 && candidate.toLowerCase().startsWith(filePath.toLowerCase())) {
-      candidate = candidate.slice(filePath.length).trim();
-    }
-
-    const separator = candidate.indexOf(":");
-    if (separator <= 0) {
-      continue;
-    }
-
-    const principal = candidate.slice(0, separator).trim();
-    const permissions = candidate.slice(separator + 1).trim();
-    if (!permissions.startsWith("(")) {
-      continue;
-    }
-
-    entries.push({ principal, permissions });
+    entries.push({ permissions: match[1]! });
   }
 
   return entries;
+}
+
+async function aclContainsSid(filePath: string, sid: string): Promise<boolean> {
+  try {
+    await runIcacls([filePath, "/findsid", `*${sid}`, "/q"]);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export async function secureWindowsCredentialsFile(filePath: string): Promise<void> {
@@ -104,10 +97,10 @@ export async function secureWindowsCredentialsFile(filePath: string): Promise<vo
 export async function assertWindowsCredentialsFileAcl(filePath: string): Promise<void> {
   const identity = await currentWindowsIdentity();
   const resolvedPath = await realpath(filePath);
-  const entries = parseIcaclsEntries(resolvedPath, await runIcacls([resolvedPath]));
+  const entries = parseIcaclsEntries(await runIcacls([resolvedPath]));
 
   const isPrivate = entries.length === 1 &&
-    entries[0]!.principal.toLowerCase() === identity.account.toLowerCase() &&
+    await aclContainsSid(resolvedPath, identity.sid) &&
     entries[0]!.permissions.includes("(F)") &&
     !entries[0]!.permissions.includes("(I)") &&
     !entries[0]!.permissions.includes("(DENY)");
