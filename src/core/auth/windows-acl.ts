@@ -84,6 +84,9 @@ async function aclContainsSid(filePath: string, sid: string): Promise<boolean> {
 export async function secureWindowsCredentialsFile(filePath: string): Promise<void> {
   const identity = await currentWindowsIdentity();
   const resolvedPath = await realpath(filePath);
+  // Reset first so inherited and pre-existing explicit ACEs have a common baseline.
+  // Removing inheritance then leaves an empty DACL before the current-user grant.
+  await runIcacls([resolvedPath, "/reset", "/q"]);
   await runIcacls([
     resolvedPath,
     "/inheritance:r",
