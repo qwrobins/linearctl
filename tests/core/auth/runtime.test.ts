@@ -2,7 +2,6 @@ import { execFile } from "node:child_process";
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -334,9 +333,7 @@ describe("credentials store transactions", () => {
       }
     });
 
-    const runtimeModule = pathToFileURL(
-      join(import.meta.dir, "../../../src/core/auth/runtime.ts")
-    ).href;
+    const runtimeModule = new URL("../../../src/core/auth/runtime.ts", import.meta.url).href;
     const childScript = join(directory, "refresh-child.ts");
     await writeFile(childScript, `
       import { resolveStoredProfile } from ${JSON.stringify(runtimeModule)};
