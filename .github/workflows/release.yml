@@ -77,6 +77,23 @@ jobs:
           $archivePath = Join-Path "dist" $env:ARTIFACT_NAME
           Compress-Archive -LiteralPath $binaryPath -DestinationPath $archivePath -CompressionLevel Optimal
 
+      - name: Smoke test Windows release archive
+        if: matrix.target == 'bun-windows-x64'
+        shell: pwsh
+        env:
+          ARTIFACT_NAME: ${{ matrix.artifact }}
+        run: |
+          $archivePath = Join-Path "dist" $env:ARTIFACT_NAME
+          $extractPath = Join-Path $env:RUNNER_TEMP "linearctl-release-archive"
+          Expand-Archive -LiteralPath $archivePath -DestinationPath $extractPath
+
+          $expectedBinary = Join-Path $extractPath "linearctl.exe"
+          $archivedFiles = @(Get-ChildItem -LiteralPath $extractPath -File -Recurse)
+          if ($archivedFiles.Count -ne 1 -or $archivedFiles[0].FullName -ne $expectedBinary) {
+            throw "$env:ARTIFACT_NAME must contain only linearctl.exe at the archive root."
+          }
+          & $expectedBinary --help
+
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}

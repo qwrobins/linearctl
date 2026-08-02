@@ -52,6 +52,11 @@ jobs:
             throw ($errors | Out-String)
           }
 
+      - name: Test PowerShell installer
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: .\tests\install\windows-installer.test.ps1
+
       - name: Smoke test binary
         if: runner.os != 'Windows'
         run: ./dist/linearctl --help
