@@ -17,7 +17,7 @@ Invoke-WebRequest https://raw.githubusercontent.com/qwrobins/linearctl/main/inst
 Remove-Item $installer
 ```
 
-The Windows installer verifies the published SHA-256 checksum and installs to `%LOCALAPPDATA%\Programs\linearctl\bin` by default. Pass `-InstallDir` or set `LINEAR_INSTALL_DIR` to override it.
+The Windows installer verifies the published SHA-256 checksum for `linearctl-windows-x64.zip`, extracts `linearctl.exe`, and installs it to `%LOCALAPPDATA%\Programs\linearctl\bin` by default. Pass `-InstallDir` or set `LINEAR_INSTALL_DIR` to override it.
 
 To build from source instead:
 

@@ -15,7 +15,7 @@ curl -fsSL https://raw.githubusercontent.com/qwrobins/linearctl/main/install.sh 
 Or install a specific version:
 
 ```bash
-LINEAR_VERSION=v0.8.8 curl -fsSL https://raw.githubusercontent.com/qwrobins/linearctl/main/install.sh | sh
+LINEAR_VERSION=v0.8.9 curl -fsSL https://raw.githubusercontent.com/qwrobins/linearctl/main/install.sh | sh
 ```
 
 On Debian/Ubuntu, the installer automatically uses the `.deb` package. To skip deb and install the raw binary instead:
@@ -35,7 +35,7 @@ Invoke-WebRequest https://raw.githubusercontent.com/qwrobins/linearctl/main/inst
 Remove-Item $installer
 ```
 
-The installer downloads `linearctl-windows-x64.exe`, requires a matching release checksum, and installs it as `linearctl.exe` under `%LOCALAPPDATA%\Programs\linearctl\bin` by default. Pass `-InstallDir C:\path\to\bin` or set `LINEAR_INSTALL_DIR` to choose another directory. Omit `-AddToPath` if you prefer to manage `PATH` yourself.
+The installer downloads `linearctl-windows-x64.zip`, requires a matching release checksum, and installs the archived `linearctl.exe` under `%LOCALAPPDATA%\Programs\linearctl\bin` by default. Pass `-InstallDir C:\path\to\bin` or set `LINEAR_INSTALL_DIR` to choose another directory. Omit `-AddToPath` if you prefer to manage `PATH` yourself.
 
 Or build from source:
 
