@@ -10,7 +10,8 @@ $ProgressPreference = "SilentlyContinue"
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
 $Repository = "qwrobins/linearctl"
-$Artifact = "linearctl-windows-x64.exe"
+$ArchiveName = "linearctl-windows-x64.zip"
+$LegacyArtifactName = "linearctl-windows-x64.exe"
 $BinaryName = "linearctl.exe"
 
 function Resolve-LinearVersion {
@@ -48,7 +49,7 @@ function Resolve-InstallDirectory {
   return [System.IO.Path]::GetFullPath((Join-Path (Get-Location) $RequestedDirectory))
 }
 
-function Get-ExpectedChecksum {
+function Find-ExpectedChecksum {
   param(
     [string]$ChecksumsFile,
     [string]$ArtifactName
@@ -59,7 +60,7 @@ function Get-ExpectedChecksum {
     Where-Object { $_ -match "^(?<hash>[0-9A-Fa-f]{64})\s+\*?$escapedName$" } |
     Select-Object -First 1
   if ($null -eq $line) {
-    throw "checksums.txt does not contain an entry for $ArtifactName."
+    return $null
   }
 
   [void]($line -match '^(?<hash>[0-9A-Fa-f]{64})')
@@ -103,8 +104,8 @@ if ($resolvedVersion -notmatch '^v[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?$') 
 $resolvedInstallDir = Resolve-InstallDirectory $InstallDir
 $baseUrl = "https://github.com/$Repository/releases/download/$resolvedVersion"
 $temporaryDirectory = Join-Path ([System.IO.Path]::GetTempPath()) ("linearctl-install-" + [guid]::NewGuid())
-$downloadedBinary = Join-Path $temporaryDirectory $Artifact
 $checksumsFile = Join-Path $temporaryDirectory "checksums.txt"
+$extractedDirectory = Join-Path $temporaryDirectory "extracted"
 $stagedBinary = Join-Path $resolvedInstallDir (".$BinaryName." + [guid]::NewGuid() + ".tmp")
 $targetBinary = Join-Path $resolvedInstallDir $BinaryName
 
@@ -113,17 +114,38 @@ try {
   New-Item -ItemType Directory -Path $resolvedInstallDir -Force | Out-Null
 
   Write-Host "Downloading linearctl $resolvedVersion for Windows x64..."
-  Invoke-WebRequest -UseBasicParsing -Uri "$baseUrl/$Artifact" -OutFile $downloadedBinary
   Invoke-WebRequest -UseBasicParsing -Uri "$baseUrl/checksums.txt" -OutFile $checksumsFile
 
-  $expected = Get-ExpectedChecksum $checksumsFile $Artifact
-  $actual = (Get-FileHash -LiteralPath $downloadedBinary -Algorithm SHA256).Hash.ToUpperInvariant()
+  $artifactName = $ArchiveName
+  $expected = Find-ExpectedChecksum $checksumsFile $artifactName
+  if ($null -eq $expected) {
+    $artifactName = $LegacyArtifactName
+    $expected = Find-ExpectedChecksum $checksumsFile $artifactName
+  }
+  if ($null -eq $expected) {
+    throw "checksums.txt does not contain an entry for $ArchiveName or $LegacyArtifactName."
+  }
+
+  $downloadedArtifact = Join-Path $temporaryDirectory $artifactName
+  Invoke-WebRequest -UseBasicParsing -Uri "$baseUrl/$artifactName" -OutFile $downloadedArtifact
+
+  $actual = (Get-FileHash -LiteralPath $downloadedArtifact -Algorithm SHA256).Hash.ToUpperInvariant()
   if ($actual -ne $expected) {
-    throw "Checksum mismatch for $Artifact. Expected $expected but received $actual."
+    throw "Checksum mismatch for $artifactName. Expected $expected but received $actual."
   }
   Write-Host "Checksum verified."
 
-  Copy-Item -LiteralPath $downloadedBinary -Destination $stagedBinary
+  if ($artifactName -eq $ArchiveName) {
+    Expand-Archive -LiteralPath $downloadedArtifact -DestinationPath $extractedDirectory
+    $sourceBinary = Join-Path $extractedDirectory $BinaryName
+    if (-not (Test-Path -LiteralPath $sourceBinary -PathType Leaf)) {
+      throw "$ArchiveName does not contain $BinaryName at the archive root."
+    }
+  } else {
+    $sourceBinary = $downloadedArtifact
+  }
+
+  Copy-Item -LiteralPath $sourceBinary -Destination $stagedBinary
   Move-Item -LiteralPath $stagedBinary -Destination $targetBinary -Force
   Write-Host "Installed linearctl to $targetBinary"
 

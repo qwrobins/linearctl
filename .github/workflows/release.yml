@@ -20,19 +20,24 @@ jobs:
         include:
           - os: ubuntu-latest
             target: bun-linux-x64
+            binary: linearctl-linux-x64
             artifact: linearctl-linux-x64
           - os: ubuntu-latest
             target: bun-linux-arm64
+            binary: linearctl-linux-arm64
             artifact: linearctl-linux-arm64
           - os: macos-latest
             target: bun-darwin-x64
+            binary: linearctl-darwin-x64
             artifact: linearctl-darwin-x64
           - os: macos-latest
             target: bun-darwin-arm64
+            binary: linearctl-darwin-arm64
             artifact: linearctl-darwin-arm64
           - os: windows-latest
             target: bun-windows-x64
-            artifact: linearctl-windows-x64.exe
+            binary: linearctl.exe
+            artifact: linearctl-windows-x64.zip
 
     runs-on: ${{ matrix.os }}
 
@@ -48,18 +53,46 @@ jobs:
       - run: bun install --frozen-lockfile
 
       - name: Build binary
-        run: bun build src/cli/main.ts --compile --target=${{ matrix.target }} --outfile=dist/${{ matrix.artifact }}
+        run: bun build src/cli/main.ts --compile --target=${{ matrix.target }} --outfile=dist/${{ matrix.binary }}
 
       - name: Smoke test binary
         if: matrix.target == 'bun-linux-x64' || matrix.target == 'bun-darwin-arm64'
         env:
-          ARTIFACT_NAME: ${{ matrix.artifact }}
-        run: ./dist/"$ARTIFACT_NAME" --help
+          BINARY_NAME: ${{ matrix.binary }}
+        run: ./dist/"$BINARY_NAME" --help
 
       - name: Smoke test Windows binary
         if: matrix.target == 'bun-windows-x64'
         shell: pwsh
-        run: .\dist\linearctl-windows-x64.exe --help
+        run: .\dist\linearctl.exe --help
+
+      - name: Package Windows release
+        if: matrix.target == 'bun-windows-x64'
+        shell: pwsh
+        env:
+          BINARY_NAME: ${{ matrix.binary }}
+          ARTIFACT_NAME: ${{ matrix.artifact }}
+        run: |
+          $binaryPath = Join-Path "dist" $env:BINARY_NAME
+          $archivePath = Join-Path "dist" $env:ARTIFACT_NAME
+          Compress-Archive -LiteralPath $binaryPath -DestinationPath $archivePath -CompressionLevel Optimal
+
+      - name: Smoke test Windows release archive
+        if: matrix.target == 'bun-windows-x64'
+        shell: pwsh
+        env:
+          ARTIFACT_NAME: ${{ matrix.artifact }}
+        run: |
+          $archivePath = Join-Path "dist" $env:ARTIFACT_NAME
+          $extractPath = Join-Path $env:RUNNER_TEMP "linearctl-release-archive"
+          Expand-Archive -LiteralPath $archivePath -DestinationPath $extractPath
+
+          $expectedBinary = Join-Path $extractPath "linearctl.exe"
+          $archivedFiles = @(Get-ChildItem -LiteralPath $extractPath -File -Recurse)
+          if ($archivedFiles.Count -ne 1 -or $archivedFiles[0].FullName -ne $expectedBinary) {
+            throw "$env:ARTIFACT_NAME must contain only linearctl.exe at the archive root."
+          }
+          & $expectedBinary --help
 
       - uses: actions/upload-artifact@v4
         with:

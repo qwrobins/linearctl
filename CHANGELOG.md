@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.9] - 2026-08-02
+
+### Changed
+
+- Packaged the Windows x64 release as `linearctl-windows-x64.zip` with `linearctl.exe` at the archive root. The PowerShell installer remains compatible with the uncompressed v0.8.8 asset.
+
 ## [0.8.8] - 2026-08-01
 
 ### Added

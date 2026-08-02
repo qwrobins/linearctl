@@ -27,7 +27,7 @@ Invoke-WebRequest https://raw.githubusercontent.com/qwrobins/linearctl/main/inst
 Remove-Item $installer
 ```
 
-The PowerShell installer verifies the release checksum before installing `linearctl.exe` to `%LOCALAPPDATA%\Programs\linearctl\bin`. Use `-InstallDir C:\path\to\bin` or `LINEAR_INSTALL_DIR` to override the destination.
+The PowerShell installer verifies `linearctl-windows-x64.zip`, extracts `linearctl.exe`, and installs it to `%LOCALAPPDATA%\Programs\linearctl\bin`. Use `-InstallDir C:\path\to\bin` or `LINEAR_INSTALL_DIR` to override the destination.
 
 ## 2. Install agent skills
 
