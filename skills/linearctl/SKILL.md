@@ -121,7 +121,7 @@ Raw GraphQL should not be used merely because it is possible. It is the fallback
 
 ### Skills
 - `linearctl skills install [--json]` — auto-detect agents and install skill files
-- `linearctl skills list --json` — list embedded skills plus install status, paths, and `upToDate` state for Claude Code and Codex at user and project scope
+- `linearctl skills list --json` — list embedded skills plus install status, paths, and `upToDate` state for Claude Code and Codex at user and project scope; uninspectable targets report a per-target `error` without hiding other results
 
 ### Schema
 - `linearctl schema version --json`

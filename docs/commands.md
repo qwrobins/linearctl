@@ -292,7 +292,7 @@ linearctl skills install [--json]
 linearctl skills list [--json]
 ```
 
-Installation auto-discovers Claude Code and Codex targets. Listing always checks both tools at user and project scope; JSON entries include `installs[]` records with `tool`, `scope`, `path`, `installed`, and `upToDate`.
+Installation auto-discovers Claude Code and Codex targets. Listing always checks both tools at user and project scope; JSON entries include `installs[]` records with `tool`, `scope`, `path`, `installed`, and `upToDate`, plus a per-target `error` when a path cannot be inspected.
 
 ## Generated API
 

@@ -1658,20 +1658,27 @@ describe("handleIssueCommand — issue update", () => {
     }
   });
 
-  it("adds --label without replacing existing labels", async () => {
+  it("adds --label atomically with other fields without replacing existing labels", async () => {
     const directory = await mkdtemp(join(tmpdir(), "linear-cli-issue-"));
     const paths = await writeProfileFiles(directory);
     const labelId = "c0000000-0000-0000-0000-000000000003";
     const fetchSpy = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
       const request = JSON.parse(String(init?.body ?? "{}"));
-      expect(request.query).toContain("issueAddLabel");
-      expect(request.query).not.toContain("issueUpdate(");
-      expect(request.variables).toEqual({ id: "INF-2975", labelId });
+      expect(request.query).toContain("issueUpdate(");
+      expect(request.variables).toEqual({
+        id: "INF-2975",
+        input: {
+          title: "Updated atomically",
+          addedLabelIds: [labelId]
+        }
+      });
+      expect(request.variables.input).not.toHaveProperty("labelIds");
       return new Response(JSON.stringify({
         data: {
-          issueAddLabel: {
+          issueUpdate: {
             success: true,
             issue: makeRawIssue({
+              title: "Updated atomically",
               labels: {
                 nodes: [
                   { id: "label-1", name: "bug" },
@@ -1689,6 +1696,7 @@ describe("handleIssueCommand — issue update", () => {
     try {
       const exitCode = await handleIssueCommand(["update", "INF-2975"], {
         ...baseOptions(paths),
+        title: "Updated atomically",
         label: labelId,
         fetchImpl: fetchSpy as unknown as FetchLike
       });
@@ -2350,12 +2358,12 @@ describe("handleIssueCommand — issue bulk-update", () => {
     const labelId = "c0000000-0000-0000-0000-000000000003";
     const fetchSpy = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
       const request = JSON.parse(String(init?.body ?? "{}"));
-      expect(request.query).toContain("issueAddLabel");
-      expect(request.variables.labelId).toBe(labelId);
-      expect(request.variables).not.toHaveProperty("input.labelIds");
+      expect(request.query).toContain("issueUpdate(");
+      expect(request.variables.input.addedLabelIds).toEqual([labelId]);
+      expect(request.variables.input).not.toHaveProperty("labelIds");
       return new Response(JSON.stringify({
         data: {
-          issueAddLabel: {
+          issueUpdate: {
             success: true,
             issue: makeRawIssue({
               identifier: request.variables.id,

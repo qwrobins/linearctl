@@ -37,6 +37,7 @@ interface SkillInstallStatus {
   path: string;
   installed: boolean;
   upToDate: boolean;
+  error?: string;
 }
 
 function isTty(stream?: NodeJS.ReadableStream): boolean {
@@ -88,8 +89,16 @@ async function inspectSkillInstall(
       upToDate: installedContent === bundledContent
     };
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
-      throw error;
+    const filesystemError = error as NodeJS.ErrnoException;
+    if (filesystemError.code !== "ENOENT") {
+      return {
+        tool: target.agent,
+        scope: target.scope,
+        path,
+        installed: true,
+        upToDate: false,
+        error: filesystemError.message
+      };
     }
     return {
       tool: target.agent,
@@ -200,9 +209,11 @@ async function handleSkillsList(options: SkillsCommandOptions): Promise<number> 
     for (const entry of entries) {
       process.stdout.write(`  ${entry.name} (${entry.filename})\n`);
       for (const install of entry.installs) {
-        const status = install.installed
-          ? `installed, ${install.upToDate ? "up to date" : "out of date"}`
-          : "not installed";
+        const status = install.error !== undefined
+          ? `inspection failed: ${install.error}`
+          : install.installed
+            ? `installed, ${install.upToDate ? "up to date" : "out of date"}`
+            : "not installed";
         process.stdout.write(`    ${install.tool} (${install.scope}): ${status} — ${install.path}\n`);
       }
     }

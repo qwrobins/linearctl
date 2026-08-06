@@ -92,8 +92,10 @@ describe("handleSkillsCommand", () => {
 
       const currentPath = join(tempHome, ".claude", "skills", "linearctl", "SKILL.md");
       const stalePath = join(process.cwd(), ".codex", "skills", "linearctl-raw-gql", "SKILL.md");
+      const brokenPath = join(process.cwd(), ".claude", "skills", "linearctl", "SKILL.md");
       await mkdir(join(currentPath, ".."), { recursive: true });
       await mkdir(join(stalePath, ".."), { recursive: true });
+      await mkdir(brokenPath, { recursive: true });
       await writeFile(currentPath, EMBEDDED_SKILLS.linearctl!.content, "utf8");
       await writeFile(stalePath, "stale skill content\n", "utf8");
 
@@ -119,6 +121,14 @@ describe("handleSkillsCommand", () => {
           path: join(tempHome, ".codex", "skills", "linearctl", "SKILL.md"),
           installed: false,
           upToDate: false
+        });
+        expect(linearctl.installs).toContainEqual({
+          tool: "claude",
+          scope: "project",
+          path: brokenPath,
+          installed: true,
+          upToDate: false,
+          error: expect.stringContaining("EISDIR")
         });
 
         const rawGql = parsed.find((entry: { name: string }) => entry.name === "linearctl-raw-gql");

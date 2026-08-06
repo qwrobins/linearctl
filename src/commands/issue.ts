@@ -216,17 +216,6 @@ mutation IssueUpdate($id: String!, $input: IssueUpdateInput!) {
 }
 ${CURATED_ISSUE_FRAGMENT}`;
 
-const ISSUE_ADD_LABEL_MUTATION = `
-mutation IssueAddLabel($id: String!, $labelId: String!) {
-  issueAddLabel(id: $id, labelId: $labelId) {
-    success
-    issue {
-      ...CuratedIssue
-    }
-  }
-}
-${CURATED_ISSUE_FRAGMENT}`;
-
 const ISSUE_ARCHIVE_MUTATION = `
 mutation IssueArchive($id: String!) {
   issueArchive(id: $id) {
@@ -1059,6 +1048,9 @@ async function handleIssueUpdate(
       : looksLikeId(options.label)
         ? options.label
         : await resolveLabelId(options.label, issueTeamId, resolverOpts);
+    if (labelId !== undefined) {
+      input.addedLabelIds = [labelId];
+    }
     if (options.state !== undefined && !looksLikeId(options.state)) {
       input.stateId = await resolveStateId(options.state, issueTeamId!, resolverOpts);
     }
@@ -1090,57 +1082,26 @@ async function handleIssueUpdate(
     if (options.dryRun === true) {
       return emitDryRunResult("update", "issue", {
         id: identifier,
-        ...input,
-        ...(labelId === undefined ? {} : { addLabelId: labelId })
+        ...input
       }, options);
     }
 
-    let rawIssue: RawIssue | null = null;
+    const response = await ctx.graphql<{
+      issueUpdate: { success: boolean; issue: RawIssue | null };
+    }>(ISSUE_UPDATE_MUTATION, { id: identifier, input });
 
-    if (Object.keys(input).length > 0) {
-      const response = await ctx.graphql<{
-        issueUpdate: { success: boolean; issue: RawIssue | null };
-      }>(ISSUE_UPDATE_MUTATION, { id: identifier, input });
-
-      if (
-        ctx.hasErrors(response.body.errors) ||
-        response.body.data?.issueUpdate?.issue === null ||
-        response.body.data?.issueUpdate?.issue === undefined
-      ) {
-        const errors = ctx.mapGraphQLErrors(response.body.errors);
-        return ctx.emitFailure(
-          errors.length > 0 ? errors : [{ category: "general", message: "Issue update failed" }]
-        );
-      }
-
-      rawIssue = response.body.data.issueUpdate.issue;
+    if (
+      ctx.hasErrors(response.body.errors) ||
+      response.body.data?.issueUpdate?.issue === null ||
+      response.body.data?.issueUpdate?.issue === undefined
+    ) {
+      const errors = ctx.mapGraphQLErrors(response.body.errors);
+      return ctx.emitFailure(
+        errors.length > 0 ? errors : [{ category: "general", message: "Issue update failed" }]
+      );
     }
 
-    if (labelId !== undefined) {
-      const response = await ctx.graphql<{
-        issueAddLabel: { success: boolean; issue: RawIssue | null };
-      }>(ISSUE_ADD_LABEL_MUTATION, { id: identifier, labelId });
-
-      if (
-        ctx.hasErrors(response.body.errors) ||
-        !response.body.data?.issueAddLabel?.success ||
-        response.body.data.issueAddLabel.issue === null ||
-        response.body.data.issueAddLabel.issue === undefined
-      ) {
-        const errors = ctx.mapGraphQLErrors(response.body.errors);
-        return ctx.emitFailure(
-          errors.length > 0 ? errors : [{ category: "general", message: "Adding issue label failed" }]
-        );
-      }
-
-      rawIssue = response.body.data.issueAddLabel.issue;
-    }
-
-    if (rawIssue === null) {
-      return ctx.emitFailure([{ category: "general", message: "Issue update returned no issue" }]);
-    }
-
-    const issue = normalizeIssue(rawIssue);
+    const issue = normalizeIssue(response.body.data.issueUpdate.issue);
 
     if (options.jsonEnvelope) {
       return ctx.emitSuccess(issue);
@@ -1741,6 +1702,9 @@ async function handleBulkUpdate(options: IssueCommandOptions): Promise<number> {
       : looksLikeId(options.label)
         ? options.label
         : await resolveLabelId(options.label, undefined, resolverOpts);
+    if (labelId !== undefined) {
+      input.addedLabelIds = [labelId];
+    }
     // State names are resolved per team — cache so issues sharing a team
     // don't each pay for a resolution query.
     const stateIdByTeam = new Map<string, string>();
@@ -1770,46 +1734,19 @@ async function handleBulkUpdate(options: IssueCommandOptions): Promise<number> {
           }
         }
 
-        let rawIssue: RawIssue | null = null;
+        const response = await ctx.graphql<{
+          issueUpdate: { success: boolean; issue: RawIssue | null };
+        }>(ISSUE_UPDATE_MUTATION, { id, input: issueInput });
 
-        if (Object.keys(issueInput).length > 0) {
-          const response = await ctx.graphql<{
-            issueUpdate: { success: boolean; issue: RawIssue | null };
-          }>(ISSUE_UPDATE_MUTATION, { id, input: issueInput });
-
-          if (
-            ctx.hasErrors(response.body.errors) ||
-            response.body.data?.issueUpdate?.issue === null ||
-            response.body.data?.issueUpdate?.issue === undefined
-          ) {
-            throw new Error(response.body.errors?.[0]?.message ?? "Issue update failed");
-          }
-
-          rawIssue = response.body.data.issueUpdate.issue;
+        if (
+          ctx.hasErrors(response.body.errors) ||
+          response.body.data?.issueUpdate?.issue === null ||
+          response.body.data?.issueUpdate?.issue === undefined
+        ) {
+          throw new Error(response.body.errors?.[0]?.message ?? "Issue update failed");
         }
 
-        if (labelId !== undefined) {
-          const response = await ctx.graphql<{
-            issueAddLabel: { success: boolean; issue: RawIssue | null };
-          }>(ISSUE_ADD_LABEL_MUTATION, { id, labelId });
-
-          if (
-            ctx.hasErrors(response.body.errors) ||
-            !response.body.data?.issueAddLabel?.success ||
-            response.body.data.issueAddLabel.issue === null ||
-            response.body.data.issueAddLabel.issue === undefined
-          ) {
-            throw new Error(response.body.errors?.[0]?.message ?? "Adding issue label failed");
-          }
-
-          rawIssue = response.body.data.issueAddLabel.issue;
-        }
-
-        if (rawIssue === null) {
-          throw new Error("Issue update returned no issue");
-        }
-
-        const issue = normalizeIssue(rawIssue);
+        const issue = normalizeIssue(response.body.data.issueUpdate.issue);
         return { ...issue };
       },
       options
