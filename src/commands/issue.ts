@@ -44,6 +44,7 @@ export interface IssueCommandOptions {
   stdinStream?: NodeJS.ReadableStream;
   priority?: string;
   estimate?: string;
+  dueDate?: string;
   assignee?: string;
   label?: string;
   state?: string;
@@ -115,6 +116,7 @@ fragment CuratedIssue on Issue {
   description
   priority
   estimate
+  dueDate
   state { id name type }
   team { id key name }
   assignee { id name email }
@@ -139,6 +141,7 @@ fragment CuratedIssueSearchResult on IssueSearchResult {
   description
   priority
   estimate
+  dueDate
   state { id name type }
   team { id key name }
   assignee { id name email }
@@ -213,6 +216,17 @@ mutation IssueUpdate($id: String!, $input: IssueUpdateInput!) {
 }
 ${CURATED_ISSUE_FRAGMENT}`;
 
+const ISSUE_ADD_LABEL_MUTATION = `
+mutation IssueAddLabel($id: String!, $labelId: String!) {
+  issueAddLabel(id: $id, labelId: $labelId) {
+    success
+    issue {
+      ...CuratedIssue
+    }
+  }
+}
+${CURATED_ISSUE_FRAGMENT}`;
+
 const ISSUE_ARCHIVE_MUTATION = `
 mutation IssueArchive($id: String!) {
   issueArchive(id: $id) {
@@ -271,6 +285,7 @@ interface RawIssue {
   description: string | null;
   priority: number;
   estimate: number | null;
+  dueDate: string | null;
   state: { id: string; name: string; type: string } | null;
   team: { id: string; key: string; name: string };
   assignee: { id: string; name: string; email: string } | null;
@@ -294,6 +309,7 @@ export interface NormalizedIssue {
   description: string | null;
   priority: number;
   estimate: number | null;
+  dueDate: string | null;
   state: { id: string; name: string; type: string } | null;
   team: { id: string; key: string; name: string };
   assignee: { id: string; name: string; email: string } | null;
@@ -318,6 +334,7 @@ export function normalizeIssue(raw: RawIssue): NormalizedIssue {
     description: raw.description,
     priority: raw.priority,
     estimate: raw.estimate,
+    dueDate: raw.dueDate,
     state: raw.state,
     team: raw.team,
     assignee: raw.assignee,
@@ -350,6 +367,9 @@ function printHumanIssue(issue: NormalizedIssue): void {
   if (issue.estimate !== null) {
     process.stdout.write(`  Estimate: ${issue.estimate}\n`);
   }
+  if (issue.dueDate !== null) {
+    process.stdout.write(`  Due date: ${issue.dueDate}\n`);
+  }
   if (issue.project !== null) {
     process.stdout.write(`  Project:  ${issue.project.name}\n`);
   }
@@ -367,6 +387,42 @@ function printHumanIssue(issue: NormalizedIssue): void {
 
 function shouldResolveProjectIdentifier(value: string): boolean {
   return !looksLikeId(value);
+}
+
+function isUnsetValue(value: string): boolean {
+  const normalized = value.trim().toLowerCase();
+  return normalized === "" || normalized === "none" || normalized === "null";
+}
+
+function isUnassignedValue(value: string): boolean {
+  return isUnsetValue(value) || value.trim().toLowerCase() === "unassigned";
+}
+
+function isValidDueDate(value: string): boolean {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (match === null) {
+    return false;
+  }
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  if (year < 1 || month < 1 || month > 12 || day < 1) {
+    return false;
+  }
+
+  const daysInMonth = [31, isLeapYear(year) ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  return day <= daysInMonth[month - 1]!;
+}
+
+function isLeapYear(year: number): boolean {
+  return year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+}
+
+function dueDateValidationError(allowUnset: boolean): string {
+  return allowUnset
+    ? '--due-date must be a valid YYYY-MM-DD date or "none" to clear it.'
+    : "--due-date must be a valid date in YYYY-MM-DD format.";
 }
 
 async function buildIssueFilter(
@@ -396,7 +452,11 @@ async function buildIssueFilter(
   }
 
   const stateValue = options.state ?? options.status;
-  const stateValues = options.states ?? (stateValue === undefined ? [] : [stateValue]);
+  const rawStateValues = options.states ?? (stateValue === undefined ? [] : [stateValue]);
+  const stateValues = rawStateValues.flatMap((value) => value.split(",").map((state) => state.trim()));
+  if (stateValues.some((state) => state === "")) {
+    return { validationError: "--state values must not be empty." };
+  }
 
   const stateFilterPromise = (async (): Promise<Record<string, unknown> | undefined> => {
     const buildStateFilter = async (state: string): Promise<Record<string, unknown>> => {
@@ -422,6 +482,9 @@ async function buildIssueFilter(
   const assigneeFilterPromise = options.assignee === undefined
     ? Promise.resolve(undefined)
     : (async (): Promise<Record<string, unknown>> => {
+        if (isUnassignedValue(options.assignee!)) {
+          return { assignee: { null: true } };
+        }
         const assigneeId = looksLikeId(options.assignee!)
           ? options.assignee!
           : await resolveUserId(options.assignee!, resolverOpts);
@@ -476,6 +539,15 @@ async function buildIssueFilter(
   }
   if (options.completedAfter !== undefined) {
     filter.completedAt = { gte: options.completedAfter };
+  }
+  if (options.dueDate !== undefined) {
+    if (isUnsetValue(options.dueDate)) {
+      filter.dueDate = { null: true };
+    } else if (!isValidDueDate(options.dueDate)) {
+      return { validationError: dueDateValidationError(true) };
+    } else {
+      filter.dueDate = { eq: options.dueDate };
+    }
   }
 
   return Object.keys(filter).length > 0 ? { filter } : {};
@@ -570,6 +642,12 @@ async function handleIssueCreate(options: IssueCommandOptions): Promise<number> 
       return emitValidationError("--estimate must be a non-negative number.", options);
     }
     input.estimate = parsed;
+  }
+  if (options.dueDate !== undefined) {
+    if (isUnsetValue(options.dueDate) || !isValidDueDate(options.dueDate)) {
+      return emitValidationError(dueDateValidationError(false), options);
+    }
+    input.dueDate = options.dueDate;
   }
 
   if (options.assignee !== undefined) {
@@ -907,30 +985,38 @@ async function handleIssueUpdate(
     }
     input.estimate = parsed;
   }
+  if (options.dueDate !== undefined) {
+    if (!isUnsetValue(options.dueDate) && !isValidDueDate(options.dueDate)) {
+      return emitValidationError(dueDateValidationError(true), options);
+    }
+    input.dueDate = isUnsetValue(options.dueDate) ? null : options.dueDate;
+  }
   if (options.assignee !== undefined) {
-    input.assigneeId = options.assignee;
+    input.assigneeId = isUnassignedValue(options.assignee) ? null : options.assignee;
   }
   if (options.label !== undefined) {
-    input.labelIds = [options.label];
+    // --label is additive. Keep raw labelIds available through --input-json for
+    // callers that explicitly need replacement semantics.
+    delete input.labelIds;
   }
   if (options.state !== undefined) {
     input.stateId = options.state;
   }
   if (options.cycle !== undefined) {
-    input.cycleId = options.cycle;
+    input.cycleId = isUnsetValue(options.cycle) ? null : options.cycle;
   }
   if (options.project !== undefined) {
-    input.projectId = options.project;
+    input.projectId = isUnsetValue(options.project) ? null : options.project;
   }
   const projectMilestone = options.projectMilestone ?? options.milestone;
   if (projectMilestone !== undefined) {
-    input.projectMilestoneId = projectMilestone;
+    input.projectMilestoneId = isUnsetValue(projectMilestone) ? null : projectMilestone;
   }
   if (options.parent !== undefined) {
-    input.parentId = options.parent;
+    input.parentId = isUnsetValue(options.parent) ? null : options.parent;
   }
 
-  if (Object.keys(input).length === 0) {
+  if (Object.keys(input).length === 0 && options.label === undefined) {
     return emitValidationError("issue update requires at least one field to update.", options);
   }
 
@@ -940,7 +1026,11 @@ async function handleIssueUpdate(
     const resolverOpts = await ctx.resolverOptions();
 
     // Resolve friendly names to IDs
-    if (options.assignee !== undefined && !looksLikeId(options.assignee)) {
+    if (
+      options.assignee !== undefined &&
+      !isUnassignedValue(options.assignee) &&
+      !looksLikeId(options.assignee)
+    ) {
       input.assigneeId = await resolveUserId(options.assignee, resolverOpts);
     }
 
@@ -948,7 +1038,7 @@ async function handleIssueUpdate(
     const needsTeamLookup =
       (options.label !== undefined && !looksLikeId(options.label)) ||
       (options.state !== undefined && !looksLikeId(options.state)) ||
-      (options.project !== undefined && shouldResolveProjectIdentifier(options.project));
+      (options.project !== undefined && !isUnsetValue(options.project) && shouldResolveProjectIdentifier(options.project));
     let issueTeamId: string | undefined;
     if (needsTeamLookup) {
       const issueData = await ctx.graphql<{ issue: { team: { id: string } } | null }>(
@@ -964,16 +1054,22 @@ async function handleIssueUpdate(
       }
     }
 
-    if (options.label !== undefined && !looksLikeId(options.label)) {
-      input.labelIds = [await resolveLabelId(options.label, issueTeamId, resolverOpts)];
-    }
+    const labelId = options.label === undefined
+      ? undefined
+      : looksLikeId(options.label)
+        ? options.label
+        : await resolveLabelId(options.label, issueTeamId, resolverOpts);
     if (options.state !== undefined && !looksLikeId(options.state)) {
       input.stateId = await resolveStateId(options.state, issueTeamId!, resolverOpts);
     }
-    if (options.project !== undefined && shouldResolveProjectIdentifier(options.project)) {
+    if (
+      options.project !== undefined &&
+      !isUnsetValue(options.project) &&
+      shouldResolveProjectIdentifier(options.project)
+    ) {
       input.projectId = await resolveProjectId(options.project, issueTeamId, resolverOpts);
     }
-    if (options.parent !== undefined) {
+    if (options.parent !== undefined && !isUnsetValue(options.parent)) {
       if (looksLikeId(options.parent)) {
         input.parentId = options.parent;
       } else {
@@ -992,25 +1088,59 @@ async function handleIssueUpdate(
     }
 
     if (options.dryRun === true) {
-      return emitDryRunResult("update", "issue", { id: identifier, ...input }, options);
+      return emitDryRunResult("update", "issue", {
+        id: identifier,
+        ...input,
+        ...(labelId === undefined ? {} : { addLabelId: labelId })
+      }, options);
     }
 
-    const response = await ctx.graphql<{
-      issueUpdate: { success: boolean; issue: RawIssue | null };
-    }>(ISSUE_UPDATE_MUTATION, { id: identifier, input });
+    let rawIssue: RawIssue | null = null;
 
-    if (
-      ctx.hasErrors(response.body.errors) ||
-      response.body.data?.issueUpdate?.issue === null ||
-      response.body.data?.issueUpdate?.issue === undefined
-    ) {
-      const errors = ctx.mapGraphQLErrors(response.body.errors);
-      return ctx.emitFailure(
-        errors.length > 0 ? errors : [{ category: "general", message: "Issue update failed" }]
-      );
+    if (Object.keys(input).length > 0) {
+      const response = await ctx.graphql<{
+        issueUpdate: { success: boolean; issue: RawIssue | null };
+      }>(ISSUE_UPDATE_MUTATION, { id: identifier, input });
+
+      if (
+        ctx.hasErrors(response.body.errors) ||
+        response.body.data?.issueUpdate?.issue === null ||
+        response.body.data?.issueUpdate?.issue === undefined
+      ) {
+        const errors = ctx.mapGraphQLErrors(response.body.errors);
+        return ctx.emitFailure(
+          errors.length > 0 ? errors : [{ category: "general", message: "Issue update failed" }]
+        );
+      }
+
+      rawIssue = response.body.data.issueUpdate.issue;
     }
 
-    const issue = normalizeIssue(response.body.data.issueUpdate.issue);
+    if (labelId !== undefined) {
+      const response = await ctx.graphql<{
+        issueAddLabel: { success: boolean; issue: RawIssue | null };
+      }>(ISSUE_ADD_LABEL_MUTATION, { id: identifier, labelId });
+
+      if (
+        ctx.hasErrors(response.body.errors) ||
+        !response.body.data?.issueAddLabel?.success ||
+        response.body.data.issueAddLabel.issue === null ||
+        response.body.data.issueAddLabel.issue === undefined
+      ) {
+        const errors = ctx.mapGraphQLErrors(response.body.errors);
+        return ctx.emitFailure(
+          errors.length > 0 ? errors : [{ category: "general", message: "Adding issue label failed" }]
+        );
+      }
+
+      rawIssue = response.body.data.issueAddLabel.issue;
+    }
+
+    if (rawIssue === null) {
+      return ctx.emitFailure([{ category: "general", message: "Issue update returned no issue" }]);
+    }
+
+    const issue = normalizeIssue(rawIssue);
 
     if (options.jsonEnvelope) {
       return ctx.emitSuccess(issue);
@@ -1551,7 +1681,7 @@ async function handleBulkUpdate(options: IssueCommandOptions): Promise<number> {
     input.stateId = options.state;
   }
   if (options.assignee !== undefined) {
-    input.assigneeId = options.assignee;
+    input.assigneeId = isUnassignedValue(options.assignee) ? null : options.assignee;
   }
   if (options.priority !== undefined) {
     const parsed = Number(options.priority);
@@ -1560,9 +1690,6 @@ async function handleBulkUpdate(options: IssueCommandOptions): Promise<number> {
     }
     input.priority = parsed;
   }
-  if (options.label !== undefined) {
-    input.labelIds = [options.label];
-  }
   if (options.estimate !== undefined) {
     const parsed = Number(options.estimate);
     if (!Number.isFinite(parsed) || parsed < 0) {
@@ -1570,20 +1697,30 @@ async function handleBulkUpdate(options: IssueCommandOptions): Promise<number> {
     }
     input.estimate = parsed;
   }
+  if (options.dueDate !== undefined) {
+    if (!isUnsetValue(options.dueDate) && !isValidDueDate(options.dueDate)) {
+      return emitValidationError(dueDateValidationError(true), options);
+    }
+    input.dueDate = isUnsetValue(options.dueDate) ? null : options.dueDate;
+  }
   if (options.cycle !== undefined) {
-    input.cycleId = options.cycle;
+    input.cycleId = isUnsetValue(options.cycle) ? null : options.cycle;
   }
   const projectMilestone = options.projectMilestone ?? options.milestone;
   if (projectMilestone !== undefined) {
-    input.projectMilestoneId = projectMilestone;
+    input.projectMilestoneId = isUnsetValue(projectMilestone) ? null : projectMilestone;
   }
 
-  if (Object.keys(input).length === 0) {
-    return emitValidationError("bulk-update requires at least one field to update (--state, --assignee, --priority, --label, --estimate, --cycle, --project-milestone, --milestone).", options);
+  if (Object.keys(input).length === 0 && options.label === undefined) {
+    return emitValidationError("bulk-update requires at least one field to update (--state, --assignee, --priority, --label, --estimate, --due-date, --cycle, --project-milestone, --milestone).", options);
   }
 
   if (options.dryRun) {
-    return emitDryRunResult("bulk-update", "issue", { ids: identifiers, update: input }, options);
+    return emitDryRunResult("bulk-update", "issue", {
+      ids: identifiers,
+      update: input,
+      ...(options.label === undefined ? {} : { addLabel: options.label })
+    }, options);
   }
 
   const ctx = buildContext(options);
@@ -1592,12 +1729,18 @@ async function handleBulkUpdate(options: IssueCommandOptions): Promise<number> {
     const resolverOpts = await ctx.resolverOptions();
 
     // Resolve friendly names to IDs once before the bulk loop
-    if (options.assignee !== undefined && !looksLikeId(options.assignee)) {
+    if (
+      options.assignee !== undefined &&
+      !isUnassignedValue(options.assignee) &&
+      !looksLikeId(options.assignee)
+    ) {
       input.assigneeId = await resolveUserId(options.assignee, resolverOpts);
     }
-    if (options.label !== undefined && !looksLikeId(options.label)) {
-      input.labelIds = [await resolveLabelId(options.label, undefined, resolverOpts)];
-    }
+    const labelId = options.label === undefined
+      ? undefined
+      : looksLikeId(options.label)
+        ? options.label
+        : await resolveLabelId(options.label, undefined, resolverOpts);
     // State names are resolved per team — cache so issues sharing a team
     // don't each pay for a resolution query.
     const stateIdByTeam = new Map<string, string>();
@@ -1627,19 +1770,46 @@ async function handleBulkUpdate(options: IssueCommandOptions): Promise<number> {
           }
         }
 
-        const response = await ctx.graphql<{
-          issueUpdate: { success: boolean; issue: RawIssue | null };
-        }>(ISSUE_UPDATE_MUTATION, { id, input: issueInput });
+        let rawIssue: RawIssue | null = null;
 
-        if (
-          ctx.hasErrors(response.body.errors) ||
-          response.body.data?.issueUpdate?.issue === null ||
-          response.body.data?.issueUpdate?.issue === undefined
-        ) {
-          throw new Error(response.body.errors?.[0]?.message ?? "Issue update failed");
+        if (Object.keys(issueInput).length > 0) {
+          const response = await ctx.graphql<{
+            issueUpdate: { success: boolean; issue: RawIssue | null };
+          }>(ISSUE_UPDATE_MUTATION, { id, input: issueInput });
+
+          if (
+            ctx.hasErrors(response.body.errors) ||
+            response.body.data?.issueUpdate?.issue === null ||
+            response.body.data?.issueUpdate?.issue === undefined
+          ) {
+            throw new Error(response.body.errors?.[0]?.message ?? "Issue update failed");
+          }
+
+          rawIssue = response.body.data.issueUpdate.issue;
         }
 
-        const issue = normalizeIssue(response.body.data.issueUpdate.issue);
+        if (labelId !== undefined) {
+          const response = await ctx.graphql<{
+            issueAddLabel: { success: boolean; issue: RawIssue | null };
+          }>(ISSUE_ADD_LABEL_MUTATION, { id, labelId });
+
+          if (
+            ctx.hasErrors(response.body.errors) ||
+            !response.body.data?.issueAddLabel?.success ||
+            response.body.data.issueAddLabel.issue === null ||
+            response.body.data.issueAddLabel.issue === undefined
+          ) {
+            throw new Error(response.body.errors?.[0]?.message ?? "Adding issue label failed");
+          }
+
+          rawIssue = response.body.data.issueAddLabel.issue;
+        }
+
+        if (rawIssue === null) {
+          throw new Error("Issue update returned no issue");
+        }
+
+        const issue = normalizeIssue(rawIssue);
         return { ...issue };
       },
       options
@@ -1945,7 +2115,7 @@ export async function handleIssueCommand(
   if (subcommand === "update") {
     const identifier = rest[0];
     if (identifier === undefined || identifier === "") {
-      return emitValidationError("usage: linearctl issue update <identifier> [--title <text>] [--description <text>|--description-file <path|->] [--priority <0-4>] [--estimate <n>] [--assignee <id>] [--label <name|id>] [--state <name|id>] [--cycle <id>] [--project <name|id>] [--project-milestone <id>|--milestone <id>] [--parent <identifier>] [--json]", options);
+      return emitValidationError("usage: linearctl issue update <identifier> [--title <text>] [--description <text>|--description-file <path|->] [--priority <0-4>] [--estimate <n>] [--due-date <YYYY-MM-DD|none>] [--assignee <id|none>] [--label <name|id>] [--state <name|id>] [--cycle <id|none>] [--project <name|id|none>] [--project-milestone <id|none>|--milestone <id|none>] [--parent <identifier|none>] [--json]", options);
     }
     if (rest.length > 1) {
       return emitValidationError("issue update accepts exactly one identifier.", options);

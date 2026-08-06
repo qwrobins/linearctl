@@ -12,8 +12,8 @@ linearctl issue get <identifier> --json
 linearctl issue view <identifier> --json
 
 # List issues with filters
-linearctl issue list [--search <text>|--query <text>] [--team <name|key|id>] [--state <name|id> ...] [--status <name|id>] [--assignee <name|displayName|email|"me"|id>] \
-  [--label <name|id>] [--priority <0-4>] [--cycle <id>] [--project <name|id>] \
+linearctl issue list [--search <text>|--query <text>] [--team <name|key|id>] [--state <name|id>[,<name|id>...] ...] [--status <name|id>] [--assignee <name|displayName|email|"me"|id|none>] \
+  [--label <name|id>] [--priority <0-4>] [--due-date <YYYY-MM-DD|none>] [--cycle <id>] [--project <name|id>] \
   [--created-after <date>] [--updated-after <date>] [--completed-after <date>] \
   [--all-teams] [--filter-json <json>] [--order-by <field>] \
   [--all] [--max <n>|--limit <n>] [--page-size <n>] [--after <cursor>] --json
@@ -23,16 +23,16 @@ linearctl issue search [<text>|--query <text>] [--team <name|key|id>] [--all] --
 
 # Create an issue
 linearctl issue create --title <title> --team <name|key|id> \
-  [--description <text>|--description-file <path|->] [--priority <0-4>] [--estimate <n>] [--assignee <email|"me"|id>] \
+  [--description <text>|--description-file <path|->] [--priority <0-4>] [--estimate <n>] [--due-date <YYYY-MM-DD>] [--assignee <email|"me"|id>] \
   [--label <name|id>] [--state <name|id>] [--cycle <id>] [--project <name|id>] \
   [--project-milestone <id>|--milestone <id>] \
   [--parent <identifier>] --json
 
 # Update an issue
 linearctl issue update <identifier> [--title <text>] [--description <text>|--description-file <path|->] \
-  [--priority <0-4>] [--estimate <n>] [--assignee <email|"me"|id>] [--label <name|id>] \
-  [--state <name|id>] [--cycle <id>] [--project <name|id>] \
-  [--project-milestone <id>|--milestone <id>] [--parent <identifier>] --json
+  [--priority <0-4>] [--estimate <n>] [--due-date <YYYY-MM-DD|none>] [--assignee <email|"me"|id|none>] [--label <name|id>] \
+  [--state <name|id>] [--cycle <id|none>] [--project <name|id|none>] \
+  [--project-milestone <id|none>|--milestone <id|none>] [--parent <identifier|none>] --json
 
 # Close an issue (transitions to a terminal completed/canceled state, defaults to "Done")
 linearctl issue close <identifier> [--state <name>] --json
@@ -50,15 +50,17 @@ linearctl issue attach-slack <identifier> --url <slack-url> [--sync] [--title <t
 linearctl issue comment <identifier> (--body <text>|--body-file <path|->) --json
 ```
 
-`issue get` / `issue view` returns soft-deleted Linear issues when the API can still read them. JSON output includes `projectMilestone`, `trashed`, and `archivedAt`; human output prints `Trashed: true` and `Archived: <timestamp>` when applicable. A missing referenced issue returns exit 4 with `category: "not-found"` in `--json-envelope`.
+`issue get`, `issue view`, and `issue list` JSON include `dueDate`. The list command accepts repeated or comma-separated `--state` values, `--assignee none`/`unassigned` for issues with no assignee, and `--due-date none` for issues with no due date. `issue get` / `issue view` returns soft-deleted Linear issues when the API can still read them; JSON also includes `projectMilestone`, `trashed`, and `archivedAt`, while human output marks trashed and archived issues. A missing referenced issue returns exit 4 with `category: "not-found"` in `--json-envelope`.
+
+On `issue update`, pass `none` to clear an assignee, cycle, project, project milestone, parent, or due date. On both `issue update` and `issue bulk-update`, `--label` adds one label without removing existing labels. Single-issue callers that deliberately need replacement semantics can still pass `labelIds` through the low-level `--input-json` escape hatch; bulk replacement has no curated flag.
 
 ### Bulk operations
 
 ```bash
 # Bulk update fields on multiple issues
-linearctl issue bulk-update --ids <id1,id2,...> [--state <id>] [--assignee <id>] \
-  [--priority <0-4>] [--estimate <n>] [--label <id>] [--cycle <id>] \
-  [--project-milestone <id>|--milestone <id>] --json
+linearctl issue bulk-update --ids <id1,id2,...> [--state <id>] [--assignee <id|none>] \
+  [--priority <0-4>] [--estimate <n>] [--due-date <YYYY-MM-DD|none>] [--label <id>] [--cycle <id|none>] \
+  [--project-milestone <id|none>|--milestone <id|none>] --json
 
 # Bulk close multiple issues by transitioning them to a completed workflow state
 linearctl issue bulk-close --ids <id1,id2,...> [--state <name|id>] --json
@@ -158,9 +160,12 @@ linearctl user list --json
 ```bash
 linearctl label get <id> --json
 linearctl label list [--team <name|key|id>] --json
-linearctl label create --name <name> [--description <text>] [--color <hex>] [--team <name|key|id>] --json
+linearctl label create --name <name> [--description <text>] [--color <hex>] [--team <name|key|id>] \
+  [--parent <name|id>|--group] --json
 linearctl label delete <id> --json                # [destructive]
 ```
+
+Use `--group` to create a non-applicable label group, then `--parent <name|id>` to create child labels inside it. Parent names resolve within the selected team when `--team` is present.
 
 ## Workflow state
 
@@ -283,11 +288,11 @@ See [schema-and-generated.md](schema-and-generated.md) for details.
 # Install agent skills to project (.claude/skills/)
 linearctl skills install [--json]
 
-# List embedded skills
+# List embedded skills and inspect install status, paths, and freshness
 linearctl skills list [--json]
 ```
 
-Auto-discovers installed agents (Claude Code, Codex) at project and user level and installs skills to all found directories.
+Installation auto-discovers Claude Code and Codex targets. Listing always checks both tools at user and project scope; JSON entries include `installs[]` records with `tool`, `scope`, `path`, `installed`, and `upToDate`.
 
 ## Generated API
 

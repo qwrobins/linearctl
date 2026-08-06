@@ -1,6 +1,7 @@
 [
   {
     "commandPath": "linearctl issue get",
+    "usage": "linearctl issue get <identifier> [--json]",
     "layer": "curated",
     "resource": "issue",
     "operation": "get",
@@ -17,6 +18,7 @@
   },
   {
     "commandPath": "linearctl issue view",
+    "usage": "linearctl issue view <identifier> [--json] (alias: get)",
     "layer": "curated",
     "resource": "issue",
     "operation": "view",
@@ -33,6 +35,7 @@
   },
   {
     "commandPath": "linearctl issue create",
+    "usage": "linearctl issue create --title <title> --team <id> [--description <text>|--description-file <path|->] [--priority <0-4>] [--estimate <n>] [--due-date <YYYY-MM-DD>] [--assignee <id>] [--label <id>] [--state <id>] [--cycle <id>] [--project <id|name>] [--project-milestone <id>|--milestone <id>] [--parent <identifier>] [--json]",
     "layer": "curated",
     "resource": "issue",
     "operation": "create",
@@ -49,6 +52,7 @@
   },
   {
     "commandPath": "linearctl issue list",
+    "usage": "linearctl issue list [--search <text>|--query <text>] [--state <name>[,<name>...] ...] [--status <name>] [--assignee <id|none>] [--team <id>] [--label <name|id>] [--priority <0-4>] [--due-date <YYYY-MM-DD|none>] [--cycle <id>] [--project <id|name>] [--created-after <date>] [--updated-after <date>] [--completed-after <date>] [--order-by <field>] [--all-teams] [--all] [--json]",
     "layer": "curated",
     "resource": "issue",
     "operation": "list",
@@ -69,6 +73,7 @@
   },
   {
     "commandPath": "linearctl issue search",
+    "usage": "linearctl issue search [<text>|--query <text>|--search <text>] [--team <id>] [--all] [--json]",
     "layer": "curated",
     "resource": "issue",
     "operation": "search",
@@ -85,6 +90,7 @@
   },
   {
     "commandPath": "linearctl issue update",
+    "usage": "linearctl issue update <identifier> [--title <text>] [--description <text>|--description-file <path|->] [--priority <0-4>] [--estimate <n>] [--due-date <YYYY-MM-DD|none>] [--assignee <id|none>] [--label <name|id>] [--state <name|id>] [--cycle <id|none>] [--project <name|id|none>] [--project-milestone <id|none>|--milestone <id|none>] [--parent <identifier|none>] [--json]",
     "layer": "curated",
     "resource": "issue",
     "operation": "update",
@@ -101,6 +107,7 @@
   },
   {
     "commandPath": "linearctl issue close",
+    "usage": "linearctl issue close <identifier> [--state <name>] [--json]",
     "layer": "curated",
     "resource": "issue",
     "operation": "close",
@@ -117,6 +124,7 @@
   },
   {
     "commandPath": "linearctl issue delete",
+    "usage": "linearctl issue delete <identifier> [--json]",
     "layer": "curated",
     "resource": "issue",
     "operation": "delete",
@@ -133,6 +141,7 @@
   },
   {
     "commandPath": "linearctl issue assign",
+    "usage": "linearctl issue assign <identifier> <assignee-id> [--json]",
     "layer": "curated",
     "resource": "issue",
     "operation": "assign",
@@ -149,6 +158,7 @@
   },
   {
     "commandPath": "linearctl issue comment",
+    "usage": "linearctl issue comment <identifier> (--body <text>|--body-file <path|->) [--json]",
     "layer": "curated",
     "resource": "issue",
     "operation": "comment",
@@ -165,6 +175,7 @@
   },
   {
     "commandPath": "linearctl issue attach-slack",
+    "usage": "linearctl issue attach-slack <identifier> --url <slack-url> [--sync] [--title <text>] [--json]",
     "layer": "curated",
     "resource": "issue",
     "operation": "attach-slack",
@@ -181,6 +192,7 @@
   },
   {
     "commandPath": "linearctl issue bulk-update",
+    "usage": "linearctl issue bulk-update --ids <id1,id2,...> [--state <name|id>] [--assignee <id|none>] [--priority <0-4>] [--estimate <n>] [--due-date <YYYY-MM-DD|none>] [--label <id>] [--cycle <id|none>] [--project-milestone <id|none>|--milestone <id|none>] [--json]",
     "layer": "curated",
     "resource": "issue",
     "operation": "bulk-update",
@@ -197,6 +209,7 @@
   },
   {
     "commandPath": "linearctl issue bulk-close",
+    "usage": "linearctl issue bulk-close --ids <id1,id2,...> [--state <name|id>] [--json]",
     "layer": "curated",
     "resource": "issue",
     "operation": "bulk-close",
@@ -213,6 +226,7 @@
   },
   {
     "commandPath": "linearctl issue bulk-archive",
+    "usage": "linearctl issue bulk-archive --ids <id1,id2,...> [--json]",
     "layer": "curated",
     "resource": "issue",
     "operation": "bulk-archive",
@@ -229,6 +243,7 @@
   },
   {
     "commandPath": "linearctl issue bulk-delete",
+    "usage": "linearctl issue bulk-delete --ids <id1,id2,...> (--yes|--confirm) [--json]",
     "layer": "curated",
     "resource": "issue",
     "operation": "bulk-delete",
@@ -245,6 +260,7 @@
   },
   {
     "commandPath": "linearctl issue bulk-assign",
+    "usage": "linearctl issue bulk-assign --ids <id1,id2,...> --assignee <id> [--json]",
     "layer": "curated",
     "resource": "issue",
     "operation": "bulk-assign",
@@ -261,6 +277,7 @@
   },
   {
     "commandPath": "linearctl relation list",
+    "usage": "linearctl relation list <issue> [--all] [--max <n>] [--json]",
     "layer": "curated",
     "resource": "relation",
     "operation": "list",
@@ -277,6 +294,7 @@
   },
   {
     "commandPath": "linearctl relation create",
+    "usage": "linearctl relation create --issue <issue> --related <issue> --type <blocks|duplicate|related|similar> [--json]",
     "layer": "curated",
     "resource": "relation",
     "operation": "create",
@@ -293,6 +311,7 @@
   },
   {
     "commandPath": "linearctl relation delete",
+    "usage": "linearctl relation delete <relation-id> [--json]",
     "layer": "curated",
     "resource": "relation",
     "operation": "delete",
@@ -309,6 +328,7 @@
   },
   {
     "commandPath": "linearctl project get",
+    "usage": "linearctl project get <name|id> [--json]",
     "layer": "curated",
     "resource": "project",
     "operation": "get",
@@ -325,6 +345,7 @@
   },
   {
     "commandPath": "linearctl project list",
+    "usage": "linearctl project list [--query <text>|--search <text>|--name <text>] [--team <id>] [--state <status-type> ...] [--all-teams] [--json]",
     "layer": "curated",
     "resource": "project",
     "operation": "list",
@@ -341,6 +362,7 @@
   },
   {
     "commandPath": "linearctl project create",
+    "usage": "linearctl project create --name <name> [--description <text>|--description-file <path|->] [--content <text>|--content-file <path|->] [--team <id>] [--lead <user>] [--status <id|name|type>|--state <name|type>] [--start-date <date>] [--target-date <date>] [--json]",
     "layer": "curated",
     "resource": "project",
     "operation": "create",
@@ -357,6 +379,7 @@
   },
   {
     "commandPath": "linearctl project update",
+    "usage": "linearctl project update <id> [--name ...] [--description <text>|--description-file <path|->] [--content <text>|--content-file <path|->] [--status <name|type|id>|--state <name|type>] [--lead <user>] [--start-date <date>] [--target-date <date>] [--json]",
     "layer": "curated",
     "resource": "project",
     "operation": "update",
@@ -373,6 +396,7 @@
   },
   {
     "commandPath": "linearctl project create-with-issues",
+    "usage": "linearctl project create-with-issues --name <name> --team <id> --issues-json <json> [--description <text>|--description-file <path|->] [--content <text>|--content-file <path|->] [--lead <user>] [--status <id|name|type>|--state <name|type>] [--start-date <date>] [--target-date <date>] [--json]",
     "layer": "curated",
     "resource": "project",
     "operation": "create-with-issues",
@@ -389,6 +413,7 @@
   },
   {
     "commandPath": "linearctl project delete",
+    "usage": "linearctl project delete <id> [--json]",
     "layer": "curated",
     "resource": "project",
     "operation": "delete",
@@ -405,6 +430,7 @@
   },
   {
     "commandPath": "linearctl cycle get",
+    "usage": "linearctl cycle get <id> [--json]",
     "layer": "curated",
     "resource": "cycle",
     "operation": "get",
@@ -421,6 +447,7 @@
   },
   {
     "commandPath": "linearctl cycle list",
+    "usage": "linearctl cycle list [--team <id>] [--all-teams] [--json]",
     "layer": "curated",
     "resource": "cycle",
     "operation": "list",
@@ -437,6 +464,7 @@
   },
   {
     "commandPath": "linearctl cycle current",
+    "usage": "linearctl cycle current [--team <id>] [--json]",
     "layer": "curated",
     "resource": "cycle",
     "operation": "current",
@@ -453,6 +481,7 @@
   },
   {
     "commandPath": "linearctl cycle create",
+    "usage": "linearctl cycle create --team <id> [--name ...] [--starts-at ...] [--ends-at ...] [--json]",
     "layer": "curated",
     "resource": "cycle",
     "operation": "create",
@@ -469,6 +498,7 @@
   },
   {
     "commandPath": "linearctl cycle update",
+    "usage": "linearctl cycle update <id> [--name ...] [--starts-at ...] [--ends-at ...] [--json]",
     "layer": "curated",
     "resource": "cycle",
     "operation": "update",
@@ -485,6 +515,7 @@
   },
   {
     "commandPath": "linearctl cycle archive",
+    "usage": "linearctl cycle archive <id> [--json]",
     "layer": "curated",
     "resource": "cycle",
     "operation": "archive",
@@ -501,6 +532,7 @@
   },
   {
     "commandPath": "linearctl cycle delete",
+    "usage": "linearctl cycle delete <id> [--json]",
     "layer": "curated",
     "resource": "cycle",
     "operation": "delete",
@@ -517,6 +549,7 @@
   },
   {
     "commandPath": "linearctl team get",
+    "usage": "linearctl team get <id-or-key-or-name> [--set-default] [--json]",
     "layer": "curated",
     "resource": "team",
     "operation": "get",
@@ -533,6 +566,7 @@
   },
   {
     "commandPath": "linearctl team list",
+    "usage": "linearctl team list [--json]",
     "layer": "curated",
     "resource": "team",
     "operation": "list",
@@ -549,6 +583,7 @@
   },
   {
     "commandPath": "linearctl team members",
+    "usage": "linearctl team members <id-or-key-or-name> [--all] [--json]",
     "layer": "curated",
     "resource": "team",
     "operation": "members",
@@ -565,6 +600,7 @@
   },
   {
     "commandPath": "linearctl user get",
+    "usage": "linearctl user get <id|name|displayName|email> [--json]",
     "layer": "curated",
     "resource": "user",
     "operation": "get",
@@ -581,6 +617,7 @@
   },
   {
     "commandPath": "linearctl user me",
+    "usage": "linearctl user me [--json]",
     "layer": "curated",
     "resource": "user",
     "operation": "me",
@@ -597,6 +634,7 @@
   },
   {
     "commandPath": "linearctl user list",
+    "usage": "linearctl user list [--json]",
     "layer": "curated",
     "resource": "user",
     "operation": "list",
@@ -613,6 +651,7 @@
   },
   {
     "commandPath": "linearctl label get",
+    "usage": "linearctl label get <id|name> [--team <id>] [--json]",
     "layer": "curated",
     "resource": "label",
     "operation": "get",
@@ -629,6 +668,7 @@
   },
   {
     "commandPath": "linearctl label list",
+    "usage": "linearctl label list [--team <id>] [--all-teams] [--json]",
     "layer": "curated",
     "resource": "label",
     "operation": "list",
@@ -645,6 +685,7 @@
   },
   {
     "commandPath": "linearctl label create",
+    "usage": "linearctl label create --name <name> [--description ...] [--color ...] [--team <id>] [--parent <name|id>|--group] [--json]",
     "layer": "curated",
     "resource": "label",
     "operation": "create",
@@ -661,6 +702,7 @@
   },
   {
     "commandPath": "linearctl label delete",
+    "usage": "linearctl label delete <id> [--json]",
     "layer": "curated",
     "resource": "label",
     "operation": "delete",
@@ -677,6 +719,7 @@
   },
   {
     "commandPath": "linearctl state get",
+    "usage": "linearctl state get <id|name> [--team <id>] [--json]",
     "layer": "curated",
     "resource": "state",
     "operation": "get",
@@ -693,6 +736,7 @@
   },
   {
     "commandPath": "linearctl state list",
+    "usage": "linearctl state list [--team <id>] [--all-teams] [--json]",
     "layer": "curated",
     "resource": "state",
     "operation": "list",
@@ -709,6 +753,7 @@
   },
   {
     "commandPath": "linearctl state create",
+    "usage": "linearctl state create --name <name> --team <id> --state-type <type> [--color <hex>] [--json]",
     "layer": "curated",
     "resource": "state",
     "operation": "create",
@@ -725,6 +770,7 @@
   },
   {
     "commandPath": "linearctl state archive",
+    "usage": "linearctl state archive <id|name> [--team <id>] [--json]",
     "layer": "curated",
     "resource": "state",
     "operation": "archive",
@@ -741,6 +787,7 @@
   },
   {
     "commandPath": "linearctl state delete",
+    "usage": "linearctl state delete <id|name> [--team <id>] [--json]",
     "layer": "curated",
     "resource": "state",
     "operation": "delete",
@@ -757,6 +804,7 @@
   },
   {
     "commandPath": "linearctl project-status list",
+    "usage": "linearctl project-status list [--json]",
     "layer": "curated",
     "resource": "project-status",
     "operation": "list",
@@ -773,6 +821,7 @@
   },
   {
     "commandPath": "linearctl project-status get",
+    "usage": "linearctl project-status get <id> [--json]",
     "layer": "curated",
     "resource": "project-status",
     "operation": "get",
@@ -789,6 +838,7 @@
   },
   {
     "commandPath": "linearctl project-status create",
+    "usage": "linearctl project-status create --name <name> --status-type <type> [--json]",
     "layer": "curated",
     "resource": "project-status",
     "operation": "create",
@@ -805,6 +855,7 @@
   },
   {
     "commandPath": "linearctl project-status delete",
+    "usage": "linearctl project-status delete <id> [--json]",
     "layer": "curated",
     "resource": "project-status",
     "operation": "delete",
@@ -821,6 +872,7 @@
   },
   {
     "commandPath": "linearctl comment list",
+    "usage": "linearctl comment list (<issue>|--issue <id>) [--json]",
     "layer": "curated",
     "resource": "comment",
     "operation": "list",
@@ -837,6 +889,7 @@
   },
   {
     "commandPath": "linearctl comment create",
+    "usage": "linearctl comment create --issue <id> (--body <text>|--body-file <path|->) [--json]",
     "layer": "curated",
     "resource": "comment",
     "operation": "create",
@@ -853,6 +906,7 @@
   },
   {
     "commandPath": "linearctl comment update",
+    "usage": "linearctl comment update <id> (--body <text>|--body-file <path|->) [--json]",
     "layer": "curated",
     "resource": "comment",
     "operation": "update",
@@ -869,6 +923,7 @@
   },
   {
     "commandPath": "linearctl comment delete",
+    "usage": "linearctl comment delete <id> [--json]",
     "layer": "curated",
     "resource": "comment",
     "operation": "delete",
@@ -885,6 +940,7 @@
   },
   {
     "commandPath": "linearctl attachment list",
+    "usage": "linearctl attachment list --issue <id> [--json]",
     "layer": "curated",
     "resource": "attachment",
     "operation": "list",
@@ -901,6 +957,7 @@
   },
   {
     "commandPath": "linearctl attachment create",
+    "usage": "linearctl attachment create --issue <id> --url <url> --title <title> [--json]",
     "layer": "curated",
     "resource": "attachment",
     "operation": "create",
@@ -917,6 +974,7 @@
   },
   {
     "commandPath": "linearctl attachment delete",
+    "usage": "linearctl attachment delete <id> [--json]",
     "layer": "curated",
     "resource": "attachment",
     "operation": "delete",
@@ -933,6 +991,7 @@
   },
   {
     "commandPath": "linearctl file upload",
+    "usage": "linearctl file upload <path> [--issue <id>] [--json]",
     "layer": "curated",
     "resource": "file",
     "operation": "upload",
@@ -949,6 +1008,7 @@
   },
   {
     "commandPath": "linearctl file url",
+    "usage": "linearctl file url <attachment-id> [--expires-in <seconds>] [--json]",
     "layer": "curated",
     "resource": "file",
     "operation": "url",
@@ -965,6 +1025,7 @@
   },
   {
     "commandPath": "linearctl file download",
+    "usage": "linearctl file download <url> [--output <path>] [--json]",
     "layer": "curated",
     "resource": "file",
     "operation": "download",
@@ -981,6 +1042,7 @@
   },
   {
     "commandPath": "linearctl auth login",
+    "usage": "linearctl auth login --profile <name> --api-key-env <ENV>",
     "layer": "curated",
     "resource": "auth",
     "operation": "login",
@@ -997,6 +1059,7 @@
   },
   {
     "commandPath": "linearctl auth logout",
+    "usage": "linearctl auth logout --profile <name>",
     "layer": "curated",
     "resource": "auth",
     "operation": "logout",
@@ -1013,6 +1076,7 @@
   },
   {
     "commandPath": "linearctl auth status",
+    "usage": "linearctl auth status [--json]",
     "layer": "curated",
     "resource": "auth",
     "operation": "status",
@@ -1029,6 +1093,7 @@
   },
   {
     "commandPath": "linearctl auth switch",
+    "usage": "linearctl auth switch <profile>",
     "layer": "curated",
     "resource": "auth",
     "operation": "switch",
@@ -1045,6 +1110,7 @@
   },
   {
     "commandPath": "linearctl auth whoami",
+    "usage": "linearctl auth whoami [--json]",
     "layer": "curated",
     "resource": "auth",
     "operation": "whoami",
@@ -1061,6 +1127,7 @@
   },
   {
     "commandPath": "linearctl schema version",
+    "usage": "linearctl schema version [--json]",
     "layer": "curated",
     "resource": "schema",
     "operation": "version",
@@ -1077,6 +1144,7 @@
   },
   {
     "commandPath": "linearctl schema pull",
+    "usage": "linearctl schema pull [--json] [--output-dir <path>]  (default: <config-dir>/schema)",
     "layer": "curated",
     "resource": "schema",
     "operation": "pull",
@@ -1093,6 +1161,7 @@
   },
   {
     "commandPath": "linearctl schema check",
+    "usage": "linearctl schema check [--json]",
     "layer": "curated",
     "resource": "schema",
     "operation": "check",
@@ -1109,6 +1178,7 @@
   },
   {
     "commandPath": "linearctl workspace list",
+    "usage": "linearctl workspace list [--json]",
     "layer": "curated",
     "resource": "workspace",
     "operation": "list",
@@ -1125,6 +1195,7 @@
   },
   {
     "commandPath": "linearctl skills install",
+    "usage": "linearctl skills install [--scope project|user] [--json]",
     "layer": "curated",
     "resource": "skills",
     "operation": "install",
@@ -1141,6 +1212,7 @@
   },
   {
     "commandPath": "linearctl skills list",
+    "usage": "linearctl skills list [--json]",
     "layer": "curated",
     "resource": "skills",
     "operation": "list",

@@ -157,3 +157,5 @@ linearctl auth status --config-file /path/to/config --credentials-file /path/to/
 - API keys are read from environment variables or stdin
 - OAuth tokens are stored in the credentials file alongside API keys
 - Profile names are validated against INI-breaking characters
+
+If a Unix credentials file is too permissive, the error reports its absolute path, actual mode, the expected owner-only policy (`0600` recommended), and a copyable `chmod 600 '<path>'` remediation command.

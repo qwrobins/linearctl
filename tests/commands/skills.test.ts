@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, mkdir } from "node:fs/promises";
+import { mkdtemp, readFile, mkdir, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -79,6 +79,60 @@ describe("handleSkillsCommand", () => {
         expect(output).toContain("linearctl-raw-gql");
       } finally {
         spy.mockRestore();
+      }
+    });
+
+    it("reports install paths and whether each known target is up to date", async () => {
+      const tempHome = await mkdtemp(join(tmpdir(), "linearctl-skills-list-home-"));
+      const tempProject = await mkdtemp(join(tmpdir(), "linearctl-skills-list-project-"));
+      const originalHome = process.env.HOME;
+      const originalCwd = process.cwd();
+      process.env.HOME = tempHome;
+      process.chdir(tempProject);
+
+      const currentPath = join(tempHome, ".claude", "skills", "linearctl", "SKILL.md");
+      const stalePath = join(process.cwd(), ".codex", "skills", "linearctl-raw-gql", "SKILL.md");
+      await mkdir(join(currentPath, ".."), { recursive: true });
+      await mkdir(join(stalePath, ".."), { recursive: true });
+      await writeFile(currentPath, EMBEDDED_SKILLS.linearctl!.content, "utf8");
+      await writeFile(stalePath, "stale skill content\n", "utf8");
+
+      const { chunks, spy } = captureStdout();
+
+      try {
+        const code = await handleSkillsCommand(["list"], baseOptions());
+        expect(code).toBe(0);
+
+        const parsed = JSON.parse(chunks.join(""));
+        const linearctl = parsed.find((entry: { name: string }) => entry.name === "linearctl");
+        expect(linearctl.installs).toHaveLength(4);
+        expect(linearctl.installs).toContainEqual({
+          tool: "claude",
+          scope: "user",
+          path: currentPath,
+          installed: true,
+          upToDate: true
+        });
+        expect(linearctl.installs).toContainEqual({
+          tool: "codex",
+          scope: "user",
+          path: join(tempHome, ".codex", "skills", "linearctl", "SKILL.md"),
+          installed: false,
+          upToDate: false
+        });
+
+        const rawGql = parsed.find((entry: { name: string }) => entry.name === "linearctl-raw-gql");
+        expect(rawGql.installs).toContainEqual({
+          tool: "codex",
+          scope: "project",
+          path: stalePath,
+          installed: true,
+          upToDate: false
+        });
+      } finally {
+        spy.mockRestore();
+        process.chdir(originalCwd);
+        process.env.HOME = originalHome;
       }
     });
   });

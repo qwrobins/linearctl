@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Added issue due-date reads, exact list filtering, create/update support, and bulk updates through `--due-date`.
+- Added `--parent` and `--group` to create child labels and label groups.
+- Added install path, presence, and freshness information to `skills list`.
+
+### Changed
+
+- Made `issue update` and `issue bulk-update` `--label` additive so existing labels are preserved.
+- Added a consistent `none` sentinel for clearing nullable issue assignee, cycle, project, milestone, parent, and due-date fields.
+
+### Fixed
+
+- Added unassigned issue filtering and comma-separated multi-state filters to `issue list`.
+- Made Unix credential permission errors report the resolved file path, actual mode, expected policy, and `chmod 600` remediation.
+
 ## [0.8.9] - 2026-08-02
 
 ### Changed

@@ -249,6 +249,7 @@ function toParsedCliArguments(values: Record<string, unknown>, positionals: stri
     ...(typeof values["content-file"] === "string" ? { contentFile: values["content-file"] } : {}),
     ...(typeof values.priority === "string" ? { priority: values.priority } : {}),
     ...(typeof values.estimate === "string" ? { estimate: values.estimate } : {}),
+    ...(typeof values["due-date"] === "string" ? { dueDate: values["due-date"] } : {}),
     ...(typeof values.assignee === "string" ? { assignee: values.assignee } : {}),
     ...(typeof values.ids === "string" ? { ids: values.ids } : {}),
     ...(typeof values.label === "string" ? { label: values.label } : {}),
@@ -302,6 +303,7 @@ function toParsedCliArguments(values: Record<string, unknown>, positionals: stri
     ...(typeof values.parent === "string" ? { parent: values.parent } : {}),
     ...(typeof values.related === "string" ? { related: values.related } : {}),
     ...(typeof values.type === "string" ? { type: values.type } : {}),
+    group: values.group === true,
     noRetry: values["no-retry"] === true,
     ...(typeof values["max-retries"] === "string" ? { maxRetries: parseNonNegativeInt(values["max-retries"], "max-retries") } : {}),
     positionals

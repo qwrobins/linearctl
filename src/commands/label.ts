@@ -26,6 +26,8 @@ export interface LabelCommandOptions {
   description?: string;
   color?: string;
   team?: string;
+  parent?: string;
+  group?: boolean;
   allTeams?: boolean;
   // pagination flags
   all?: boolean;
@@ -43,6 +45,7 @@ interface RawLabel {
   name: string;
   description: string | null;
   color: string;
+  isGroup: boolean;
   parent: { id: string; name: string } | null;
   team: { id: string; key: string; name: string } | null;
   createdAt: string;
@@ -54,6 +57,7 @@ export interface NormalizedLabel {
   name: string;
   description: string | null;
   color: string;
+  isGroup: boolean;
   parent: { id: string; name: string } | null;
   team: { id: string; key: string; name: string } | null;
   createdAt: string;
@@ -66,6 +70,7 @@ fragment CuratedLabel on IssueLabel {
   name
   description
   color
+  isGroup
   parent { id name }
   team { id key name }
   createdAt
@@ -118,6 +123,7 @@ export function normalizeLabel(raw: RawLabel): NormalizedLabel {
     name: raw.name,
     description: raw.description,
     color: raw.color,
+    isGroup: raw.isGroup,
     parent: raw.parent,
     team: raw.team,
     createdAt: raw.createdAt,
@@ -132,6 +138,9 @@ function printHumanLabel(label: NormalizedLabel): void {
   }
   if (label.team !== null) {
     process.stdout.write(`  Team:        ${label.team.name}\n`);
+  }
+  if (label.isGroup) {
+    process.stdout.write("  Group:       true\n");
   }
   if (label.parent !== null) {
     process.stdout.write(`  Parent:      ${label.parent.name}\n`);
@@ -297,6 +306,9 @@ async function handleLabelCreate(options: LabelCommandOptions): Promise<number> 
   if (options.name === undefined) {
     return emitValidationError("--name is required for label create.", options);
   }
+  if (options.group === true && options.parent !== undefined) {
+    return emitValidationError("--group cannot be combined with --parent.", options);
+  }
 
   const input: Record<string, unknown> = {
     name: options.name
@@ -308,13 +320,26 @@ async function handleLabelCreate(options: LabelCommandOptions): Promise<number> 
   if (options.color !== undefined) {
     input.color = options.color;
   }
+  if (options.group === true) {
+    input.isGroup = true;
+  }
 
   const ctx = buildContext(options);
 
   try {
-    if (options.team !== undefined) {
-      const resolverOpts = await ctx.resolverOptions();
-      input.teamId = looksLikeId(options.team) ? options.team : await resolveTeamId(options.team, resolverOpts);
+    const resolverOpts = await ctx.resolverOptions();
+    const teamId = options.team === undefined
+      ? undefined
+      : looksLikeId(options.team)
+        ? options.team
+        : await resolveTeamId(options.team, resolverOpts);
+    if (teamId !== undefined) {
+      input.teamId = teamId;
+    }
+    if (options.parent !== undefined) {
+      input.parentId = looksLikeId(options.parent)
+        ? options.parent
+        : await resolveLabelId(options.parent, teamId, resolverOpts);
     }
 
     if (options.dryRun === true) {

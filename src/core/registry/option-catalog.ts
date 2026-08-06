@@ -42,6 +42,7 @@ export const OPTION_CATALOG: Record<string, OptionSpec> = {
   "content-file": { type: "string" },
   priority: { type: "string" },
   estimate: { type: "string" },
+  "due-date": { type: "string" },
   assignee: { type: "string" },
   label: { type: "string" },
   state: { type: "string", multiple: true },
@@ -101,6 +102,7 @@ export const OPTION_CATALOG: Record<string, OptionSpec> = {
   parent: { type: "string" },
   related: { type: "string" },
   type: { type: "string" },
+  group: { type: "boolean" },
 };
 
 /** Reusable option groups that commands compose from */

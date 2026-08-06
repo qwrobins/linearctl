@@ -40,6 +40,7 @@ function deriveCuratedCommandMetadata(): CommandMetadata[] {
 
       metadata.push({
         commandPath: `linearctl ${command.name} ${operation}`,
+        usage: command.subcommands[operation]!.usage,
         layer: "curated",
         resource: command.name,
         operation,

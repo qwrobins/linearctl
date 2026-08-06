@@ -1,4 +1,4 @@
-import { writeFile, mkdir } from "node:fs/promises";
+import { writeFile, mkdir, readFile } from "node:fs/promises";
 import { createInterface } from "node:readline";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
@@ -28,6 +28,15 @@ interface SkillInstallResult {
 interface SkillListEntry {
   name: string;
   filename: string;
+  installs: SkillInstallStatus[];
+}
+
+interface SkillInstallStatus {
+  tool: string;
+  scope: string;
+  path: string;
+  installed: boolean;
+  upToDate: boolean;
 }
 
 function isTty(stream?: NodeJS.ReadableStream): boolean {
@@ -37,28 +46,11 @@ function isTty(stream?: NodeJS.ReadableStream): boolean {
 
 function discoverAgentTargets(scope: "user" | "project"): AgentTarget[] {
   const home = process.env.HOME ?? homedir();
-  const cwd = process.cwd();
-  const targets: AgentTarget[] = [];
-
-  if (scope === "project") {
-    targets.push({ agent: "claude", scope: "project", displayName: "claude (project)", dir: join(cwd, ".claude", "skills") });
-    targets.push({ agent: "codex", scope: "project", displayName: "codex (project)", dir: join(cwd, ".codex", "skills") });
-  } else {
-    const claudeExists = existsSync(join(home, ".claude"));
-    const codexExists = existsSync(join(home, ".codex"));
-
-    if (claudeExists) {
-      targets.push({ agent: "claude", scope: "user", displayName: "claude (user)", dir: join(home, ".claude", "skills") });
-    }
-    if (codexExists) {
-      targets.push({ agent: "codex", scope: "user", displayName: "codex (user)", dir: join(home, ".codex", "skills") });
-    }
-
-    if (targets.length === 0) {
-      targets.push({ agent: "claude", scope: "user", displayName: "claude (user)", dir: join(home, ".claude", "skills") });
-      targets.push({ agent: "codex", scope: "user", displayName: "codex (user)", dir: join(home, ".codex", "skills") });
-    }
-  }
+  const knownTargets = knownAgentTargets().filter((target) => target.scope === scope);
+  const detectedTargets = scope === "project"
+    ? knownTargets
+    : knownTargets.filter((target) => existsSync(join(home, `.${target.agent}`)));
+  const targets = detectedTargets.length > 0 ? detectedTargets : knownTargets;
 
   // Deduplicate by resolved path
   const seen = new Set<string>();
@@ -67,6 +59,46 @@ function discoverAgentTargets(scope: "user" | "project"): AgentTarget[] {
     seen.add(t.dir);
     return true;
   });
+}
+
+function knownAgentTargets(): AgentTarget[] {
+  const home = process.env.HOME ?? homedir();
+  const cwd = process.cwd();
+  return [
+    { agent: "claude", scope: "user", displayName: "claude (user)", dir: join(home, ".claude", "skills") },
+    { agent: "codex", scope: "user", displayName: "codex (user)", dir: join(home, ".codex", "skills") },
+    { agent: "claude", scope: "project", displayName: "claude (project)", dir: join(cwd, ".claude", "skills") },
+    { agent: "codex", scope: "project", displayName: "codex (project)", dir: join(cwd, ".codex", "skills") }
+  ];
+}
+
+async function inspectSkillInstall(
+  name: string,
+  bundledContent: string,
+  target: AgentTarget
+): Promise<SkillInstallStatus> {
+  const path = join(target.dir, name, "SKILL.md");
+  try {
+    const installedContent = await readFile(path, "utf8");
+    return {
+      tool: target.agent,
+      scope: target.scope,
+      path,
+      installed: true,
+      upToDate: installedContent === bundledContent
+    };
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+      throw error;
+    }
+    return {
+      tool: target.agent,
+      scope: target.scope,
+      path,
+      installed: false,
+      upToDate: false
+    };
+  }
 }
 
 async function promptScope(stdinStream?: NodeJS.ReadableStream): Promise<"user" | "project"> {
@@ -148,10 +180,16 @@ async function handleSkillsInstall(options: SkillsCommandOptions): Promise<numbe
 }
 
 async function handleSkillsList(options: SkillsCommandOptions): Promise<number> {
-  const entries: SkillListEntry[] = Object.entries(EMBEDDED_SKILLS).map(([name, skill]) => ({
-    name,
-    filename: skill.filename
-  }));
+  const targets = knownAgentTargets();
+  const entries: SkillListEntry[] = await Promise.all(
+    Object.entries(EMBEDDED_SKILLS).map(async ([name, skill]) => ({
+      name,
+      filename: skill.filename,
+      installs: await Promise.all(
+        targets.map((target) => inspectSkillInstall(name, skill.content, target))
+      )
+    }))
+  );
 
   if (options.jsonEnvelope) {
     process.stdout.write(`${JSON.stringify({ ok: true, data: entries }, null, 2)}\n`);
@@ -161,6 +199,12 @@ async function handleSkillsList(options: SkillsCommandOptions): Promise<number> 
     process.stdout.write("Available skills:\n");
     for (const entry of entries) {
       process.stdout.write(`  ${entry.name} (${entry.filename})\n`);
+      for (const install of entry.installs) {
+        const status = install.installed
+          ? `installed, ${install.upToDate ? "up to date" : "out of date"}`
+          : "not installed";
+        process.stdout.write(`    ${install.tool} (${install.scope}): ${status} — ${install.path}\n`);
+      }
     }
   }
 

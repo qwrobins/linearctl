@@ -32,6 +32,12 @@ describe("curated command taxonomy", () => {
     expect(findCuratedCommand("linearctl project list")?.inputMode).toBe("flags");
   });
 
+  it("derives discoverable usage strings from the command registry", () => {
+    expect(findCuratedCommand("linearctl issue create")?.usage).toContain("--due-date <YYYY-MM-DD>");
+    expect(findCuratedCommand("linearctl issue list")?.usage).toContain("--assignee <id|none>");
+    expect(findCuratedCommand("linearctl label create")?.usage).toContain("--parent <name|id>|--group");
+  });
+
   it("marks destructive and confirmation-requiring commands explicitly", () => {
     expect(findCuratedCommand("linearctl comment delete")?.safety).toBe("destructive");
     expect(findCuratedCommand("linearctl attachment delete")?.safety).toBe("destructive");
