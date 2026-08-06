@@ -61,6 +61,7 @@ export interface ParsedCliArguments {
   contentFile?: string;
   priority?: string;
   estimate?: string;
+  dueDate?: string;
   assignee?: string;
   label?: string;
   state?: string;
@@ -115,6 +116,7 @@ export interface ParsedCliArguments {
   parent?: string;
   related?: string;
   type?: string;
+  group: boolean;
   noRetry: boolean;
   maxRetries?: number;
   positionals: string[];

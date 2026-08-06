@@ -1,5 +1,6 @@
 import { open, readFile } from "node:fs/promises";
 import type { FileHandle } from "node:fs/promises";
+import { resolve } from "node:path";
 import type { IniDocument } from "../config/ini.js";
 import { parseIni, stringifyIni } from "../config/ini.js";
 import { writeFileAtomically } from "../config/atomic-file.js";
@@ -166,7 +167,7 @@ export async function loadCredentialsFile(
       if (process.platform === "win32") {
         await assertWindowsCredentialsFileAcl(credentialsFile);
       } else {
-        await assertCredentialsFileHandlePermissions(handle);
+        await assertCredentialsFileHandlePermissions(handle, credentialsFile);
       }
       return parseCredentials(parseIni(await handle.readFile({ encoding: "utf8" })));
     } finally {
@@ -195,18 +196,32 @@ export async function assertCredentialsFilePermissions(credentialsFile: string):
 
   const handle = await open(credentialsFile, "r");
   try {
-    await assertCredentialsFileHandlePermissions(handle);
+    await assertCredentialsFileHandlePermissions(handle, credentialsFile);
   } finally {
     await handle.close();
   }
 }
 
-export async function assertCredentialsFileHandlePermissions(handle: FileHandle): Promise<void> {
+export async function assertCredentialsFileHandlePermissions(
+  handle: FileHandle,
+  credentialsFile?: string
+): Promise<void> {
   const mode = (await handle.stat()).mode;
 
   if ((mode & 0o077) !== 0) {
-    throw new Error("credentials file permissions must not allow group or other access");
+    const displayedPath = credentialsFile === undefined ? "<open file>" : resolve(credentialsFile);
+    const displayedMode = (mode & 0o777).toString(8).padStart(4, "0");
+    const remediation = credentialsFile === undefined
+      ? ""
+      : ` Fix with: chmod 600 ${quoteShellArgument(displayedPath)}`;
+    throw new Error(
+      `credentials file ${displayedPath} has mode ${displayedMode}; expected an owner-only mode such as 0600 (no group or other access).${remediation}`
+    );
   }
+}
+
+function quoteShellArgument(value: string): string {
+  return `'${value.replaceAll("'", `'\\''`)}'`;
 }
 
 function normalizeAndValidateProfileName(profileName: string): string {

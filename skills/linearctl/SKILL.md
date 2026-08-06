@@ -33,11 +33,11 @@ Raw GraphQL should not be used merely because it is possible. It is the fallback
 ## Available curated commands
 
 ### Issues
-- `linearctl issue get <identifier> --json` / `linearctl issue view <identifier> --json` — fetch a single issue by identifier (e.g. INF-2975) or UUID; JSON includes `projectMilestone`, `trashed`, and `archivedAt`, so write/delete verification must check those fields instead of assuming exit 0 means live
-- `linearctl issue list [--search <text>|--query <text>] [--state <name> ...] [--status <name>] [--assignee <name|displayName|email|"me"|id>] [--team <id|key|name>] [--label <name|id>] [--priority <0-4>] [--cycle <id>] [--project <name|id>] [--created-after <date>] [--updated-after <date>] [--completed-after <date>] [--order-by <field>] [--all-teams] [--all] [--max <n>|--limit <n>] [--json]` — list issues with filters; repeated `--state` values are unioned; `--status` aliases `--state`; `--search`/`--query` routes to full-text search and composes with the other filters; friendly names resolve case-insensitively
+- `linearctl issue get <identifier> --json` / `linearctl issue view <identifier> --json` — fetch a single issue by identifier (e.g. INF-2975) or UUID; JSON includes `dueDate`, `projectMilestone`, `trashed`, and `archivedAt`, so write/delete verification must check those fields instead of assuming exit 0 means live
+- `linearctl issue list [--search <text>|--query <text>] [--state <name>[,<name>...] ...] [--status <name>] [--assignee <name|displayName|email|"me"|id|none>] [--team <id|key|name>] [--label <name|id>] [--priority <0-4>] [--due-date <YYYY-MM-DD|none>] [--cycle <id>] [--project <name|id>] [--created-after <date>] [--updated-after <date>] [--completed-after <date>] [--order-by <field>] [--all-teams] [--all] [--max <n>|--limit <n>] [--json]` — list issues with filters; repeated or comma-separated `--state` values are unioned; `--assignee none`/`unassigned` finds unassigned work; `--due-date none` finds issues without a due date; `--status` aliases `--state`; `--search`/`--query` routes to full-text search and composes with the other filters; friendly names resolve case-insensitively
 - `linearctl issue search [<text>|--query <text>] [--team <id|key|name>] [--all] --json` — full-text search across issues; profile default teams are not applied, so pass `--team` to scope explicitly
-- `linearctl issue create --title <title> --team <id> [--description <text>|--description-file <path|->] [--priority <0-4>] [--estimate <n>] [--assignee <id>] [--label <id>] [--state <id>] [--cycle <id>] [--project <name|id>] [--project-milestone <id>|--milestone <id>] --json` — create an issue
-- `linearctl issue update <identifier> [--title <text>] [--description <text>|--description-file <path|->] [--priority <0-4>] [--estimate <n>] [--assignee <id>] [--label <name|id>] [--state <id>] [--cycle <id>] [--project <name|id>] [--project-milestone <id>|--milestone <id>] --json` — update an issue
+- `linearctl issue create --title <title> --team <id> [--description <text>|--description-file <path|->] [--priority <0-4>] [--estimate <n>] [--due-date <YYYY-MM-DD>] [--assignee <id>] [--label <id>] [--state <id>] [--cycle <id>] [--project <name|id>] [--project-milestone <id>|--milestone <id>] --json` — create an issue
+- `linearctl issue update <identifier> [--title <text>] [--description <text>|--description-file <path|->] [--priority <0-4>] [--estimate <n>] [--due-date <YYYY-MM-DD|none>] [--assignee <id|none>] [--label <name|id>] [--state <id>] [--cycle <id|none>] [--project <name|id|none>] [--project-milestone <id|none>|--milestone <id|none>] [--parent <identifier|none>] --json` — update an issue; `none` clears nullable fields and `--label` adds without replacing existing labels
 - `linearctl issue close <identifier> [--state <name>] --json` — close an issue (transitions to a terminal completed/canceled workflow state; defaults to "Done", use --state to pick another)
 - `linearctl issue delete <identifier> --json` — delete/trash an issue by identifier or UUID
 - `linearctl issue assign <identifier> <assignee-id> --json` — assign an issue
@@ -50,7 +50,7 @@ Raw GraphQL should not be used merely because it is possible. It is the fallback
 - `linearctl relation delete <relation-id> --json` — delete a relation
 
 ### Bulk operations
-- `linearctl issue bulk-update --ids <id1,id2,...> [--state <id>] [--assignee <id>] [--priority <0-4>] [--estimate <n>] [--label <id>] [--cycle <id>] [--project-milestone <id>|--milestone <id>] --json`
+- `linearctl issue bulk-update --ids <id1,id2,...> [--state <id>] [--assignee <id|none>] [--priority <0-4>] [--estimate <n>] [--due-date <YYYY-MM-DD|none>] [--label <id>] [--cycle <id|none>] [--project-milestone <id|none>|--milestone <id|none>] --json` — `--label` is additive
 - `linearctl issue bulk-close --ids <id1,id2,...> [--state <name|id>] --json` — transition issues to a completed/canceled workflow state, matching `issue close`
 - `linearctl issue bulk-archive --ids <id1,id2,...> --json` — archive multiple issues
 - `linearctl issue bulk-delete --ids <id1,id2,...> --yes|--confirm --json` — delete/trash multiple issues; `--confirm` is accepted as an alias for `--yes`
@@ -92,7 +92,7 @@ Raw GraphQL should not be used merely because it is possible. It is the fallback
 ### Labels
 - `linearctl label get <id> --json`
 - `linearctl label list [--team <id>] [--all-teams] --json`
-- `linearctl label create --name <name> [--description <text>] [--color <hex>] [--team <id>] --json`
+- `linearctl label create --name <name> [--description <text>] [--color <hex>] [--team <id>] [--parent <name|id>|--group] --json` — create a group with `--group`, or a child label under a group with `--parent`
 - `linearctl label delete <id> --json`
 
 ### Comments
@@ -121,7 +121,7 @@ Raw GraphQL should not be used merely because it is possible. It is the fallback
 
 ### Skills
 - `linearctl skills install [--json]` — auto-detect agents and install skill files
-- `linearctl skills list --json` — list available embedded skills
+- `linearctl skills list --json` — list embedded skills plus install status, paths, and `upToDate` state for Claude Code and Codex at user and project scope; uninspectable targets report a per-target `error` without hiding other results
 
 ### Schema
 - `linearctl schema version --json`
@@ -178,6 +178,7 @@ Curated commands resolve friendly names to IDs automatically:
 - `--assignee "me"` resolves to the current user's ID
 - `--assignee "aborges"` resolves by Linear displayName
 - `--assignee "quentin@example.com"` resolves by email
+- `--assignee none` / `unassigned` filters for no assignee on `issue list` and clears the assignee on `issue update`
 - `--state "In Progress"` resolves to the workflow state ID (team-scoped)
 - `--label "bug"` resolves to the label ID (team-scoped when possible)
 - `--project "Terraform Tech Debt"` resolves by exact project name, unique prefix, or unique substring

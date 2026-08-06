@@ -87,6 +87,7 @@ function makeRawIssue(overrides?: Partial<Record<string, unknown>>) {
     title: "Fix login",
     description: "Login is broken on mobile",
     priority: 2,
+    dueDate: null,
     state: { id: "state-1", name: "In Progress", type: "started" },
     team: { id: "team-1", key: "INF", name: "Infrastructure" },
     assignee: { id: "user-1", name: "Quentin", email: "quentin@example.com" },
@@ -151,6 +152,12 @@ describe("normalizeIssue", () => {
     const normalized = normalizeIssue(raw as Parameters<typeof normalizeIssue>[0]);
     expect(normalized.projectMilestone).toBeNull();
   });
+
+  it("preserves due dates", () => {
+    const raw = makeRawIssue({ dueDate: "2026-08-18" });
+    const normalized = normalizeIssue(raw as Parameters<typeof normalizeIssue>[0]);
+    expect(normalized.dueDate).toBe("2026-08-18");
+  });
 });
 
 describe("handleIssueCommand — issue get", () => {
@@ -180,6 +187,7 @@ describe("handleIssueCommand — issue get", () => {
       expect(parsed.parent).toBeNull();
       expect(parsed.trashed).toBe(false);
       expect(parsed.archivedAt).toBeNull();
+      expect(parsed.dueDate).toBeNull();
     } finally {
       output.restore();
     }
@@ -417,6 +425,7 @@ describe("handleIssueCommand — issue create", () => {
         team: "a0000000-0000-0000-0000-000000000001",
         description: "Fix the thing",
         priority: "2",
+        dueDate: "2026-08-18",
         assignee: "b0000000-0000-0000-0000-000000000001",
         label: "c0000000-0000-0000-0000-000000000001",
         state: "d0000000-0000-0000-0000-000000000001",
@@ -429,10 +438,31 @@ describe("handleIssueCommand — issue create", () => {
       const input = fetchBody.variables.input;
       expect(input.description).toBe("Fix the thing");
       expect(input.priority).toBe(2);
+      expect(input.dueDate).toBe("2026-08-18");
       expect(input.assigneeId).toBe("b0000000-0000-0000-0000-000000000001");
       expect(input.labelIds).toEqual(["c0000000-0000-0000-0000-000000000001"]);
       expect(input.stateId).toBe("d0000000-0000-0000-0000-000000000001");
       expect(input.projectMilestoneId).toBe("e0000000-0000-0000-0000-000000000001");
+    } finally {
+      output.restore();
+    }
+  });
+
+  it("rejects invalid --due-date values", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-issue-"));
+    const paths = await writeProfileFiles(directory);
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleIssueCommand(["create"], {
+        ...baseOptions(paths),
+        title: "Bug fix",
+        team: "a0000000-0000-0000-0000-000000000001",
+        dueDate: "2026-02-30"
+      });
+
+      expect(exitCode).toBe(5);
+      expect(output.stderr.join("")).toContain("YYYY-MM-DD");
     } finally {
       output.restore();
     }
@@ -797,6 +827,101 @@ describe("handleIssueCommand — issue list", () => {
         { state: { name: { eqIgnoreCase: "In Progress" } } },
         { state: { name: { eqIgnoreCase: "Block/Waiting" } } }
       ]);
+    } finally {
+      output.restore();
+    }
+  });
+
+  it("accepts comma-separated and repeated --state filters as one union", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-issue-"));
+    const paths = await writeProfileFiles(directory);
+    const fetchSpy = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
+      new Response(JSON.stringify({
+        data: {
+          issues: {
+            nodes: [makeRawIssue()],
+            pageInfo: { hasNextPage: false, endCursor: null }
+          }
+        }
+      }), { status: 200 })
+    );
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleIssueCommand(["list"], {
+        ...baseOptions(paths),
+        states: ["Selected for Development, Backlog", "Triage"],
+        fetchImpl: fetchSpy as unknown as FetchLike
+      });
+
+      expect(exitCode).toBe(0);
+      const request = JSON.parse(String(fetchSpy.mock.calls[0]?.[1]?.body ?? "{}"));
+      expect(request.variables.filter.or).toEqual([
+        { state: { name: { eqIgnoreCase: "Selected for Development" } } },
+        { state: { name: { eqIgnoreCase: "Backlog" } } },
+        { state: { name: { eqIgnoreCase: "Triage" } } }
+      ]);
+    } finally {
+      output.restore();
+    }
+  });
+
+  it("filters for unassigned issues with --assignee none", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-issue-"));
+    const paths = await writeProfileFiles(directory);
+    const fetchSpy = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
+      new Response(JSON.stringify({
+        data: {
+          issues: {
+            nodes: [makeRawIssue({ assignee: null })],
+            pageInfo: { hasNextPage: false, endCursor: null }
+          }
+        }
+      }), { status: 200 })
+    );
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleIssueCommand(["list"], {
+        ...baseOptions(paths),
+        assignee: "none",
+        fetchImpl: fetchSpy as unknown as FetchLike
+      });
+
+      expect(exitCode).toBe(0);
+      const request = JSON.parse(String(fetchSpy.mock.calls[0]?.[1]?.body ?? "{}"));
+      expect(request.variables.filter.assignee).toEqual({ null: true });
+    } finally {
+      output.restore();
+    }
+  });
+
+  it("filters issues by exact due date and includes dueDate in list JSON", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-issue-"));
+    const paths = await writeProfileFiles(directory);
+    const fetchSpy = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
+      new Response(JSON.stringify({
+        data: {
+          issues: {
+            nodes: [makeRawIssue({ dueDate: "2026-08-18" })],
+            pageInfo: { hasNextPage: false, endCursor: null }
+          }
+        }
+      }), { status: 200 })
+    );
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleIssueCommand(["list"], {
+        ...baseOptions(paths),
+        dueDate: "2026-08-18",
+        fetchImpl: fetchSpy as unknown as FetchLike
+      });
+
+      expect(exitCode).toBe(0);
+      const request = JSON.parse(String(fetchSpy.mock.calls[0]?.[1]?.body ?? "{}"));
+      expect(request.variables.filter.dueDate).toEqual({ eq: "2026-08-18" });
+      expect(JSON.parse(output.stdout.join(""))[0].dueDate).toBe("2026-08-18");
     } finally {
       output.restore();
     }
@@ -1451,6 +1576,142 @@ describe("handleIssueCommand — issue update", () => {
       output.restore();
     }
   });
+
+  it("sets and returns --due-date", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-issue-"));
+    const paths = await writeProfileFiles(directory);
+    const fetchSpy = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
+      new Response(JSON.stringify({
+        data: {
+          issueUpdate: {
+            success: true,
+            issue: makeRawIssue({ dueDate: "2026-08-18" })
+          }
+        }
+      }), { status: 200 })
+    );
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleIssueCommand(["update", "INF-2975"], {
+        ...baseOptions(paths),
+        dueDate: "2026-08-18",
+        fetchImpl: fetchSpy as unknown as FetchLike
+      });
+
+      expect(exitCode).toBe(0);
+      const request = JSON.parse(String(fetchSpy.mock.calls[0]?.[1]?.body ?? "{}"));
+      expect(request.variables.input.dueDate).toBe("2026-08-18");
+      expect(JSON.parse(output.stdout.join("")).dueDate).toBe("2026-08-18");
+    } finally {
+      output.restore();
+    }
+  });
+
+  it("clears nullable fields with the none sentinel", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-issue-"));
+    const paths = await writeProfileFiles(directory);
+    const fetchSpy = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
+      new Response(JSON.stringify({
+        data: {
+          issueUpdate: {
+            success: true,
+            issue: makeRawIssue({
+              assignee: null,
+              cycle: null,
+              project: null,
+              projectMilestone: null,
+              parent: null,
+              dueDate: null
+            })
+          }
+        }
+      }), { status: 200 })
+    );
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleIssueCommand(["update", "INF-2975"], {
+        ...baseOptions(paths),
+        assignee: "none",
+        cycle: "none",
+        project: "none",
+        projectMilestone: "none",
+        parent: "none",
+        dueDate: "none",
+        fetchImpl: fetchSpy as unknown as FetchLike
+      });
+
+      expect(exitCode).toBe(0);
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+      const request = JSON.parse(String(fetchSpy.mock.calls[0]?.[1]?.body ?? "{}"));
+      expect(request.variables.input).toMatchObject({
+        assigneeId: null,
+        cycleId: null,
+        projectId: null,
+        projectMilestoneId: null,
+        parentId: null,
+        dueDate: null
+      });
+    } finally {
+      output.restore();
+    }
+  });
+
+  it("adds --label atomically with other fields without replacing existing labels", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-issue-"));
+    const paths = await writeProfileFiles(directory);
+    const labelId = "c0000000-0000-0000-0000-000000000003";
+    const fetchSpy = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const request = JSON.parse(String(init?.body ?? "{}"));
+      expect(request.query).toContain("issueUpdate(");
+      expect(request.variables).toEqual({
+        id: "INF-2975",
+        input: {
+          title: "Updated atomically",
+          addedLabelIds: [labelId]
+        }
+      });
+      expect(request.variables.input).not.toHaveProperty("labelIds");
+      return new Response(JSON.stringify({
+        data: {
+          issueUpdate: {
+            success: true,
+            issue: makeRawIssue({
+              title: "Updated atomically",
+              labels: {
+                nodes: [
+                  { id: "label-1", name: "bug" },
+                  { id: "label-2", name: "mobile" },
+                  { id: labelId, name: "refined" }
+                ]
+              }
+            })
+          }
+        }
+      }), { status: 200 });
+    });
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleIssueCommand(["update", "INF-2975"], {
+        ...baseOptions(paths),
+        title: "Updated atomically",
+        label: labelId,
+        fetchImpl: fetchSpy as unknown as FetchLike
+      });
+
+      expect(exitCode).toBe(0);
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+      expect(JSON.parse(output.stdout.join("")).labels.map((label: { name: string }) => label.name)).toEqual([
+        "bug",
+        "mobile",
+        "refined"
+      ]);
+    } finally {
+      output.restore();
+    }
+  });
 });
 
 describe("handleIssueCommand — missing issue taxonomy", () => {
@@ -2057,6 +2318,81 @@ describe("handleIssueCommand — issue bulk-update", () => {
         const request = JSON.parse(String(call[1]?.body ?? "{}"));
         expect(request.variables.input.projectMilestoneId).toBe("e0000000-0000-0000-0000-000000000001");
       }
+    } finally {
+      output.restore();
+    }
+  });
+
+  it("applies --due-date to every bulk update", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-issue-"));
+    const paths = await writeProfileFiles(directory);
+    const fetchSpy = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
+      new Response(JSON.stringify({
+        data: { issueUpdate: { success: true, issue: makeRawIssue({ dueDate: "2026-08-18" }) } }
+      }), { status: 200 })
+    );
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleIssueCommand(["bulk-update"], {
+        ...baseOptions(paths),
+        ids: "INF-2975,INF-2976",
+        dueDate: "2026-08-18",
+        fetchImpl: fetchSpy as unknown as FetchLike
+      });
+
+      expect(exitCode).toBe(0);
+      expect(fetchSpy).toHaveBeenCalledTimes(2);
+      for (const call of fetchSpy.mock.calls) {
+        const request = JSON.parse(String(call[1]?.body ?? "{}"));
+        expect(request.variables.input.dueDate).toBe("2026-08-18");
+      }
+    } finally {
+      output.restore();
+    }
+  });
+
+  it("adds --label to every issue without sending replacement labelIds", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-issue-"));
+    const paths = await writeProfileFiles(directory);
+    const labelId = "c0000000-0000-0000-0000-000000000003";
+    const fetchSpy = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const request = JSON.parse(String(init?.body ?? "{}"));
+      expect(request.query).toContain("issueUpdate(");
+      expect(request.variables.input.addedLabelIds).toEqual([labelId]);
+      expect(request.variables.input).not.toHaveProperty("labelIds");
+      return new Response(JSON.stringify({
+        data: {
+          issueUpdate: {
+            success: true,
+            issue: makeRawIssue({
+              identifier: request.variables.id,
+              labels: {
+                nodes: [
+                  { id: "label-1", name: "bug" },
+                  { id: labelId, name: "refined" }
+                ]
+              }
+            })
+          }
+        }
+      }), { status: 200 });
+    });
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleIssueCommand(["bulk-update"], {
+        ...baseOptions(paths),
+        ids: "INF-2975,INF-2976",
+        label: labelId,
+        fetchImpl: fetchSpy as unknown as FetchLike
+      });
+
+      expect(exitCode).toBe(0);
+      expect(fetchSpy).toHaveBeenCalledTimes(2);
+      const parsed = JSON.parse(output.stdout.join(""));
+      expect(parsed.succeeded).toHaveLength(2);
+      expect(parsed.succeeded[0].labels.map((label: { name: string }) => label.name)).toEqual(["bug", "refined"]);
     } finally {
       output.restore();
     }

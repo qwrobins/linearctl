@@ -12,6 +12,7 @@ export interface FallbackGuidance {
 
 export interface CommandMetadata {
   commandPath: string;
+  usage: string;
   layer: CommandSourceLayer;
   resource: string;
   operation: string;
@@ -46,6 +47,10 @@ export function assertValidCommandMetadata(command: unknown): asserts command is
 
   if (typeof command.commandPath !== "string") {
     throw new Error("commandPath is required");
+  }
+
+  if (typeof command.usage !== "string" || !command.usage.trim()) {
+    throw new Error(`usage is required for ${command.commandPath}`);
   }
 
   if (typeof command.layer !== "string") {

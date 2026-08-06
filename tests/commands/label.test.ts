@@ -58,6 +58,7 @@ function makeRawLabel(overrides?: Partial<Record<string, unknown>>) {
     name: "bug",
     description: "Something is broken",
     color: "#FF0000",
+    isGroup: false,
     parent: null,
     team: { id: "team-1", key: "INF", name: "Infrastructure" },
     createdAt: "2026-04-09T10:00:00Z",
@@ -89,6 +90,7 @@ describe("normalizeLabel", () => {
     expect(normalized.id).toBe("label-uuid-1");
     expect(normalized.name).toBe("bug");
     expect(normalized.color).toBe("#FF0000");
+    expect(normalized.isGroup).toBe(false);
     expect(normalized.parent).toBeNull();
     expect(normalized.team).toEqual({ id: "team-1", key: "INF", name: "Infrastructure" });
   });
@@ -208,6 +210,112 @@ describe("handleLabelCommand — label create", () => {
 
       expect(exitCode).toBe(5);
       expect(output.stderr.join("")).toContain("--name is required");
+    } finally {
+      output.restore();
+    }
+  });
+
+  it("resolves --parent by name and sends parentId", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-label-"));
+    const paths = await writeProfileFiles(directory);
+    const teamId = "a0000000-0000-0000-0000-000000000001";
+    const parentId = "b0000000-0000-0000-0000-000000000001";
+    const fetchSpy = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const request = JSON.parse(String(init?.body ?? "{}"));
+      if (request.query.includes("ResolveLabel")) {
+        return new Response(JSON.stringify({
+          data: {
+            issueLabels: {
+              nodes: [{ id: parentId, name: "Cost Management", team: { id: teamId, name: "Infrastructure" } }]
+            }
+          }
+        }), { status: 200 });
+      }
+
+      expect(request.query).toContain("LabelCreate");
+      expect(request.variables.input).toMatchObject({
+        name: "AWS",
+        teamId,
+        parentId
+      });
+      return new Response(JSON.stringify({
+        data: {
+          issueLabelCreate: {
+            success: true,
+            issueLabel: makeRawLabel({
+              name: "AWS",
+              parent: { id: parentId, name: "Cost Management" }
+            })
+          }
+        }
+      }), { status: 200 });
+    });
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleLabelCommand(["create"], {
+        ...baseOptions(paths),
+        name: "AWS",
+        team: teamId,
+        parent: "Cost Management",
+        fetchImpl: fetchSpy as unknown as FetchLike
+      });
+
+      expect(exitCode).toBe(0);
+      expect(fetchSpy).toHaveBeenCalledTimes(2);
+      expect(JSON.parse(output.stdout.join("")).parent).toEqual({ id: parentId, name: "Cost Management" });
+    } finally {
+      output.restore();
+    }
+  });
+
+  it("creates label groups with --group", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-label-"));
+    const paths = await writeProfileFiles(directory);
+    const fetchSpy = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const request = JSON.parse(String(init?.body ?? "{}"));
+      expect(request.variables.input).toMatchObject({ name: "Cost Management", isGroup: true });
+      return new Response(JSON.stringify({
+        data: {
+          issueLabelCreate: {
+            success: true,
+            issueLabel: makeRawLabel({ name: "Cost Management", isGroup: true })
+          }
+        }
+      }), { status: 200 });
+    });
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleLabelCommand(["create"], {
+        ...baseOptions(paths),
+        name: "Cost Management",
+        group: true,
+        fetchImpl: fetchSpy as unknown as FetchLike
+      });
+
+      expect(exitCode).toBe(0);
+      expect(JSON.parse(output.stdout.join("")).isGroup).toBe(true);
+    } finally {
+      output.restore();
+    }
+  });
+
+  it("rejects combining --group and --parent", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-label-"));
+    const paths = await writeProfileFiles(directory);
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleLabelCommand(["create"], {
+        ...baseOptions(paths),
+        name: "Nested group",
+        group: true,
+        parent: "Cost Management"
+      });
+
+      expect(exitCode).toBe(5);
+      expect(output.stderr.join("")).toContain("cannot be combined");
     } finally {
       output.restore();
     }

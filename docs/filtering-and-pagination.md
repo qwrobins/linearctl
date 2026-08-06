@@ -52,12 +52,13 @@ Issue list supports these filter flags:
 | Flag | Description | Accepts |
 |---|---|---|
 | `--team <value>` | Filter by team | Name, key (e.g. `INF`), or UUID |
-| `--state <value>` | Filter by workflow state; repeat for a union filter | Name (e.g. `"In Progress"`) or UUID |
+| `--state <value>` | Filter by workflow state; repeat or comma-separate values for a union filter | Name (e.g. `"In Progress"`) or UUID |
 | `--status <value>` | Alias for `--state <value>` | Name (e.g. `"Backlog"`) or UUID |
 | `--search <text>` / `--query <text>` | Full-text issue search | Search text |
-| `--assignee <value>` | Filter by assignee | `"me"`, name, displayName, email, or UUID |
+| `--assignee <value>` | Filter by assignee | `"me"`, name, displayName, email, UUID, or `none`/`unassigned` |
 | `--label <value>` | Filter by label | Name or UUID |
 | `--priority <n>` | Filter by priority | Integer 0-4 (0 = no priority, 1 = urgent, 4 = low) |
+| `--due-date <date>` | Filter by exact due date, or issues without one | `YYYY-MM-DD` or `none` |
 | `--cycle <value>` | Filter by cycle | UUID |
 | `--project <value>` | Filter by project | project name or UUID |
 | `--created-after <date>` | Issues created on or after date | ISO 8601 date (e.g. `2024-01-01`) |
@@ -74,6 +75,9 @@ linearctl issue list --assignee me --state "In Progress" --json
 
 # Issues in either of two states
 linearctl issue list --state "In Progress" --state "Block/Waiting" --json
+
+# The same union using a comma-separated value, limited to unassigned work
+linearctl issue list --state "In Progress,Block/Waiting" --assignee none --json
 
 # High-priority issues on a team
 linearctl issue list --team INF --priority 1 --json
@@ -115,6 +119,7 @@ Curated commands automatically resolve friendly names to Linear UUIDs:
 | `--assignee "me"` | Resolved to the current user's ID |
 | `--assignee "alice"` | Resolved by Linear displayName |
 | `--assignee "alice@example.com"` | Resolved by email |
+| `--assignee none` / `unassigned` | Matches issues whose assignee relation is null |
 | `--state "In Progress"` | Resolved to the workflow state ID (team-scoped) |
 | `--label "bug"` | Resolved to the label ID (team-scoped when possible) |
 | `--project "Terraform Tech Debt"` | Resolved by exact name, unique prefix, or unique substring |

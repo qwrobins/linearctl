@@ -98,6 +98,8 @@ linearctl --help
 linearctl issue --help
 ```
 
+Each curated metadata entry includes a registry-derived `usage` string, so agents can discover supported flags such as `--due-date`, nullable `none` values, and label-group creation without parsing human help.
+
 ## Anti-patterns
 
 - Do not use `linearctl gql` when curated or generated commands cover the task

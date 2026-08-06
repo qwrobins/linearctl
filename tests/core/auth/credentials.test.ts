@@ -138,9 +138,19 @@ describe("parseCredentials", () => {
     );
     await chmod(credentialsFile, 0o644);
 
-    await expect(loadCredentialsFile(credentialsFile)).rejects.toThrow(
-      "credentials file permissions must not allow group or other access"
-    );
+    let caught: unknown;
+    try {
+      await loadCredentialsFile(credentialsFile);
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(caught).toBeInstanceOf(Error);
+    const message = (caught as Error).message;
+    expect(message).toContain(credentialsFile);
+    expect(message).toContain("mode 0644");
+    expect(message).toContain("expected an owner-only mode such as 0600");
+    expect(message).toContain(`chmod 600 '${credentialsFile}'`);
   });
 
   it.skipIf(process.platform !== "win32")(

@@ -87,7 +87,17 @@ describe("CLI scaffold", () => {
     expect(output).toContain("linearctl issue create --title <title>");
     expect(output).toContain("linearctl issue update <identifier>");
     expect(output).toContain("--project-milestone <id>|--milestone <id>");
+    expect(output).toContain("--due-date <YYYY-MM-DD>");
+    expect(output).toContain("--assignee <id|none>");
+    expect(output).toContain("--state <name>[,<name>...] ...");
     expect(output).toContain("linearctl --metadata curated --json");
+  });
+
+  it("shows label group and parent creation flags in curated help", async () => {
+    const { stdout: output } = await runCli(["label", "--help"]);
+
+    expect(output).toContain("linearctl label create --name <name>");
+    expect(output).toContain("--parent <name|id>|--group");
   });
 
   it("prints full project content flags in curated help", async () => {
