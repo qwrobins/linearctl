@@ -93,6 +93,14 @@ describe("CLI scaffold", () => {
     expect(output).toContain("linearctl --metadata curated --json");
   });
 
+  it("shows client-credentials auth flags in curated help", async () => {
+    const { stdout: output } = await runCli(["auth", "--help"]);
+
+    expect(output).toContain("--oauth-client-credentials");
+    expect(output).toContain("--oauth-client-secret-env");
+    expect(output).toContain("--oauth-client-secret-stdin");
+  });
+
   it("shows label group and parent creation flags in curated help", async () => {
     const { stdout: output } = await runCli(["label", "--help"]);
 

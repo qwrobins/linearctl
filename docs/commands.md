@@ -235,9 +235,13 @@ File upload and download requests use manual redirect handling. Same-host redire
 # API key login
 linearctl auth login --profile <name> --api-key-env <ENV_VAR> [--set-default]
 
-# OAuth login
+# OAuth login (browser-based PKCE)
 linearctl auth login --profile <name> --oauth --oauth-client-id <id> \
   [--callback-port <port>] [--no-browser] [--set-default]
+
+# OAuth client-credentials login (non-interactive)
+linearctl auth login --profile <name> --oauth-client-credentials \
+  --oauth-client-id <id> (--oauth-client-secret-env <ENV>|--oauth-client-secret-stdin) [--set-default]
 
 # Stdin API key
 linearctl auth login --profile <name> --api-key-stdin [--set-default]
@@ -254,6 +258,8 @@ linearctl auth switch <profile>
 # Remove a profile [destructive with --remove-config]
 linearctl auth logout --profile <name> [--remove-config]
 ```
+
+Client-credentials login accepts the client ID directly or through `--oauth-client-id-env <ENV>` / `LINEAR_CLI_CLIENT_ID`; the client secret is accepted only through `--oauth-client-secret-env <ENV>` or `--oauth-client-secret-stdin`. The secret is never persisted. It does not open a browser or start a callback listener.
 
 OAuth refresh, login, and logout serialize credentials-file updates across CLI processes so concurrent commands cannot discard another profile's rotated tokens.
 

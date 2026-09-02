@@ -256,7 +256,7 @@ export async function resolveStoredProfile(input: ResolveStoredProfileInput): Pr
     credentials
   });
 
-  if (profile.credentials.type === "oauth") {
+  if (profile.credentials.type === "oauth" && profile.credentials.grantType !== "client_credentials") {
     return refreshOAuthProfileIfNeeded(profile, credentials, input);
   }
 
@@ -275,6 +275,13 @@ async function refreshOAuthProfileIfNeeded(
 
   if (!oauthCredentialsNeedRefresh(oauthCreds.expiresAt)) {
     return profile;
+  }
+
+  if (!oauthCreds.refreshToken) {
+    throw new ProfileResolutionError(
+      "profile-missing-credentials",
+      `OAuth profile "${profile.name}" is missing refresh_token required for token refresh.`
+    );
   }
 
   if (!oauthCreds.oauthClientId) {
@@ -301,6 +308,13 @@ async function refreshOAuthProfileIfNeeded(
 
     if (!oauthCredentialsNeedRefresh(current.expiresAt)) {
       return { ...profile, credentials: current };
+    }
+
+    if (!current.refreshToken) {
+      throw new ProfileResolutionError(
+        "profile-missing-credentials",
+        `OAuth profile "${profile.name}" is missing refresh_token required for token refresh.`
+      );
     }
 
     if (!current.oauthClientId) {
@@ -381,7 +395,7 @@ async function recoverConcurrentOAuthRefresh(
     return latestProfile;
   }
 
-  if (!latestOAuthCreds.oauthClientId) {
+  if (!latestOAuthCreds.refreshToken || !latestOAuthCreds.oauthClientId) {
     return undefined;
   }
 

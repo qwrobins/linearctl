@@ -3,6 +3,7 @@ export * from "./core/errors/command-failure.js";
 export * from "./core/auth/credentials.js";
 export * from "./core/auth/profile-resolution.js";
 export * from "./core/auth/runtime.js";
+export * from "./core/auth/oauth.js";
 export * from "./core/config/config-file.js";
 export * from "./core/config/atomic-file.js";
 export * from "./core/config/ini.js";

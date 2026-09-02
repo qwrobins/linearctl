@@ -1042,7 +1042,7 @@
   },
   {
     "commandPath": "linearctl auth login",
-    "usage": "linearctl auth login --profile <name> --api-key-env <ENV>",
+    "usage": "linearctl auth login --profile <name> --api-key-env <ENV> | --api-key-stdin | --oauth --oauth-client-id <id> | --oauth-client-credentials (--oauth-client-id <id>|--oauth-client-id-env <ENV>) (--oauth-client-secret-env <ENV>|--oauth-client-secret-stdin)",
     "layer": "curated",
     "resource": "auth",
     "operation": "login",

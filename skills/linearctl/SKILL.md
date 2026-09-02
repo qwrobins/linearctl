@@ -20,7 +20,7 @@ If the user has not configured the CLI yet, help them bootstrap:
 3. Set a default team: `linearctl team list --json` to find team keys, then `linearctl team get <key> --set-default`
 4. Verify: `linearctl auth whoami --json`
 
-API keys are created at https://linear.app/settings/api. For OAuth, see https://linear.app/settings/api/applications.
+API keys are created at https://linear.app/settings/api. For browser OAuth and unattended client-credentials OAuth, see https://linear.app/settings/api/applications.
 
 ## Command routing
 
@@ -132,7 +132,8 @@ Raw GraphQL should not be used merely because it is possible. It is the fallback
 ### Auth
 - `linearctl auth status --json`
 - `linearctl auth login --profile <name> --api-key-env <ENV>`
-- `linearctl auth login --profile <name> --oauth --oauth-client-id <id>`
+- `linearctl auth login --profile <name> --oauth --oauth-client-id <id>` — browser-based PKCE login
+- `linearctl auth login --profile <name> --oauth-client-credentials --oauth-client-id <id> (--oauth-client-secret-env <ENV>|--oauth-client-secret-stdin)` — non-interactive login; never pass the client secret as an argument and it is not persisted
 - `linearctl auth logout --profile <name>`
 - `linearctl auth switch <profile>`
 - `linearctl auth whoami --json`

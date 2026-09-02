@@ -114,7 +114,8 @@ Completed:
 
 - Post-MVP features (all complete):
   - OAuth browser callback flow with PKCE, loopback listener on 127.0.0.1:8765, token exchange, auto-refresh
-  - `--oauth-client-id`, `--callback-port`, `--no-browser` CLI flags
+  - Non-interactive OAuth client-credentials login with env/stdin secret input and secret-free profile persistence
+  - `--oauth-client-id`, `--callback-port`, `--no-browser`, and `--oauth-client-credentials` CLI flags
   - Auto-refresh of expired OAuth tokens in profile resolution (5-minute window)
   - JSONL streaming output (`--jsonl`) for all list commands via `streamPaginateGraphQL`
   - Bulk operations: `issue bulk-update`, `issue bulk-close`, `issue bulk-assign` with partial success reporting

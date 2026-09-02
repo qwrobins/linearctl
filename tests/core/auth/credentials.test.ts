@@ -56,6 +56,28 @@ describe("parseCredentials", () => {
     });
   });
 
+  it("parses client-credentials OAuth profiles without a refresh token", () => {
+    const credentials = parseCredentials(
+      parseIni(`
+        [service]
+        type = oauth
+        grant_type = client_credentials
+        access_token = access-service
+        expires_at = 2026-04-07T18:45:00Z
+        oauth_client_id = client_123
+      `)
+    );
+
+    expect(credentials.profiles.service).toEqual({
+      profileName: "service",
+      type: "oauth",
+      grantType: "client_credentials",
+      accessToken: "access-service",
+      expiresAt: "2026-04-07T18:45:00Z",
+      oauthClientId: "client_123"
+    });
+  });
+
   it("fails when required credential material is missing", () => {
     expect(() =>
       parseCredentials(
@@ -209,6 +231,25 @@ describe("parseCredentials", () => {
         ""
       ].join("\n")
     );
+  });
+
+  it("serializes client-credentials profiles without a client secret", () => {
+    const serialized = stringifyCredentials({
+      profiles: {
+        service: {
+          profileName: "service",
+          type: "oauth",
+          grantType: "client_credentials",
+          accessToken: "access-service",
+          expiresAt: "2026-04-07T18:45:00Z",
+          oauthClientId: "client_123"
+        }
+      }
+    });
+
+    expect(serialized).toContain("grant_type = client_credentials");
+    expect(serialized).not.toContain("client_secret");
+    expect(serialized).not.toContain("super-secret");
   });
 
   it("writes credentials atomically with restrictive permissions", async () => {
