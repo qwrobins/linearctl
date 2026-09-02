@@ -86,7 +86,17 @@ Register `http://127.0.0.1:8765/oauth/callback` as a redirect URI on the Linear 
 
 This opens your browser for authorization and listens on `127.0.0.1:8765` for the callback. Override the port with `--callback-port`. Use `--no-browser` to print the URL instead of opening it.
 
-OAuth tokens auto-refresh when expired.
+Authorization-code OAuth tokens auto-refresh when expired.
+
+For unattended services, use client credentials instead of the browser flow:
+
+```bash
+export LINEAR_CLIENT_SECRET=...
+linearctl auth login --profile service --oauth-client-credentials \
+  --oauth-client-id <client-id> --oauth-client-secret-env LINEAR_CLIENT_SECRET --set-default
+```
+
+Use `--oauth-client-secret-stdin` to read the secret from piped stdin. Client-credentials login makes no browser or callback request and does not persist the client secret.
 
 ## Verify
 

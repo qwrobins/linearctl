@@ -28,6 +28,7 @@ import {
 import { ExitCode } from "../core/errors/exit-codes.js";
 import {
   buildAuthorizeUrl,
+  exchangeClientCredentials,
   exchangeCode,
   generatePkceChallenge,
   generateState,
@@ -47,7 +48,15 @@ export interface AuthCommandOptions {
   apiKeyEnv?: string;
   apiKeyStdin: boolean;
   oauth: boolean;
+  /** Non-interactive OAuth client-credentials grant. */
+  oauthClientCredentials?: boolean;
   oauthClientId?: string;
+  /** Optional environment variable name containing the client ID. */
+  oauthClientIdEnv?: string;
+  /** Environment variable name containing the client secret. */
+  oauthClientSecretEnv?: string;
+  /** Read the client secret from piped stdin. */
+  oauthClientSecretStdin?: boolean;
   callbackPort?: string;
   noBrowser: boolean;
   setDefault: boolean;
@@ -188,6 +197,81 @@ async function readApiKey(options: AuthCommandOptions): Promise<string | undefin
   }
 
   process.stderr.write("Error: API key login requires --api-key-env <ENV> or --api-key-stdin.\n");
+  return undefined;
+}
+
+function readOAuthClientId(options: AuthCommandOptions): string | undefined {
+  if (options.oauthClientId !== undefined && options.oauthClientIdEnv !== undefined) {
+    process.stderr.write("Error: --oauth-client-id and --oauth-client-id-env are mutually exclusive.\n");
+    return undefined;
+  }
+
+  let clientId: string | undefined;
+  if (options.oauthClientIdEnv !== undefined) {
+    const envName = options.oauthClientIdEnv.trim();
+    if (envName === "") {
+      process.stderr.write("Error: --oauth-client-id-env requires a non-empty environment variable name.\n");
+      return undefined;
+    }
+
+    clientId = options.env[envName];
+    if (clientId === undefined || clientId.trim() === "") {
+      process.stderr.write(`Error: environment variable ${envName} is not set or is empty.\n`);
+      return undefined;
+    }
+  } else {
+    clientId = options.oauthClientId ?? options.env.LINEAR_CLI_CLIENT_ID;
+  }
+
+  if (clientId === undefined || clientId.trim() === "") {
+    process.stderr.write("Error: --oauth-client-id or LINEAR_CLI_CLIENT_ID environment variable is required for OAuth login.\n");
+    process.stderr.write("  Create an OAuth application at: https://linear.app/settings/api/applications\n");
+    process.stderr.write("  Then pass the client ID via --oauth-client-id <id> or set LINEAR_CLI_CLIENT_ID.\n");
+    return undefined;
+  }
+
+  return clientId.trim();
+}
+
+async function readOAuthClientSecret(options: AuthCommandOptions): Promise<string | undefined> {
+  const readFromStdin = options.oauthClientSecretStdin === true;
+  if (options.oauthClientSecretEnv !== undefined && readFromStdin) {
+    process.stderr.write("Error: --oauth-client-secret-env and --oauth-client-secret-stdin are mutually exclusive.\n");
+    return undefined;
+  }
+
+  if (options.oauthClientSecretEnv !== undefined) {
+    const envName = options.oauthClientSecretEnv.trim();
+    if (envName === "") {
+      process.stderr.write("Error: --oauth-client-secret-env requires a non-empty environment variable name.\n");
+      return undefined;
+    }
+
+    const clientSecret = options.env[envName];
+    if (clientSecret === undefined || clientSecret.trim() === "") {
+      process.stderr.write(`Error: environment variable ${envName} is not set or is empty.\n`);
+      return undefined;
+    }
+
+    return clientSecret.trim();
+  }
+
+  if (readFromStdin) {
+    if (isTtyInput(options.stdin)) {
+      process.stderr.write("Error: --oauth-client-secret-stdin requires piped stdin.\n");
+      return undefined;
+    }
+
+    const clientSecret = (await readAllStdin(options.stdin)).trim();
+    if (clientSecret === "") {
+      process.stderr.write("Error: --oauth-client-secret-stdin received empty input.\n");
+      return undefined;
+    }
+
+    return clientSecret;
+  }
+
+  process.stderr.write("Error: OAuth client-credentials login requires --oauth-client-secret-env <ENV> or --oauth-client-secret-stdin.\n");
   return undefined;
 }
 
@@ -369,11 +453,8 @@ async function handleOAuthLogin(options: AuthCommandOptions): Promise<number> {
     return ExitCode.ValidationError;
   }
 
-  const clientId = options.oauthClientId ?? options.env.LINEAR_CLI_CLIENT_ID;
-  if (clientId === undefined || clientId.trim() === "") {
-    process.stderr.write("Error: --oauth-client-id or LINEAR_CLI_CLIENT_ID environment variable is required for OAuth login.\n");
-    process.stderr.write("  Create an OAuth application at: https://linear.app/settings/api/applications\n");
-    process.stderr.write("  Then pass the client ID via --oauth-client-id <id> or set LINEAR_CLI_CLIENT_ID.\n");
+  const clientId = readOAuthClientId(options);
+  if (clientId === undefined) {
     return ExitCode.ValidationError;
   }
 
@@ -457,8 +538,8 @@ async function handleOAuthLogin(options: AuthCommandOptions): Promise<number> {
     accessToken: tokenResponse.access_token,
     refreshToken: tokenResponse.refresh_token,
     expiresAt,
-    scopes: tokenResponse.scope,
-    oauthClientId: clientId.trim()
+    ...(tokenResponse.scope === undefined ? {} : { scopes: tokenResponse.scope }),
+    oauthClientId: clientId
   };
 
   let updatedConfig = config.profiles[profileName] === undefined
@@ -511,6 +592,91 @@ async function handleOAuthLogin(options: AuthCommandOptions): Promise<number> {
   }
 
   return ExitCode.Success;
+}
+
+async function handleOAuthClientCredentialsLogin(options: AuthCommandOptions): Promise<number> {
+  const profileName = requireProfile(options, "auth login --oauth-client-credentials");
+  if (profileName === undefined) {
+    return ExitCode.ValidationError;
+  }
+
+  const clientId = readOAuthClientId(options);
+  if (clientId === undefined) {
+    return ExitCode.ValidationError;
+  }
+
+  const clientSecret = await readOAuthClientSecret(options);
+  if (clientSecret === undefined) {
+    return ExitCode.ValidationError;
+  }
+
+  let tokenResponse;
+  try {
+    tokenResponse = await exchangeClientCredentials({
+      clientId,
+      clientSecret,
+      // Linear requires a scope for client-credentials tokens. Match the
+      // browser flow's default scope while keeping this flow non-interactive.
+      scope: DEFAULT_OAUTH_SCOPE,
+      ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl })
+    });
+  } catch (error) {
+    if (error instanceof OAuthTokenError) {
+      process.stderr.write(`Error: ${redactSecret(error.message, clientSecret)}\n`);
+      return ExitCode.AuthenticationError;
+    }
+    throw error;
+  }
+
+  const expiresAt = new Date(Date.now() + tokenResponse.expires_in * 1000).toISOString();
+  const config = await loadOptionalConfig(options.configFile);
+  const newProfileCredentials = {
+    profileName,
+    type: "oauth" as const,
+    grantType: "client_credentials" as const,
+    accessToken: tokenResponse.access_token,
+    expiresAt,
+    ...(tokenResponse.refresh_token === undefined ? {} : { refreshToken: tokenResponse.refresh_token }),
+    ...(tokenResponse.scope === undefined ? {} : { scopes: tokenResponse.scope }),
+    oauthClientId: clientId
+  };
+
+  let updatedConfig = config.profiles[profileName] === undefined
+    ? setProfileMetadata(config, profileName, {})
+    : config;
+
+  if (options.setDefault) {
+    updatedConfig = setDefaultProfile(updatedConfig, profileName);
+  }
+
+  await persistAuthState({
+    nextConfig: updatedConfig,
+    mutateCredentials: (latest) => setCredentialsProfile(latest, newProfileCredentials),
+    configFile: options.configFile,
+    credentialsFile: options.credentialsFile
+  });
+
+  const result: AuthLoginResult = {
+    profile: profileName,
+    type: "oauth",
+    source: "credentials-file",
+    ...(updatedConfig.defaultProfile === undefined ? {} : { defaultProfile: updatedConfig.defaultProfile })
+  };
+
+  if (options.jsonEnvelope) {
+    const envelope = successEnvelope(result, { sourceLayer: "curated", profile: profileName });
+    process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
+  } else if (options.json) {
+    process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+  } else {
+    process.stdout.write(`Logged in to Linear as profile "${profileName}" using OAuth client credentials.\n`);
+  }
+
+  return ExitCode.Success;
+}
+
+function redactSecret(message: string, secret: string): string {
+  return message.replaceAll(secret, "[redacted]");
 }
 
 function openUrlInBrowser(url: string): Promise<void> {
@@ -582,6 +748,15 @@ async function handleLogin(options: AuthCommandOptions, extraPositionals: string
   if (extraPositionals.length > 0) {
     process.stderr.write("Error: auth login does not accept positional arguments.\n");
     return ExitCode.ValidationError;
+  }
+
+  if (options.oauth && options.oauthClientCredentials === true) {
+    process.stderr.write("Error: --oauth and --oauth-client-credentials are mutually exclusive.\n");
+    return ExitCode.ValidationError;
+  }
+
+  if (options.oauthClientCredentials === true) {
+    return handleOAuthClientCredentialsLogin(options);
   }
 
   if (options.oauth) {

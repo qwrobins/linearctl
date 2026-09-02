@@ -1,10 +1,10 @@
-import { mkdtemp } from "node:fs/promises";
+import { mkdtemp, readFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import type { Server } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Readable } from "node:stream";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi, type Mock } from "vitest";
 import { handleAuthCommand } from "../../src/commands/auth.js";
 import type { AuthCommandOptions } from "../../src/commands/auth.js";
 import { loadCredentialsFile } from "../../src/core/auth/credentials.js";
@@ -85,6 +85,177 @@ async function simulateBrowserCallback(port: number, state: string, code: string
 }
 
 describe("OAuth login", () => {
+  it("performs a non-interactive client-credentials login without persisting the secret", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-oauth-client-credentials-"));
+    const clientId = "client id/with?reserved";
+    const clientSecret = "secret &/=+";
+    const fetchImpl = vi.fn(async (_input: string | URL | Request, init?: RequestInit) => {
+      expect(init?.method).toBe("POST");
+      expect(init?.headers).toEqual({ "content-type": "application/x-www-form-urlencoded" });
+      const body = new URLSearchParams(String(init?.body ?? ""));
+      expect(body.get("grant_type")).toBe("client_credentials");
+      expect(body.get("client_id")).toBe(clientId);
+      expect(body.get("client_secret")).toBe(clientSecret);
+      expect(body.get("scope")).toBe("read write");
+      return new Response(
+        JSON.stringify({
+          access_token: "service-access-token",
+          expires_in: 3600,
+          token_type: "Bearer",
+          scope: "read"
+        }),
+        { status: 200 }
+      );
+    }) as FetchLike;
+    const stdoutChunks: string[] = [];
+    const stderrChunks: string[] = [];
+    const stdoutSpy = vi.spyOn(process.stdout, "write").mockImplementation(((chunk: string | Uint8Array) => {
+      stdoutChunks.push(String(chunk));
+      return true;
+    }) as typeof process.stdout.write);
+    const stderrSpy = vi.spyOn(process.stderr, "write").mockImplementation(((chunk: string | Uint8Array) => {
+      stderrChunks.push(String(chunk));
+      return true;
+    }) as typeof process.stderr.write);
+    const openUrl = vi.fn(async () => undefined);
+
+    try {
+      await expect(
+        handleAuthCommand(
+          ["login"],
+          baseOptions(directory, {
+            profile: "service",
+            oauthClientCredentials: true,
+            oauthClientId: clientId,
+            oauthClientSecretEnv: "LINEAR_CLIENT_SECRET",
+            setDefault: true,
+            env: { LINEAR_CLIENT_SECRET: clientSecret },
+            fetchImpl,
+            openUrl
+          })
+        )
+      ).resolves.toBe(0);
+    } finally {
+      stdoutSpy.mockRestore();
+      stderrSpy.mockRestore();
+    }
+
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(openUrl).not.toHaveBeenCalled();
+    expect(stderrChunks.join("")).not.toContain(clientSecret);
+    expect(stdoutChunks.join("")).not.toContain(clientSecret);
+
+    const credentialsFile = join(directory, "credentials");
+    const credentialsText = await readFile(credentialsFile, "utf8");
+    expect(credentialsText).not.toContain(clientSecret);
+    await expect(loadCredentialsFile(credentialsFile)).resolves.toMatchObject({
+      profiles: {
+        service: {
+          profileName: "service",
+          type: "oauth",
+          grantType: "client_credentials",
+          accessToken: "service-access-token",
+          oauthClientId: clientId
+        }
+      }
+    });
+    await expect(loadLinearConfigFile(join(directory, "config"))).resolves.toMatchObject({
+      defaultProfile: "service",
+      profiles: { service: {} }
+    });
+  });
+
+  it("reads the client secret from piped stdin", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-oauth-client-credentials-"));
+    const fetchImpl = vi.fn(async () =>
+      new Response(JSON.stringify({
+        access_token: "stdin-access-token",
+        expires_in: 3600,
+        token_type: "Bearer"
+      }), { status: 200 })
+    ) as FetchLike;
+
+    await expect(
+      handleAuthCommand(
+        ["login"],
+        baseOptions(directory, {
+          profile: "stdin-service",
+          oauthClientCredentials: true,
+          oauthClientId: "client-id",
+          oauthClientSecretStdin: true,
+          stdin: Readable.from(["stdin-secret\n"]),
+          fetchImpl
+        })
+      )
+    ).resolves.toBe(0);
+
+    const [, init] = (fetchImpl as unknown as Mock).mock.calls[0]!;
+    expect(new URLSearchParams(String(init?.body)).get("client_secret")).toBe("stdin-secret");
+  });
+
+  it("maps client-credentials token endpoint failures to an authentication exit code", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-oauth-client-credentials-"));
+    const stderrChunks: string[] = [];
+    const stderrSpy = vi.spyOn(process.stderr, "write").mockImplementation(((chunk: string | Uint8Array) => {
+      stderrChunks.push(String(chunk));
+      return true;
+    }) as typeof process.stderr.write);
+    const fetchImpl = vi.fn(async () =>
+      new Response(JSON.stringify({ error: "invalid_client" }), { status: 401 })
+    ) as FetchLike;
+
+    try {
+      await expect(
+        handleAuthCommand(
+          ["login"],
+          baseOptions(directory, {
+            profile: "service",
+            oauthClientCredentials: true,
+            oauthClientId: "client-id",
+            oauthClientSecretEnv: "CLIENT_SECRET",
+            env: { CLIENT_SECRET: "bad-secret" },
+            fetchImpl
+          })
+        )
+      ).resolves.toBe(2);
+    } finally {
+      stderrSpy.mockRestore();
+    }
+
+    expect(stderrChunks.join("")).toContain("Client credentials token request failed with HTTP 401 (invalid_client)");
+    expect(stderrChunks.join("")).not.toContain("bad-secret");
+  });
+
+  it("maps malformed client-credentials token responses to an authentication exit code", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-oauth-client-credentials-"));
+    const stderrChunks: string[] = [];
+    const stderrSpy = vi.spyOn(process.stderr, "write").mockImplementation(((chunk: string | Uint8Array) => {
+      stderrChunks.push(String(chunk));
+      return true;
+    }) as typeof process.stderr.write);
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ expires_in: 3600 }), { status: 200 })) as FetchLike;
+
+    try {
+      await expect(
+        handleAuthCommand(
+          ["login"],
+          baseOptions(directory, {
+            profile: "service",
+            oauthClientCredentials: true,
+            oauthClientId: "client-id",
+            oauthClientSecretEnv: "CLIENT_SECRET",
+            env: { CLIENT_SECRET: "bad-secret" },
+            fetchImpl
+          })
+        )
+      ).resolves.toBe(2);
+    } finally {
+      stderrSpy.mockRestore();
+    }
+
+    expect(stderrChunks.join("")).toContain("malformed token response");
+    expect(stderrChunks.join("")).not.toContain("bad-secret");
+  });
   it("fails when --oauth-client-id is not provided", async () => {
     const directory = await mkdtemp(join(tmpdir(), "linear-cli-oauth-"));
 

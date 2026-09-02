@@ -22,7 +22,15 @@ export interface TokenResponse {
   refresh_token: string;
   expires_in: number;
   token_type: string;
-  scope: string;
+  scope?: string;
+}
+
+export interface ClientCredentialsTokenResponse {
+  access_token: string;
+  refresh_token?: string;
+  expires_in: number;
+  token_type: string;
+  scope?: string;
 }
 
 export interface ExchangeCodeParams {
@@ -36,6 +44,14 @@ export interface ExchangeCodeParams {
 export interface RefreshTokenParams {
   refreshToken: string;
   clientId: string;
+  fetchImpl?: FetchLike;
+}
+
+export interface ClientCredentialsParams {
+  clientId: string;
+  clientSecret: string;
+  /** Linear requires a scope for client-credentials tokens. */
+  scope?: string;
   fetchImpl?: FetchLike;
 }
 
@@ -89,18 +105,97 @@ function parseTokenError(text: string): string | undefined {
   }
 }
 
-function tokenErrorMessage(operation: "exchange" | "refresh", status: number, errorCode: string | undefined): string {
-  const label = operation === "exchange" ? "Token exchange" : "Token refresh";
+type TokenOperation = "exchange" | "refresh" | "client_credentials";
+
+type TokenResponseForOperation<TOperation extends TokenOperation> =
+  TOperation extends "client_credentials" ? ClientCredentialsTokenResponse : TokenResponse;
+
+function tokenOperationLabel(operation: TokenOperation): string {
+  if (operation === "exchange") {
+    return "Token exchange";
+  }
+  if (operation === "refresh") {
+    return "Token refresh";
+  }
+  return "Client credentials token request";
+}
+
+function tokenErrorMessage(operation: TokenOperation, status: number, errorCode: string | undefined): string {
+  const label = tokenOperationLabel(operation);
   return `${label} failed with HTTP ${status}${errorCode === undefined ? "" : ` (${errorCode})`}`;
+}
+
+function malformedTokenResponse(operation: TokenOperation, reason: string): OAuthTokenError {
+  return new OAuthTokenError(`${tokenOperationLabel(operation)} returned a malformed token response: ${reason}`);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function parseTokenResponse<TOperation extends TokenOperation>(
+  operation: TOperation,
+  value: unknown
+): TokenResponseForOperation<TOperation> {
+  if (!isRecord(value)) {
+    throw malformedTokenResponse(operation, "expected a JSON object");
+  }
+
+  const accessToken = value.access_token;
+  if (typeof accessToken !== "string" || accessToken.trim() === "") {
+    throw malformedTokenResponse(operation, "access_token is required");
+  }
+
+  const expiresIn = value.expires_in;
+  if (typeof expiresIn !== "number" || !Number.isFinite(expiresIn) || expiresIn <= 0) {
+    throw malformedTokenResponse(operation, "expires_in must be a positive number");
+  }
+
+  const tokenType = value.token_type;
+  if (typeof tokenType !== "string" || tokenType.trim() === "") {
+    throw malformedTokenResponse(operation, "token_type is required");
+  }
+
+  const scope = value.scope;
+  if (scope !== undefined && typeof scope !== "string") {
+    throw malformedTokenResponse(operation, "scope must be a string when provided");
+  }
+
+  const refreshToken = value.refresh_token;
+  if (operation !== "client_credentials") {
+    if (typeof refreshToken !== "string" || refreshToken.trim() === "") {
+      throw malformedTokenResponse(operation, "refresh_token is required");
+    }
+
+    return {
+      access_token: accessToken,
+      refresh_token: refreshToken,
+      expires_in: expiresIn,
+      token_type: tokenType,
+      ...(scope === undefined ? {} : { scope })
+    } as TokenResponseForOperation<TOperation>;
+  }
+
+  if (refreshToken !== undefined && (typeof refreshToken !== "string" || refreshToken.trim() === "")) {
+    throw malformedTokenResponse(operation, "refresh_token must be a non-empty string when provided");
+  }
+
+  return {
+    access_token: accessToken,
+    expires_in: expiresIn,
+    token_type: tokenType,
+    ...(refreshToken === undefined ? {} : { refresh_token: refreshToken }),
+    ...(scope === undefined ? {} : { scope })
+  } as TokenResponseForOperation<TOperation>;
 }
 
 const TOKEN_REQUEST_TIMEOUT_MS = 60_000;
 
-async function postTokenRequest(
-  operation: "exchange" | "refresh",
+async function postTokenRequest<TOperation extends TokenOperation>(
+  operation: TOperation,
   body: URLSearchParams,
   fetchImpl: FetchLike
-): Promise<TokenResponse> {
+): Promise<TokenResponseForOperation<TOperation>> {
   const controller = new AbortController();
   const timer = setTimeout(() => {
     controller.abort();
@@ -117,8 +212,13 @@ async function postTokenRequest(
   } catch (error) {
     if (controller.signal.aborted) {
       throw new OAuthTokenError(
-        `${operation === "exchange" ? "Token exchange" : "Token refresh"} timed out after ${Math.round(TOKEN_REQUEST_TIMEOUT_MS / 1000)}s`
+        `${tokenOperationLabel(operation)} timed out after ${Math.round(TOKEN_REQUEST_TIMEOUT_MS / 1000)}s`
       );
+    }
+    // Do not surface arbitrary fetch errors for client-credentials requests:
+    // an implementation-specific error could include request details.
+    if (operation === "client_credentials") {
+      throw new OAuthTokenError(`${tokenOperationLabel(operation)} failed before receiving a response`);
     }
     throw error;
   } finally {
@@ -135,7 +235,17 @@ async function postTokenRequest(
     );
   }
 
-  return (await response.json()) as TokenResponse;
+  let responseBody: unknown;
+  try {
+    responseBody = await response.json();
+  } catch {
+    throw new OAuthTokenError(
+      `${tokenOperationLabel(operation)} returned a malformed token response: response body was not valid JSON`,
+      response.status
+    );
+  }
+
+  return parseTokenResponse(operation, responseBody);
 }
 
 export async function exchangeCode(params: ExchangeCodeParams): Promise<TokenResponse> {
@@ -163,3 +273,22 @@ export async function refreshAccessToken(params: RefreshTokenParams): Promise<To
     params.fetchImpl ?? fetch
   );
 }
+
+export async function exchangeClientCredentials(
+  params: ClientCredentialsParams
+): Promise<ClientCredentialsTokenResponse> {
+  return postTokenRequest(
+    "client_credentials",
+    new URLSearchParams({
+      grant_type: "client_credentials",
+      client_id: params.clientId,
+      client_secret: params.clientSecret,
+      ...(params.scope === undefined ? {} : { scope: params.scope })
+    }),
+    params.fetchImpl ?? fetch
+  );
+}
+
+// Keep the operation discoverable under the token-oriented name as well as the
+// exchange-oriented name used by the authorization-code flow.
+export const requestClientCredentialsToken = exchangeClientCredentials;

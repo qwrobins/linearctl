@@ -3,6 +3,7 @@ import { describe, expect, it, vi, type Mock } from "vitest";
 import {
   buildAuthorizeUrl,
   computeCodeChallenge,
+  exchangeClientCredentials,
   exchangeCode,
   generateCodeVerifier,
   generatePkceChallenge,
@@ -164,6 +165,67 @@ describe("exchangeCode", () => {
       expect((error as OAuthTokenError).message).toBe("Token exchange failed with HTTP 400 (invalid_grant)");
       expect((error as OAuthTokenError).message).not.toContain("{");
     }
+  });
+});
+
+describe("exchangeClientCredentials", () => {
+  it("POSTs a form-encoded client-credentials request", async () => {
+    const mockFetch = vi.fn(async () =>
+      new Response(
+        JSON.stringify({
+          access_token: "access-123",
+          expires_in: 3600,
+          token_type: "Bearer",
+          scope: "read write"
+        }),
+        { status: 200 }
+      )
+    ) as FetchLike;
+
+    const result = await exchangeClientCredentials({
+      clientId: "client id/with?reserved",
+      clientSecret: "secret &/=+",
+      fetchImpl: mockFetch
+    });
+
+    const calls = (mockFetch as unknown as Mock).mock.calls;
+    const [url, init] = calls[0]!;
+    expect(url).toBe(LINEAR_TOKEN_URL);
+    expect(init?.method).toBe("POST");
+    expect(init?.headers).toEqual({ "content-type": "application/x-www-form-urlencoded" });
+    expect(init?.body).toBe(
+      new URLSearchParams({
+        grant_type: "client_credentials",
+        client_id: "client id/with?reserved",
+        client_secret: "secret &/=+"
+      }).toString()
+    );
+
+    const body = new URLSearchParams(init?.body as string);
+    expect(body.get("grant_type")).toBe("client_credentials");
+    expect(body.get("client_id")).toBe("client id/with?reserved");
+    expect(body.get("client_secret")).toBe("secret &/=+");
+    expect(body.has("scope")).toBe(false);
+    expect(result).toEqual({
+      access_token: "access-123",
+      expires_in: 3600,
+      token_type: "Bearer",
+      scope: "read write"
+    });
+  });
+
+  it("rejects malformed token responses without exposing the response body", async () => {
+    const mockFetch = vi.fn(async () =>
+      new Response(JSON.stringify({ error: "client secret should not be logged" }), { status: 200 })
+    ) as FetchLike;
+
+    await expect(
+      exchangeClientCredentials({
+        clientId: "client-123",
+        clientSecret: "super-secret",
+        fetchImpl: mockFetch
+      })
+    ).rejects.toThrow("Client credentials token request returned a malformed token response: access_token is required");
   });
 });
 

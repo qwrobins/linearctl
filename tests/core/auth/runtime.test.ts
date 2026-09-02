@@ -17,6 +17,45 @@ import type { FetchLike } from "../../../src/core/transport/graphql.js";
 const execFileAsync = promisify(execFile);
 
 describe("resolveStoredProfile", () => {
+  it("does not attempt refresh for client-credentials OAuth profiles", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-auth-runtime-"));
+    const configFile = join(directory, "config");
+    const credentialsFile = join(directory, "credentials");
+
+    await writeLinearConfigFile(configFile, {
+      defaultProfile: "service",
+      profiles: { service: {} }
+    });
+    await writeCredentialsFile(credentialsFile, {
+      profiles: {
+        service: {
+          profileName: "service",
+          type: "oauth",
+          grantType: "client_credentials",
+          accessToken: "service-access",
+          expiresAt: new Date(Date.now() - 60_000).toISOString(),
+          oauthClientId: "client-123"
+        }
+      }
+    });
+
+    const fetchImpl = vi.fn(async () => {
+      throw new Error("client-credentials profiles should not refresh automatically");
+    }) as FetchLike;
+
+    const profile = await resolveStoredProfile({
+      paths: { configFile, credentialsFile },
+      fetchImpl
+    });
+
+    expect(profile.credentials).toMatchObject({
+      type: "oauth",
+      grantType: "client_credentials",
+      accessToken: "service-access"
+    });
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
   it("recovers when a concurrent OAuth refresh already updated credentials", async () => {
     const directory = await mkdtemp(join(tmpdir(), "linear-cli-auth-runtime-"));
     const configFile = join(directory, "config");

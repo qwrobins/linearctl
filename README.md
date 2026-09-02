@@ -15,7 +15,7 @@ curl -fsSL https://raw.githubusercontent.com/qwrobins/linearctl/main/install.sh 
 Or install a specific version:
 
 ```bash
-LINEAR_VERSION=v0.8.9 curl -fsSL https://raw.githubusercontent.com/qwrobins/linearctl/main/install.sh | sh
+LINEAR_VERSION=v0.8.10 curl -fsSL https://raw.githubusercontent.com/qwrobins/linearctl/main/install.sh | sh
 ```
 
 On Debian/Ubuntu, the installer automatically uses the `.deb` package. To skip deb and install the raw binary instead:
@@ -92,6 +92,16 @@ Create an OAuth app at https://linear.app/settings/api/applications and register
 ```bash
 linearctl auth login --profile work --oauth --oauth-client-id <id> --set-default
 ```
+
+For unattended services, use the OAuth client-credentials grant. Pass the client secret through an environment variable or piped stdin; it is never written to the profile:
+
+```bash
+export LINEAR_CLIENT_SECRET=...
+linearctl auth login --profile service --oauth-client-credentials \
+  --oauth-client-id <id> --oauth-client-secret-env LINEAR_CLIENT_SECRET --set-default
+```
+
+Use `--oauth-client-secret-stdin` instead of `--oauth-client-secret-env` when the secret is piped. Client-credentials login does not open a browser or start a callback listener.
 
 ### Usage
 

@@ -9,6 +9,7 @@ import {
   secureWindowsCredentialsFile
 } from "./windows-acl.js";
 
+export type OAuthGrantType = "authorization_code" | "client_credentials";
 export type CredentialType = "api_key" | "oauth";
 
 export interface ApiKeyCredentials {
@@ -21,10 +22,12 @@ export interface OAuthCredentials {
   profileName: string;
   type: "oauth";
   accessToken: string;
-  refreshToken: string;
+  /** Authorization-code OAuth profiles have a refresh token; client-credentials profiles may not. */
+  refreshToken?: string;
   expiresAt: string;
   scopes?: string;
   oauthClientId?: string;
+  grantType?: OAuthGrantType;
 }
 
 export type ProfileCredentials = ApiKeyCredentials | OAuthCredentials;
@@ -51,8 +54,9 @@ export function stringifyCredentials(credentials: CredentialsStore): string {
 
     document[credential.profileName] = {
       type: "oauth",
+      ...(credential.grantType === undefined ? {} : { grant_type: credential.grantType }),
       access_token: credential.accessToken,
-      refresh_token: credential.refreshToken,
+      ...(credential.refreshToken === undefined ? {} : { refresh_token: credential.refreshToken }),
       expires_at: credential.expiresAt,
       ...(credential.scopes === undefined ? {} : { scopes: credential.scopes }),
       ...(credential.oauthClientId === undefined ? {} : { oauth_client_id: credential.oauthClientId })
@@ -130,8 +134,20 @@ export function parseCredentials(document: IniDocument): CredentialsStore {
         throw new Error(`access_token is required for credentials profile "${profileName}"`);
       }
 
-      if (!section.refresh_token) {
+      const grantType = section.grant_type;
+      if (grantType !== undefined && grantType !== "authorization_code" && grantType !== "client_credentials") {
+        throw new Error(`unsupported OAuth grant type for credentials profile "${profileName}"`);
+      }
+
+      // Authorization-code profiles need a refresh token. Client-credentials
+      // tokens commonly do not include one and are reissued by logging in
+      // again with the client secret.
+      if (grantType !== "client_credentials" && !section.refresh_token) {
         throw new Error(`refresh_token is required for credentials profile "${profileName}"`);
+      }
+
+      if (grantType === "client_credentials" && section.refresh_token !== undefined && !section.refresh_token) {
+        throw new Error(`refresh_token must not be empty for credentials profile "${profileName}"`);
       }
 
       if (!section.expires_at) {
@@ -142,10 +158,11 @@ export function parseCredentials(document: IniDocument): CredentialsStore {
         profileName,
         type: "oauth",
         accessToken: section.access_token,
-        refreshToken: section.refresh_token,
+        ...(section.refresh_token === undefined ? {} : { refreshToken: section.refresh_token }),
         expiresAt: section.expires_at,
         ...(section.scopes === undefined ? {} : { scopes: section.scopes }),
-        ...(section.oauth_client_id === undefined ? {} : { oauthClientId: section.oauth_client_id })
+        ...(section.oauth_client_id === undefined ? {} : { oauthClientId: section.oauth_client_id }),
+        ...(grantType === undefined ? {} : { grantType })
       };
 
       continue;

@@ -54,9 +54,22 @@ Options:
 - `--callback-port <port>` -- override the default port (8765)
 - `--no-browser` -- print the authorization URL instead of opening it
 
+### OAuth client credentials
+
+For non-interactive services, use the OAuth client-credentials grant. The client ID may be passed with `--oauth-client-id` or supplied through `LINEAR_CLI_CLIENT_ID`. Supply the client secret only through an environment-variable reference or piped stdin:
+
+```bash
+export LINEAR_CLIENT_SECRET=...
+linearctl auth login --profile service --oauth-client-credentials \
+  --oauth-client-id <client-id> \
+  --oauth-client-secret-env LINEAR_CLIENT_SECRET
+```
+
+Alternatively, pipe the secret with `--oauth-client-secret-stdin`. The command requests the default `read write` scope. This flow makes one form-encoded request to Linear's token endpoint, does not open a browser or start a callback listener, and never stores the client secret in the credentials or config files. Client-credentials access tokens are renewed by running the login command again when they expire.
+
 ### Token refresh
 
-OAuth tokens expire. The CLI auto-refreshes expired tokens during profile resolution (within a 5-minute window before expiry). Refreshed tokens are written back to the credentials file. Refresh, login, and logout updates are serialized across CLI processes so concurrent commands cannot overwrite one another's credential changes.
+Authorization-code OAuth tokens expire. The CLI auto-refreshes them during profile resolution (within a 5-minute window before expiry). Refreshed tokens are written back to the credentials file. Refresh, login, and logout updates are serialized across CLI processes so concurrent commands cannot overwrite one another's credential changes.
 
 ## Setting the default profile
 
@@ -135,6 +148,14 @@ refresh_token = lin_refresh_xxx
 expires_at = 2026-04-12T18:45:00Z
 scopes = read write
 oauth_client_id = abc123
+
+[service]
+type = oauth
+grant_type = client_credentials
+access_token = lin_access_service_xxx
+expires_at = 2026-04-12T18:45:00Z
+scopes = read
+oauth_client_id = service-client-id
 ```
 
 On Windows, the credentials file uses a protected ACL with inheritance disabled and full control granted only to the current Windows account. linearctl validates that ACL before reading secrets and fails closed if another principal has access. The Windows ACL implementation uses the built-in `whoami.exe` and `icacls.exe` system tools; it does not weaken the Unix `0600` policy.

@@ -41,7 +41,11 @@ export interface ParsedCliArguments {
   apiKeyEnv?: string;
   apiKeyStdin: boolean;
   oauth: boolean;
+  oauthClientCredentials: boolean;
   oauthClientId?: string;
+  oauthClientIdEnv?: string;
+  oauthClientSecretEnv?: string;
+  oauthClientSecretStdin: boolean;
   callbackPort?: string;
   noBrowser: boolean;
   setDefault: boolean;
