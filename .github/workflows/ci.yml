@@ -52,10 +52,6 @@ jobs:
             throw ($errors | Out-String)
           }
 
-      - name: Test Unix installer
-        if: runner.os != 'Windows'
-        run: sh tests/install/unix-installer.test.sh
-
       - name: Test PowerShell installer
         if: runner.os == 'Windows'
         shell: pwsh
@@ -69,3 +65,15 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: .\dist\linearctl.exe --help
+
+  unix-installer:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate Unix installer syntax
+        run: sh -n install.sh tests/install/unix-installer.test.sh
+      - name: Test Unix installer
+        run: sh tests/install/unix-installer.test.sh

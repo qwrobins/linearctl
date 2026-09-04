@@ -76,7 +76,9 @@ main() {
   download_checksums "$checksums_url"
   verify_checksum "$STAGED_BINARY" "$artifact" "$CHECKSUMS_FILE"
 
-  chmod 755 "$STAGED_BINARY"
+  # mktemp starts at 600. Add read/execute bits without overriding the user's
+  # umask (omitting "who" in symbolic chmod preserves masked permissions).
+  chmod +rx "$STAGED_BINARY"
 
   # Remove macOS quarantine attribute so Gatekeeper doesn't block unsigned binary
   if [ "$os" = "darwin" ] && command -v xattr > /dev/null 2>&1; then
