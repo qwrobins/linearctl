@@ -1,81 +1,101 @@
-/**
- * Workflow orchestration for multi-step commands.
- *
- * Provides typed partial-success modeling so that composite commands like
- * `project create-with-issues` can report exactly which steps succeeded
- * and which failed, rather than returning a generic error when step 2 fails
- * after step 1 already committed.
- */
+/** Typed partial-success modeling for composite mutations. No committed step is rolled back. */
+import { exitCodeForErrors, mapCommandFailure } from "../errors/command-failure.js";
+import { ExitCode } from "../errors/exit-codes.js";
+import type { CommandError } from "../output/envelope.js";
 
 export interface WorkflowStep<TResult> {
-  /** Human-readable name of the step, e.g. "create project" */
   name: string;
-  /** The async operation to execute */
   execute: () => Promise<TResult>;
 }
 
 export interface WorkflowStepOutcome<TResult> {
   name: string;
-  status: "success" | "failed";
+  status: "success" | "failed" | "skipped";
   result?: TResult;
-  error?: string;
+  errors?: CommandError[];
+  reason?: string;
 }
 
 export interface WorkflowResult<TStepResults extends Record<string, unknown>> {
-  /** True only if every step succeeded */
   ok: boolean;
-  /** Per-step outcomes with typed results */
+  partialSuccess: boolean;
+  exitCode: number;
+  errors: CommandError[];
   steps: { [K in keyof TStepResults]: WorkflowStepOutcome<TStepResults[K]> };
-  /** Convenience: all successful step results */
   completed: Partial<TStepResults>;
 }
 
+/** Carry all mapped response errors through a workflow without flattening them. */
+export class WorkflowStepError extends Error {
+  readonly exitCode: number;
+
+  constructor(readonly errors: CommandError[]) {
+    super(errors[0]?.message ?? "Workflow step failed");
+    this.name = "WorkflowStepError";
+    this.exitCode = exitCodeForErrors(errors);
+  }
+}
+
+function stepFailure(error: unknown): { errors: CommandError[]; exitCode: number } {
+  if (error instanceof WorkflowStepError && error.errors.length > 0) {
+    return { errors: error.errors, exitCode: error.exitCode };
+  }
+  const failure = mapCommandFailure(error);
+  return { errors: [failure.error], exitCode: failure.exitCode };
+}
+
 /**
- * Execute a two-step workflow with typed partial-success results.
- *
- * This is the common case for composite commands (step 1 creates a resource,
- * step 2 operates on it). If step 1 fails, step 2 is skipped. If step 2 fails,
- * the result shows step 1 succeeded and step 2 failed.
+ * Execute two dependent steps. A failed first step skips the second; a failed
+ * second step (including its construction) preserves the committed first result.
+ * secondName identifies the step even if its factory cannot run or throws.
  */
 export async function runTwoStepWorkflow<TFirst, TSecond>(
   first: WorkflowStep<TFirst>,
-  second: (firstResult: TFirst) => WorkflowStep<TSecond>
+  second: (firstResult: TFirst) => WorkflowStep<TSecond>,
+  secondName = "second step"
 ): Promise<WorkflowResult<{ first: TFirst; second: TSecond }>> {
-  // Step 1
   let firstResult: TFirst;
   try {
     firstResult = await first.execute();
   } catch (error) {
-    const message = error instanceof Error ? error.message : "step failed";
+    const failure = stepFailure(error);
     return {
       ok: false,
+      partialSuccess: false,
+      ...failure,
       steps: {
-        first: { name: first.name, status: "failed", error: message },
-        second: { name: "skipped", status: "failed", error: `Skipped: "${first.name}" failed` },
+        first: { name: first.name, status: "failed", errors: failure.errors },
+        second: { name: secondName, status: "skipped", reason: `"${first.name}" failed` },
       },
       completed: {},
     };
   }
 
-  // Step 2
-  const secondStep = second(firstResult);
+  let name = secondName;
   try {
+    const secondStep = second(firstResult);
+    name = secondStep.name;
     const secondResult = await secondStep.execute();
     return {
       ok: true,
+      partialSuccess: false,
+      exitCode: ExitCode.Success,
+      errors: [],
       steps: {
         first: { name: first.name, status: "success", result: firstResult },
-        second: { name: secondStep.name, status: "success", result: secondResult },
+        second: { name, status: "success", result: secondResult },
       },
       completed: { first: firstResult, second: secondResult },
     };
   } catch (error) {
-    const message = error instanceof Error ? error.message : "step failed";
+    const failure = stepFailure(error);
     return {
       ok: false,
+      partialSuccess: true,
+      ...failure,
       steps: {
         first: { name: first.name, status: "success", result: firstResult },
-        second: { name: secondStep.name, status: "failed", error: message },
+        second: { name, status: "failed", errors: failure.errors },
       },
       completed: { first: firstResult },
     };
