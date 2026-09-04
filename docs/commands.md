@@ -218,16 +218,22 @@ linearctl attachment delete <id> --json            # [destructive]
 
 ```bash
 # Upload a file (optionally attach to an issue)
-linearctl file upload <path> [--issue <id>] --json
+linearctl file upload <path> [--issue <id>] [--transfer-timeout <seconds>] --json
 
 # Get a signed URL for an attachment
 linearctl file url <attachment-id> [--expires-in <seconds>] --json
 
 # Download a file
-linearctl file download <url> [--output <path>] --json
+linearctl file download <url> [--output <path>] [--transfer-timeout <seconds>] --json
 ```
 
-File upload and download requests use manual redirect handling. Same-host redirects keep signed upload headers and Linear authorization. Cross-host redirects are followed only after dropping those headers.
+File upload and download stream with backpressure instead of buffering entire files. Upload sizes come from local file metadata; upload sources must be regular files and should not be modified during a transfer.
+
+`--transfer-timeout` sets a total transfer deadline in whole seconds (default **120**, range 1–2147483). The deadline starts with the first PUT/GET and covers all redirects and response-body consumption, including stalled bodies and download writes. It does not change the separate GraphQL request timeout or retry policy; file transfers are not automatically retried. Ctrl-C (SIGINT) or SIGTERM cancels an active transfer and cleans up local resources. Timeout/cancellation returns exit 1.
+
+Downloads overwrite existing destinations **only after successful completion**, using a private staging directory beside the output and an atomic rename on the same filesystem. Transfer, write, or rename failures remove staging files and leave the existing destination unchanged; the parent directory must already exist and be writable. A destination symlink is replaced, not followed. The new file uses private permissions (0600 on POSIX); existing permissions/metadata are not retained. Forced termination (SIGKILL), crashes, or power loss can leave staging directories; atomic replacement is not a crash-durability guarantee.
+
+Requests and redirects must use HTTPS, with at most five redirects. Downloads must start at `uploads.linear.app`. Same-host redirects keep signed upload headers and Linear authorization. Cross-host redirects drop sensitive headers, even if a later redirect returns to the original host. Redirected PUTs replay the file from the beginning.
 
 ## Auth
 

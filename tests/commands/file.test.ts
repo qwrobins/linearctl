@@ -1,4 +1,4 @@
-import { mkdtemp, readFile } from "node:fs/promises";
+import { mkdtemp, readFile, readdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { writeFile } from "node:fs/promises";
@@ -115,7 +115,7 @@ describe("handleFileCommand — file upload", () => {
       expect(parsed.attachment).toBeUndefined();
       expect((fetchImpl as ReturnType<typeof vi.fn>).mock.calls[1]![1]!.redirect).toBe("manual");
       const putHeaders = (fetchImpl as ReturnType<typeof vi.fn>).mock.calls[1]![1]!.headers as Record<string, string>;
-      expect(putHeaders["Content-Type"]).toBe("image/png");
+      expect(new Headers(putHeaders).get("content-type")).toBe("image/png");
     } finally {
       output.restore();
     }
@@ -151,7 +151,7 @@ describe("handleFileCommand — file upload", () => {
 
       if (callIndex === 2) {
         expect((init?.headers as Record<string, string>)["x-amz-acl"]).toBe("public-read");
-        expect((init?.headers as Record<string, string>)["Content-Type"]).toBe("image/png");
+        expect(new Headers(init?.headers).get("content-type")).toBe("image/png");
         return new Response("", {
           status: 307,
           headers: { location: "https://cdn.example.com/put-here" }
@@ -403,6 +403,37 @@ describe("handleFileCommand — file url", () => {
 });
 
 describe("handleFileCommand — file download", () => {
+  it("reports cancellation in the failure envelope and preserves an existing output", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-file-"));
+    const paths = await writeProfileFiles(directory);
+    const outputPath = join(directory, "downloaded.txt");
+    await writeFile(outputPath, "original");
+    const before = await readdir(directory);
+    const controller = new AbortController();
+    const output = captureOutput();
+    try {
+      const exitCode = await handleFileCommand(["download", "https://uploads.linear.app/file"], {
+        ...baseOptions(paths),
+        json: false,
+        jsonEnvelope: true,
+        output: outputPath,
+        signal: controller.signal,
+        fetchImpl: async () => {
+          controller.abort();
+          return new Response("partial");
+        }
+      });
+      expect(exitCode).toBe(1);
+      const envelope = JSON.parse(output.stdout.join(""));
+      expect(envelope.ok).toBe(false);
+      expect(envelope.errors[0].message).toContain("cancelled");
+      expect(await readFile(outputPath, "utf8")).toBe("original");
+      expect(await readdir(directory)).toEqual(before);
+    } finally {
+      output.restore();
+    }
+  });
+
   it("downloads a file and writes to output path", async () => {
     const directory = await mkdtemp(join(tmpdir(), "linear-cli-file-"));
     const paths = await writeProfileFiles(directory);
