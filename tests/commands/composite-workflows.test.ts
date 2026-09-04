@@ -1,6 +1,7 @@
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { Readable } from "node:stream";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { handleFileCommand } from "../../src/commands/file.js";
 import { handleProjectCommand } from "../../src/commands/project.js";
@@ -88,11 +89,14 @@ for (const command of ["file", "project"] as const) {
 
     function failingFetch(firstFails: boolean, respond: () => Response) {
       let calls = 0;
-      return vi.fn(async () => {
+      return vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
         calls++;
         if (firstFails) return respond();
         if (calls === 1) return firstResponse();
-        if (command === "file" && calls === 2) return new Response("", { status: 200 });
+        if (command === "file" && calls === 2) {
+          for await (const _chunk of init?.body as unknown as Readable) { /* consume PUT */ }
+          return new Response("", { status: 200 });
+        }
         return respond();
       });
     }

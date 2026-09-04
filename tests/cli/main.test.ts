@@ -199,6 +199,24 @@ describe("CLI failure output contract", () => {
 });
 
 describe("CLI scaffold", () => {
+  it("documents and parses file transfer timeout flags", async () => {
+    const { stdout } = await runCli(["file", "--help"]);
+    expect(stdout).toContain("--transfer-timeout <seconds>");
+    const result = await runMainWithThrowingFetch([
+      "file", "upload", "missing-file", "--transfer-timeout", "300", "--dry-run", "--json"
+    ]);
+    expect(result.code).toBe(0);
+    expect(result.fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it.each(["0", "-1", "1.5", "NaN", "Infinity", "2147484"])("validates transfer timeout %s before I/O", async (timeout) => {
+    const result = await runMainWithThrowingFetch([
+      "file", "download", "https://uploads.linear.app/file", `--transfer-timeout=${timeout}`, "--json-envelope"
+    ]);
+    expect(result.code).toBe(5);
+    expect(JSON.parse(result.stdout).errors[0].message).toContain("--transfer-timeout must be an integer");
+  });
+
   it("prints top-level agent-facing help", async () => {
     const { stdout: output } = await runCli(["--help"]);
 

@@ -282,6 +282,7 @@ function toParsedCliArguments(values: Record<string, unknown>, positionals: stri
     ...(typeof values.url === "string" ? { url: values.url } : {}),
     ...(typeof values.output === "string" ? { output: values.output } : {}),
     ...(typeof values["expires-in"] === "string" ? { expiresIn: values["expires-in"] } : {}),
+    ...(typeof values["transfer-timeout"] === "string" ? { transferTimeout: values["transfer-timeout"] } : {}),
     ...(typeof values.query === "string" ? { query: values.query } : {}),
     ...(typeof values.search === "string" ? { search: values.search, ...(typeof values.query === "string" ? {} : { query: values.search }) } : {}),
     ...(typeof values["filter-json"] === "string" ? { filterJson: values["filter-json"] } : {}),

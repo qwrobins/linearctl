@@ -95,6 +95,7 @@ export interface ParsedCliArguments {
   url?: string;
   output?: string;
   expiresIn?: string;
+  transferTimeout?: string;
   query?: string;
   filterJson?: string;
   createdAfter?: string;
