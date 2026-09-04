@@ -1,6 +1,12 @@
 name: CI
 
 on:
+  workflow_call:
+    inputs:
+      commit:
+        description: Exact commit to validate
+        required: true
+        type: string
   pull_request:
     branches: [main]
   push:
@@ -18,12 +24,18 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.commit || github.sha }}
 
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: latest
+          bun-version-file: .bun-version
 
       - run: bun install --frozen-lockfile
+
+      # Must run before any build can silently repair stale committed artifacts.
+      - name: Check generated artifacts
+        run: bun run check:generated
 
       - name: Typecheck
         run: bun run typecheck
@@ -58,10 +70,4 @@ jobs:
         run: .\tests\install\windows-installer.test.ps1
 
       - name: Smoke test binary
-        if: runner.os != 'Windows'
-        run: ./dist/linearctl --help
-
-      - name: Smoke test Windows binary
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: .\dist\linearctl.exe --help
+        run: bun run smoke:binary

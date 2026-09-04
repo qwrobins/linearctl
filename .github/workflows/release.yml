@@ -11,10 +11,51 @@ on:
         required: true
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
+  resolve:
+    runs-on: ubuntu-latest
+    outputs:
+      commit: ${{ steps.commit.outputs.sha }}
+      tag: ${{ steps.tag.outputs.name }}
+    steps:
+      - name: Validate tag format
+        id: tag
+        env:
+          TAG_NAME: ${{ github.event.inputs.tag || github.ref_name }}
+        run: |
+          if ! [[ "$TAG_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "Error: expected vX.Y.Z or vX.Y.Z-suffix" >&2
+            exit 1
+          fi
+          echo "name=$TAG_NAME" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v4
+        with:
+          # A manual input must name an existing tag, never a branch or arbitrary ref.
+          ref: refs/tags/${{ steps.tag.outputs.name }}
+
+      - name: Resolve exact release commit and validate version
+        id: commit
+        env:
+          TAG_NAME: ${{ steps.tag.outputs.name }}
+        run: |
+          pkg_version=$(python3 -c 'import json;print(json.load(open("package.json"))["version"])')
+          if [ "${TAG_NAME#v}" != "$pkg_version" ]; then
+            echo "Error: tag does not match package.json version" >&2
+            exit 1
+          fi
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+  validate:
+    needs: resolve
+    uses: ./.github/workflows/ci.yml
+    with:
+      commit: ${{ needs.resolve.outputs.commit }}
+
   build:
+    needs: [resolve, validate]
     strategy:
       matrix:
         include:
@@ -22,11 +63,11 @@ jobs:
             target: bun-linux-x64
             binary: linearctl-linux-x64
             artifact: linearctl-linux-x64
-          - os: ubuntu-latest
+          - os: ubuntu-24.04-arm
             target: bun-linux-arm64
             binary: linearctl-linux-arm64
             artifact: linearctl-linux-arm64
-          - os: macos-latest
+          - os: macos-15-intel
             target: bun-darwin-x64
             binary: linearctl-darwin-x64
             artifact: linearctl-darwin-x64
@@ -44,27 +85,22 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.inputs.tag || github.ref }}
+          ref: ${{ needs.resolve.outputs.commit }}
 
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: latest
+          bun-version-file: .bun-version
 
       - run: bun install --frozen-lockfile
 
+      - name: Check generated artifacts
+        run: bun run check:generated
+
       - name: Build binary
-        run: bun build src/cli/main.ts --compile --target=${{ matrix.target }} --outfile=dist/${{ matrix.binary }}
+        run: bun run build:binary --target=${{ matrix.target }} --outfile=dist/${{ matrix.binary }}
 
       - name: Smoke test binary
-        if: matrix.target == 'bun-linux-x64' || matrix.target == 'bun-darwin-arm64'
-        env:
-          BINARY_NAME: ${{ matrix.binary }}
-        run: ./dist/"$BINARY_NAME" --help
-
-      - name: Smoke test Windows binary
-        if: matrix.target == 'bun-windows-x64'
-        shell: pwsh
-        run: .\dist\linearctl.exe --help
+        run: bun run smoke:binary dist/${{ matrix.binary }}
 
       - name: Package Windows release
         if: matrix.target == 'bun-windows-x64'
@@ -92,43 +128,27 @@ jobs:
           if ($archivedFiles.Count -ne 1 -or $archivedFiles[0].FullName -ne $expectedBinary) {
             throw "$env:ARTIFACT_NAME must contain only linearctl.exe at the archive root."
           }
-          & $expectedBinary --help
+          bun run smoke:binary $expectedBinary
+          if ($LASTEXITCODE -ne 0) { throw "Archived binary smoke test failed." }
 
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}
           path: dist/${{ matrix.artifact }}
+          if-no-files-found: error
 
   release:
-    needs: build
+    needs: [resolve, validate, build]
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      TAG_NAME: ${{ needs.resolve.outputs.tag }}
 
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.inputs.tag || github.ref }}
-
-      - name: Validate tag format
-        env:
-          TAG_NAME: ${{ github.event.inputs.tag || github.ref_name }}
-        run: |
-          # The tag is interpolated into shell commands (sed programs, heredocs)
-          # later in this workflow, so it must be a plain version tag.
-          if ! echo "$TAG_NAME" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
-            echo "Error: tag '$TAG_NAME' is not a valid version tag (expected vX.Y.Z or vX.Y.Z-suffix)" >&2
-            exit 1
-          fi
-
-      - name: Validate tag matches package.json version
-        env:
-          TAG_NAME: ${{ github.event.inputs.tag || github.ref_name }}
-        run: |
-          tag_version="${TAG_NAME#v}"
-          pkg_version=$(python3 -c 'import json;print(json.load(open("package.json"))["version"])')
-          if [ "$tag_version" != "$pkg_version" ]; then
-            echo "Error: tag version ($tag_version) does not match package.json version ($pkg_version)" >&2
-            exit 1
-          fi
+          ref: ${{ needs.resolve.outputs.commit }}
 
       - uses: actions/download-artifact@v4
         with:
@@ -144,8 +164,6 @@ jobs:
           done
 
       - name: Build deb packages
-        env:
-          TAG_NAME: ${{ github.event.inputs.tag || github.ref_name }}
         run: |
           version="${TAG_NAME#v}"
           for arch_pair in "x64:amd64" "arm64:arm64"; do
@@ -187,8 +205,6 @@ jobs:
           sha256sum * > checksums.txt
 
       - name: Extract changelog for version
-        env:
-          TAG_NAME: ${{ github.event.inputs.tag || github.ref_name }}
         run: |
           version="${TAG_NAME#v}"
           # Extract the section for this version from CHANGELOG.md
@@ -200,13 +216,19 @@ jobs:
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG_NAME: ${{ github.event.inputs.tag || github.ref_name }}
+          RELEASE_COMMIT: ${{ needs.resolve.outputs.commit }}
         run: |
+          # Reject a deleted or moved tag instead of publishing validated assets under it.
+          git fetch --no-tags origin "refs/tags/$TAG_NAME"
+          if [ "$(git rev-parse 'FETCH_HEAD^{commit}')" != "$RELEASE_COMMIT" ]; then
+            echo "Error: release tag moved after validation" >&2
+            exit 1
+          fi
           if gh release view "$TAG_NAME" > /dev/null 2>&1; then
             echo "Release $TAG_NAME already exists, uploading assets..."
             gh release upload "$TAG_NAME" --clobber release/*
           else
-            gh release create "$TAG_NAME" \
+            gh release create "$TAG_NAME" --verify-tag \
               --title "$TAG_NAME" \
               --notes-file release-notes.md \
               release/*

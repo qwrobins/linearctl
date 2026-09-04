@@ -7,8 +7,11 @@
     "linearctl": "./dist/cli/main.js"
   },
   "scripts": {
-    "build": "bun run embed:skills && tsc -p tsconfig.build.json && bun run copy:assets",
-    "build:binary": "bun run embed:skills && bun build src/cli/main.ts --compile --outfile dist/linearctl",
+    "build": "bun scripts/build.ts",
+    "build:binary": "bun scripts/build.ts --binary",
+    "generate": "bun run embed:skills && bun scripts/generate-curated-manifest.ts && bun run docs:update-readme-commands",
+    "check:generated": "bun scripts/check-generated.ts",
+    "smoke:binary": "bun scripts/smoke-binary.ts",
     "embed:skills": "bun scripts/embed-skills.ts",
     "docs:update-readme-commands": "bun scripts/update-readme-command-table.ts",
     "copy:assets": "bun scripts/copy-assets.ts",
