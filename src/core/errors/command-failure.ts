@@ -1,5 +1,5 @@
 import { GraphQLTransportError, type GraphQLErrorPayload } from "../transport/graphql.js";
-import { ExitCode } from "./exit-codes.js";
+import { ExitCode, exitCodeForCategory } from "./exit-codes.js";
 import type { CommandError } from "../output/envelope.js";
 import { ProfileResolutionError } from "../auth/profile-resolution.js";
 import { ResolutionError } from "../resolution/resolve.js";
@@ -7,6 +7,15 @@ import { ResolutionError } from "../resolution/resolve.js";
 export interface CommandFailure {
   exitCode: number;
   error: CommandError;
+}
+
+/** Select a meaningful exit code, prioritizing actionable authentication/rate-limit failures. */
+export function exitCodeForErrors(errors: CommandError[]): number {
+  if (errors.some((error) => error.category === "authentication")) return ExitCode.AuthenticationError;
+  if (errors.some((error) => error.category === "rate-limit")) return ExitCode.RateLimitExhausted;
+  if (errors.some((error) => error.category === "not-found")) return ExitCode.NotFound;
+  const actionable = errors.find((error) => error.category !== "general");
+  return actionable === undefined ? ExitCode.GeneralError : exitCodeForCategory(actionable.category);
 }
 
 export function mapCommandFailure(error: unknown): CommandFailure {
