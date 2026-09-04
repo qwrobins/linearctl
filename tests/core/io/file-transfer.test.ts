@@ -16,6 +16,11 @@ vi.mock("node:fs", async (importOriginal) => {
   return { ...actual, createWriteStream: vi.fn(actual.createWriteStream) };
 });
 
+vi.mock("node:fs/promises", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:fs/promises")>();
+  return { ...actual, rm: vi.fn(actual.rm) };
+});
+
 const url = "https://uploads.linear.app/file";
 const headers = { authorization: "secret", "x-signed": "signed", "content-type": "application/octet-stream" };
 let directory: string;
@@ -23,12 +28,14 @@ let destination: string;
 let listeners: number[];
 
 beforeEach(async () => {
+  vi.mocked(rm).mockClear();
   directory = await mkdtemp(join(tmpdir(), "linearctl-transfer-"));
   destination = join(directory, "destination");
   listeners = [process.listenerCount("SIGINT"), process.listenerCount("SIGTERM")];
 });
 afterEach(async () => {
   vi.mocked(createWriteStream).mockReset();
+  vi.mocked(rm).mockReset();
   await rm(directory, { recursive: true, force: true });
   expect([process.listenerCount("SIGINT"), process.listenerCount("SIGTERM")]).toEqual(listeners);
 });
@@ -146,6 +153,22 @@ describe("streaming downloads", () => {
     await expectPreserved();
   });
 
+  it.each(["success", "failure"])("keeps the primary %s outcome when staging cleanup fails", async (mode) => {
+    await writeFile(destination, "original");
+    const primaryError = new Error("connection lost");
+    vi.mocked(rm).mockRejectedValueOnce(new Error("cleanup denied"));
+    const response = mode === "success" ? new Response("new") : new Response(new ReadableStream({
+      start(stream) { stream.enqueue(Buffer.from("partial")); },
+      pull(stream) { stream.error(primaryError); }
+    }));
+    const transfer = downloadFile(async () => response, url, headers, destination, {});
+    if (mode === "success") await expect(transfer).resolves.toBe(3);
+    else await expect(transfer).rejects.toBe(primaryError);
+    expect(await readFile(destination, "utf8")).toBe(mode === "success" ? "new" : "original");
+    expect(rm).toHaveBeenCalledOnce();
+    expect((await readdir(directory)).some((entry) => entry.startsWith(".linearctl-download-"))).toBe(true);
+  });
+
   it("cleans up when the destination cannot be replaced", async () => {
     await mkdir(destination);
     await writeFile(join(destination, "keep"), "original");
@@ -250,6 +273,51 @@ describe("transfer redirects and deadlines", () => {
 });
 
 describe("streaming uploads", () => {
+  it("waits for complete request consumption after early 2xx headers", async () => {
+    const file = await open(join(directory, "upload"), "w+");
+    await file.truncate(256 * 1024);
+    let body: Readable | undefined;
+    let settled = false;
+    try {
+      const transfer = uploadFile(async (_url, init) => {
+        body = init?.body as unknown as Readable;
+        return new Response();
+      }, url, headers, file, 256 * 1024, {});
+      void transfer.then(() => { settled = true; }, () => { settled = true; });
+      await delay(10);
+      expect(settled).toBe(false);
+      expect(body?.destroyed).toBe(false);
+      let size = 0;
+      for await (const chunk of body!) size += chunk.length;
+      await transfer;
+      expect(size).toBe(256 * 1024);
+    } finally {
+      await file.close();
+    }
+  });
+
+  it.each(["short", "read-error", "stalled"])("does not accept early 2xx headers with a %s source", async (mode) => {
+    const file = await open(join(directory, "upload"), "w+");
+    await file.write(Buffer.from("short"));
+    if (mode === "read-error") vi.spyOn(file, "read").mockRejectedValueOnce(new Error("file read failed"));
+    const cancel = vi.fn();
+    let body: Readable | undefined;
+    try {
+      await expect(uploadFile(async (_url, init) => {
+        body = init?.body as unknown as Readable;
+        if (mode !== "stalled") body.resume();
+        // Deliberately resolve fetch without awaiting its request body.
+        return new Response(new ReadableStream({ cancel }));
+      }, url, headers, file, 100, { timeoutMs: 50 })).rejects.toThrow(
+        mode === "short" ? "became shorter" : mode === "read-error" ? "file read failed" : "timed out"
+      );
+      expect(body?.destroyed).toBe(true);
+      expect(cancel).toHaveBeenCalledOnce();
+    } finally {
+      await file.close();
+    }
+  });
+
   it("rejects a source that shrinks instead of uploading a truncated file", async () => {
     const file = await open(join(directory, "upload"), "w+");
     await file.write(Buffer.from("short"));

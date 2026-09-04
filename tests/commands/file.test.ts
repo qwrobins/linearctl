@@ -2,6 +2,7 @@ import { mkdtemp, readFile, readdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { writeFile } from "node:fs/promises";
+import type { Readable } from "node:stream";
 import { describe, expect, it, vi } from "vitest";
 import { handleFileCommand } from "../../src/commands/file.js";
 import { writeCredentialsFile } from "../../src/core/auth/credentials.js";
@@ -71,7 +72,7 @@ describe("handleFileCommand — file upload", () => {
     await writeFile(testFile, Buffer.from("fake-png-bytes"));
 
     let callIndex = 0;
-    const fetchImpl = vi.fn(async (url: string | URL | Request) => {
+    const fetchImpl = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
       const urlStr = typeof url === "string" ? url : url instanceof URL ? url.toString() : url.url;
       callIndex++;
 
@@ -95,6 +96,7 @@ describe("handleFileCommand — file upload", () => {
       }
 
       expect(urlStr).toBe("https://storage.example.com/put-here");
+      for await (const _chunk of init?.body as unknown as Readable) { /* consume PUT */ }
       return new Response("", { status: 200 });
     }) as FetchLike;
 
@@ -161,6 +163,7 @@ describe("handleFileCommand — file upload", () => {
       const redirectedHeaders = init?.headers as Record<string, string>;
       expect(redirectedHeaders["content-type"]).toBe("image/png");
       expect(redirectedHeaders["x-amz-acl"]).toBeUndefined();
+      for await (const _chunk of init?.body as unknown as Readable) { /* consume PUT */ }
       return new Response("", {
         status: 200
       });
@@ -238,7 +241,7 @@ describe("handleFileCommand — file upload", () => {
     await writeFile(testFile, Buffer.from("fake-pdf"));
 
     let callIndex = 0;
-    const fetchImpl = vi.fn(async () => {
+    const fetchImpl = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
       callIndex++;
 
       if (callIndex === 1) {
@@ -260,7 +263,7 @@ describe("handleFileCommand — file upload", () => {
       }
 
       if (callIndex === 2) {
-        // PUT response
+        for await (const _chunk of init?.body as unknown as Readable) { /* consume PUT */ }
         return new Response("", { status: 200 });
       }
 

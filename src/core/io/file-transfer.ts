@@ -88,8 +88,11 @@ async function fetchWithHostValidatedRedirects(
     // A consumed stream cannot be reused after a redirect. Keep the opened
     // file descriptor, but restart at byte zero for every PUT.
     const body = upload === undefined ? undefined : uploadStream(upload.file, upload.size, init.signal);
-    const bodyDone = body === undefined ? undefined : finished(body, { cleanup: true }).catch(() => {});
-    let response: Response;
+    const bodyDone = body === undefined ? undefined : finished(body, { cleanup: true });
+    // Observe early failures while fetch is pending, but retain the original
+    // promise so a successful HTTP response cannot hide a source failure.
+    void bodyDone?.catch(() => {});
+    let response: Response | undefined;
     try {
       const { headers: _headers, ...rest } = init;
       const request: RequestInit & { duplex?: "half" } = {
@@ -104,9 +107,18 @@ async function fetchWithHostValidatedRedirects(
         })
       };
       response = await fetchImpl(currentUrl, request);
+      // Fetch can return headers before the request stream finishes. Only
+      // redirects/rejections may abandon the body; a 2xx must await clean EOF
+      // under the same deadline before it can be considered successful.
+      if (response.ok) await bodyDone;
+    } catch (error) {
+      if (response !== undefined) discardBody(response);
+      throw error;
     } finally {
       body?.destroy();
-      await bodyDone;
+      // Early redirects/rejections intentionally stop their request stream.
+      // Preserve the primary fetch/source error if cleanup also fails.
+      await bodyDone?.catch(() => {});
     }
 
     if (![301, 302, 303, 307, 308].includes(response.status)) return response;
@@ -203,7 +215,11 @@ export async function downloadFile(
       return size;
     } finally {
       discardBody(response);
-      if (stagingDirectory !== undefined) await rm(stagingDirectory, { recursive: true, force: true });
+      if (stagingDirectory !== undefined) {
+        // Cleanup cannot reverse an already committed rename, or replace the
+        // primary transfer error. A filesystem cleanup failure may leave staging.
+        await rm(stagingDirectory, { recursive: true, force: true }).catch(() => {});
+      }
     }
   });
 }
