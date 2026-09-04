@@ -52,6 +52,10 @@ jobs:
             throw ($errors | Out-String)
           }
 
+      - name: Test Unix installer
+        if: runner.os != 'Windows'
+        run: sh tests/install/unix-installer.test.sh
+
       - name: Test PowerShell installer
         if: runner.os == 'Windows'
         shell: pwsh

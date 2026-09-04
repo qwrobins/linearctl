@@ -5,21 +5,21 @@ REPO="qwrobins/linearctl"
 INSTALL_DIR="${LINEAR_INSTALL_DIR:-$HOME/.local/bin}"
 BINARY_NAME="linearctl"
 
-# Temp files are tracked so cleanup runs on every exit path (success, error,
-# interrupt). Paths come from mktemp and never contain spaces.
-TMP_FILES=""
+# Keep paths separately and quoted: INSTALL_DIR and TMPDIR may contain spaces.
+# Cleanup runs on success, error, and catchable interruptions.
+STAGED_BINARY=""
+DEB_FILE=""
+CHECKSUMS_FILE=""
 
 cleanup() {
-  for f in $TMP_FILES; do
-    rm -f "$f"
+  for f in "$STAGED_BINARY" "$DEB_FILE" "$CHECKSUMS_FILE"; do
+    if [ -n "$f" ]; then
+      rm -f "$f"
+    fi
   done
 }
 trap cleanup EXIT
 trap 'exit 1' HUP INT TERM
-
-track_tmp() {
-  TMP_FILES="$TMP_FILES $1"
-}
 
 main() {
   os=$(detect_os)
@@ -45,14 +45,13 @@ main() {
     deb_arch=$(detect_deb_arch)
     deb_name="linearctl_${version#v}_${deb_arch}.deb"
     deb_url="${base_url}/${deb_name}"
-    deb_file=$(mktemp "${TMPDIR:-/tmp}/linearctl.XXXXXX.deb")
-    track_tmp "$deb_file"
+    DEB_FILE=$(mktemp "${TMPDIR:-/tmp}/linearctl.XXXXXX.deb")
 
     echo "Installing linearctl ${version} via deb package (${deb_arch})..."
-    download "$deb_url" "$deb_file"
+    download "$deb_url" "$DEB_FILE"
     download_checksums "$checksums_url"
-    verify_checksum "$deb_file" "$deb_name" "$CHECKSUMS_FILE"
-    sudo dpkg -i "$deb_file"
+    verify_checksum "$DEB_FILE" "$deb_name" "$CHECKSUMS_FILE"
+    sudo dpkg -i "$DEB_FILE"
     echo "Installed ${BINARY_NAME} to /usr/bin/${BINARY_NAME}"
     echo ""
     echo "Update agent skills to match this version:"
@@ -68,19 +67,23 @@ main() {
 
   mkdir -p "$INSTALL_DIR"
 
-  # Download binary
-  download "$url" "${INSTALL_DIR}/${BINARY_NAME}"
+  # Stage on the destination filesystem so the final rename is atomic. Never
+  # touch the installed binary until the replacement is verified and ready.
+  STAGED_BINARY=$(mktemp "${INSTALL_DIR}/.${BINARY_NAME}.XXXXXX")
+  download "$url" "$STAGED_BINARY"
 
   # Verify checksum (mandatory — an unverified binary is never installed)
   download_checksums "$checksums_url"
-  verify_checksum "${INSTALL_DIR}/${BINARY_NAME}" "$artifact" "$CHECKSUMS_FILE"
+  verify_checksum "$STAGED_BINARY" "$artifact" "$CHECKSUMS_FILE"
 
-  chmod +x "${INSTALL_DIR}/${BINARY_NAME}"
+  chmod 755 "$STAGED_BINARY"
 
   # Remove macOS quarantine attribute so Gatekeeper doesn't block unsigned binary
   if [ "$os" = "darwin" ] && command -v xattr > /dev/null 2>&1; then
-    xattr -d com.apple.quarantine "${INSTALL_DIR}/${BINARY_NAME}" 2>/dev/null || true
+    xattr -d com.apple.quarantine "$STAGED_BINARY" 2>/dev/null || true
   fi
+
+  mv -f "$STAGED_BINARY" "${INSTALL_DIR}/${BINARY_NAME}"
 
   echo "Installed ${BINARY_NAME} to ${INSTALL_DIR}/${BINARY_NAME}"
 
@@ -109,13 +112,11 @@ download() {
 # Downloads checksums.txt into CHECKSUMS_FILE. Fails closed: if the checksums
 # cannot be retrieved, the install aborts rather than skipping verification.
 download_checksums() {
-  checksums_file=$(mktemp)
-  track_tmp "$checksums_file"
-  if ! download "$1" "$checksums_file" 2>/dev/null; then
+  CHECKSUMS_FILE=$(mktemp)
+  if ! download "$1" "$CHECKSUMS_FILE" 2>/dev/null; then
     echo "Error: could not download checksums.txt — refusing to install unverified artifacts" >&2
     exit 1
   fi
-  CHECKSUMS_FILE="$checksums_file"
 }
 
 verify_checksum() {
@@ -125,7 +126,6 @@ verify_checksum() {
 
   expected=$(awk -v name="$artifact_name" '$2 == name {print $1}' "$checksums_file")
   if [ -z "$expected" ]; then
-    rm -f "$binary_path"
     echo "Error: no checksum found for ${artifact_name} in checksums.txt — refusing to install" >&2
     exit 1
   fi
@@ -135,7 +135,6 @@ verify_checksum() {
   elif command -v shasum > /dev/null 2>&1; then
     actual=$(shasum -a 256 "$binary_path" | awk '{print $1}')
   else
-    rm -f "$binary_path"
     echo "Error: sha256sum or shasum is required to verify the download — refusing to install" >&2
     exit 1
   fi
@@ -144,7 +143,6 @@ verify_checksum() {
     echo "Error: checksum mismatch" >&2
     echo "  Expected: ${expected}" >&2
     echo "  Actual:   ${actual}" >&2
-    rm -f "$binary_path"
     exit 1
   fi
 
