@@ -48,6 +48,8 @@ jobs:
           git push origin "$tag"
           echo "Created and pushed tag $tag"
 
+      # Release re-runs the reusable CI checks on the tag's exact SHA before
+      # building/publishing; dispatch does not bypass validation.
       - name: Trigger release workflow
         if: steps.version.outputs.changed == 'true'
         env:

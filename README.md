@@ -46,7 +46,7 @@ cp dist/linearctl ~/.local/bin/linearctl
 
 On Windows, `bun run build:binary` produces `dist\linearctl.exe`; copy it to a directory on your user `PATH`.
 
-The compiled binary has no runtime dependencies. Building from source requires [Bun](https://bun.sh).
+The compiled binary has no runtime dependencies. Building from source requires the [Bun](https://bun.sh) version pinned in `.bun-version`. See [build and release validation](docs/releasing.md) for toolchain updates, generated-artifact checks, and release gates.
 
 ## Quick start
 
