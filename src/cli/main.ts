@@ -1,12 +1,13 @@
 #!/usr/bin/env node
 import { parseArgs } from "node:util";
-import { COMMAND_REGISTRY, findCommand } from "../core/registry/commands.js";
+import { findCommand } from "../core/registry/commands.js";
 import { OPTION_CATALOG, buildOptionDefinitions } from "../core/registry/option-catalog.js";
 import { generateCommandHelp, generateTopLevelHelp } from "../core/registry/help.js";
 import type { CommandRegistration, ParsedCliArguments } from "../core/registry/types.js";
 import { curatedCommandMetadata, defaultLinearConfigPaths, ExitCode } from "../index.js";
 import { maybeWarnForStaleSchema } from "../core/schema/freshness.js";
 import { failureEnvelope } from "../core/output/envelope.js";
+import { mapCommandFailure, type CommandFailure } from "../core/errors/command-failure.js";
 import type { FetchLike } from "../core/transport/graphql.js";
 import packageJson from "../../package.json" with { type: "json" };
 
@@ -318,22 +319,18 @@ function toParsedCliArguments(values: Record<string, unknown>, positionals: stri
  * Main entry point. Uses the command registry for dispatch.
  */
 export async function main(argv: string[], runtime: MainRuntime = defaultRuntime()): Promise<number> {
-  let args: ParsedCliArguments;
+  let args: ParsedCliArguments | undefined;
+  const fail = (failure: CommandFailure): number => emitCliFailure(failure, argv, runtime, args);
+  const validationError = (message: string): number => fail({
+    exitCode: ExitCode.ValidationError,
+    error: { category: "validation", message }
+  });
 
   try {
     args = parseCliArguments(argv);
   } catch (error) {
     const message = error instanceof Error ? error.message : "invalid arguments";
-    if (hasRawFlag(argv, "json-envelope")) {
-      const envelope = failureEnvelope(
-        [{ category: "validation", message }],
-        { sourceLayer: sourceLayerFromArgv(argv) }
-      );
-      runtime.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
-      return ExitCode.ValidationError;
-    }
-    runtime.stderr.write(`Error: ${message}\n`);
-    return ExitCode.ValidationError;
+    return validationError(message);
   }
 
   if (args.help) {
@@ -362,13 +359,11 @@ export async function main(argv: string[], runtime: MainRuntime = defaultRuntime
   }
 
   if (args.team !== undefined && args.allTeams) {
-    runtime.stderr.write("Error: --team cannot be used with --all-teams\n");
-    return ExitCode.ValidationError;
+    return validationError("--team cannot be used with --all-teams");
   }
 
   if (args.metadata === "curated" && !args.json) {
-    runtime.stderr.write("Error: --metadata curated requires --json\n");
-    return ExitCode.ValidationError;
+    return validationError("--metadata curated requires --json");
   }
 
   if (args.metadata === "curated" && args.json) {
@@ -377,8 +372,7 @@ export async function main(argv: string[], runtime: MainRuntime = defaultRuntime
   }
 
   if (args.jsonl && args.all !== true && args.max === undefined) {
-    runtime.stderr.write("Error: --jsonl requires --all or --max <n>\n");
-    return ExitCode.ValidationError;
+    return validationError("--jsonl requires --all or --max <n>");
   }
 
   // Registry-driven dispatch
@@ -397,25 +391,44 @@ export async function main(argv: string[], runtime: MainRuntime = defaultRuntime
         }
         return exitCode;
       } catch (error) {
-        const message = error instanceof Error ? error.message : "command failed";
-        runtime.stderr.write(`Error: ${message}\n`);
-        return ExitCode.GeneralError;
+        return fail(mapCommandFailure(error));
       }
     }
   }
 
   if (args.positionals.length === 0) {
-    runtime.stderr.write("Error: No command provided. Run 'linearctl --help' for available commands.\n");
-    return ExitCode.ValidationError;
+    return validationError("No command provided. Run 'linearctl --help' for available commands.");
   }
 
   const unknown = commandName ?? args.positionals.join(" ");
-  runtime.stderr.write(`Error: unknown command '${unknown}'. Run 'linearctl --help' for available commands.\n`);
-  return ExitCode.ValidationError;
+  return validationError(`unknown command '${unknown}'. Run 'linearctl --help' for available commands.`);
+}
+
+function emitCliFailure(
+  failure: CommandFailure,
+  argv: string[],
+  runtime: MainRuntime,
+  args?: ParsedCliArguments
+): number {
+  // Fall back to argv if parsing failed or an unknown command left trailing
+  // output flags unparsed. Otherwise respect the parser's option boundaries.
+  const commandName = args?.positionals[0];
+  const jsonEnvelope = args !== undefined && (commandName === undefined || findCommand(commandName) !== undefined)
+    ? args.jsonEnvelope
+    : hasRawFlag(argv, "json-envelope");
+  if (jsonEnvelope) {
+    const envelope = failureEnvelope([failure.error], { sourceLayer: sourceLayerFromArgv(argv) });
+    runtime.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
+  } else {
+    runtime.stderr.write(`Error: ${failure.error.message}\n`);
+  }
+  return failure.exitCode;
 }
 
 function hasRawFlag(argv: string[], flagName: string): boolean {
-  return argv.some((arg) => arg === `--${flagName}` || arg.startsWith(`--${flagName}=`));
+  const separator = argv.indexOf("--");
+  const optionArgs = separator === -1 ? argv : argv.slice(0, separator);
+  return optionArgs.some((arg) => arg === `--${flagName}` || arg.startsWith(`--${flagName}=`));
 }
 
 function sourceLayerFromArgv(argv: string[]): "curated" | "generated" | "raw-graphql" {
