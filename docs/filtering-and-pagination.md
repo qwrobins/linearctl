@@ -38,6 +38,34 @@ linearctl issue list --team INF --all --jsonl
 linearctl issue list --team INF --after "abc123" --json
 ```
 
+### Recovering from a failed page
+
+Pagination failures preserve progress from completed pages, including HTTP errors, exhausted rate-limit retries, timeouts, network failures, and GraphQL errors. The error category and exit code are unchanged.
+
+For buffered commands, use `--json-envelope` to retain fetched results on failure. The envelope has `ok: false` and `data: null`; recovery information is in `errors[0].details`:
+
+- `partialItems`: raw connection nodes from completed pages (before command-specific normalization).
+- `endCursor`: the cursor to pass to `--after`.
+- `pageInfo`: the last completed page's pagination metadata.
+
+For `--jsonl`, rows from completed pages are already on stdout and are not emitted again. Error details contain `totalItems` (the emitted count) instead of `partialItems`. Since `--jsonl` and `--json-envelope` are mutually exclusive, the CLI prints the count and resume cursor to stderr, keeping stdout limited to data rows.
+
+Resume with the same command, filters, and ordering. Use `--after` with `--max` to continue across pages; `--all` and `--after` are mutually exclusive. The new `--max` applies only to the resumed request, so subtract the fetched/emitted count if maintaining an overall limit.
+
+```bash
+# Capture buffered results and recovery details even if a later page fails
+linearctl issue list --team INF --max 1000 --json-envelope > result.json
+# Read errors[0].details.endCursor, save partialItems, then continue
+linearctl issue list --team INF --after "resume-here" --max 750 --json-envelope > resumed.json
+
+# Keep streamed rows and diagnostics separate
+linearctl issue list --team INF --max 1000 --jsonl > issues.jsonl 2> progress.log
+# Use the checkpoint printed in progress.log; append only the remaining rows
+linearctl issue list --team INF --after "resume-here" --max 750 --jsonl >> issues.jsonl 2>> progress.log
+```
+
+Data returned alongside GraphQL errors is not committed; resume retries that failed page. If the first page fails, the count is zero, `pageInfo` is the initial `{ "hasNextPage": false }` placeholder, and `endCursor` is the supplied `--after` cursor or `null`. With a null cursor, rerun without `--after`. Cursors are not snapshots: changes to the underlying result set between requests can still affect resumed results.
+
 ### Best practices
 
 - Always add filters before broad pagination. Fetching all issues in a workspace without filters is expensive and slow.
