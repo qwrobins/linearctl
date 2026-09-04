@@ -9,6 +9,7 @@ import { authorizationHeader } from "../core/transport/graphql.js";
 import type { FetchLike } from "../core/transport/graphql.js";
 import { emitDryRunResult } from "../core/output/dry-run.js";
 import { CommandContext } from "../core/runtime/command-context.js";
+import { runTwoStepWorkflow, WorkflowStepError } from "../core/runtime/workflow.js";
 
 export interface FileCommandOptions {
   json: boolean;
@@ -188,72 +189,82 @@ async function handleFileUpload(
   try {
     const fetchImpl = options.fetchImpl ?? fetch;
 
-    const uploadResponse = await ctx.graphql<FileUploadResponse>(
-      FILE_UPLOAD_MUTATION,
-      { contentType, filename: fileName, size }
-    );
+    const upload = {
+      name: "upload file",
+      execute: async () => {
+        const uploadResponse = await ctx.graphql<FileUploadResponse>(
+          FILE_UPLOAD_MUTATION,
+          { contentType, filename: fileName, size }
+        );
 
-    const uploadPayload = uploadResponse.body.data?.fileUpload;
-    const uploadFile = uploadPayload?.uploadFile;
-    if (
-      ctx.hasErrors(uploadResponse.body.errors) ||
-      uploadPayload == null ||
-      uploadPayload.success !== true ||
-      uploadFile == null ||
-      typeof uploadFile.uploadUrl !== "string" ||
-      typeof uploadFile.assetUrl !== "string" ||
-      !Array.isArray(uploadFile.headers)
-    ) {
-      const errors = ctx.mapGraphQLErrors(uploadResponse.body.errors);
-      return ctx.emitFailure(
-        errors.length > 0 ? errors : [{ category: "general", message: "File upload request failed" }]
-      );
-    }
+        const uploadPayload = uploadResponse.body.data?.fileUpload;
+        const uploadFile = uploadPayload?.uploadFile;
+        if (
+          ctx.hasErrors(uploadResponse.body.errors) ||
+          uploadPayload == null ||
+          uploadPayload.success !== true ||
+          uploadFile == null ||
+          typeof uploadFile.uploadUrl !== "string" ||
+          typeof uploadFile.assetUrl !== "string" ||
+          !Array.isArray(uploadFile.headers)
+        ) {
+          const errors = ctx.mapGraphQLErrors(uploadResponse.body.errors);
+          throw new WorkflowStepError(
+            errors.length > 0 ? errors : [{ category: "general", message: "File upload request failed" }]
+          );
+        }
 
-    const { uploadUrl, assetUrl, headers } = uploadFile;
+        const { uploadUrl, assetUrl, headers } = uploadFile;
 
-    const putHeaders: Record<string, string> = {};
-    for (const header of headers) {
-      putHeaders[header.key] = header.value;
-    }
-    if (!Object.keys(putHeaders).some((key) => key.toLowerCase() === "content-type")) {
-      putHeaders["Content-Type"] = contentType;
-    }
+        const putHeaders: Record<string, string> = {};
+        for (const header of headers) {
+          putHeaders[header.key] = header.value;
+        }
+        if (!Object.keys(putHeaders).some((key) => key.toLowerCase() === "content-type")) {
+          putHeaders["Content-Type"] = contentType;
+        }
 
-    await streamUploadFile(fetchImpl, uploadUrl, putHeaders, file, size, transferOptions);
+        await streamUploadFile(fetchImpl, uploadUrl, putHeaders, file, size, transferOptions);
 
-    const result: Record<string, unknown> = {
-      assetUrl,
-      contentType,
-      fileName,
-      size
+        return { assetUrl, contentType, fileName, size };
+      },
     };
 
+    let result: Record<string, unknown>;
     if (options.issue !== undefined) {
-      const attachResponse = await ctx.graphql<AttachmentCreateResponse>(
-        ATTACHMENT_CREATE_MUTATION,
-        {
-          input: {
-            issueId: options.issue,
-            url: assetUrl,
-            title: fileName
+      const workflow = await runTwoStepWorkflow(upload, (uploaded) => ({
+        name: "create attachment",
+        execute: async () => {
+          const response = await ctx.graphql<AttachmentCreateResponse>(
+            ATTACHMENT_CREATE_MUTATION,
+            { input: { issueId: options.issue, url: uploaded.assetUrl, title: uploaded.fileName } }
+          );
+          const payload = response.body.data?.attachmentCreate;
+          if (ctx.hasErrors(response.body.errors) || payload?.success !== true || payload.attachment == null) {
+            const errors = ctx.mapGraphQLErrors(response.body.errors);
+            throw new WorkflowStepError(
+              errors.length > 0 ? errors : [{ category: "general", message: "Attachment creation failed" }]
+            );
           }
-        }
-      );
+          const { id, title, url } = payload.attachment;
+          return { id, title, url };
+        },
+      }), "create attachment");
 
-      if (
-        ctx.hasErrors(attachResponse.body.errors) ||
-        attachResponse.body.data?.attachmentCreate?.attachment == null
-      ) {
-        const errors = ctx.mapGraphQLErrors(attachResponse.body.errors);
-        return ctx.emitFailure(
-          errors.length > 0 ? errors : [{ category: "general", message: "Attachment creation failed" }]
-        );
+      if (!workflow.ok) {
+        return ctx.emitWorkflowFailure(workflow, {
+          ...workflow.completed.first,
+          attachment: null,
+          issue: { id: options.issue },
+        }, "Reuse assetUrl with `linearctl attachment create --issue <issue> --url <assetUrl> --title <fileName>`; do not upload again. If the response was lost, check existing attachments before retrying.");
       }
-
-      const att = attachResponse.body.data.attachmentCreate.attachment;
-      result.attachment = { id: att.id, title: att.title, url: att.url };
-      result.issue = { id: options.issue };
+      result = {
+        ...workflow.completed.first!,
+        attachment: workflow.completed.second!,
+        issue: { id: options.issue },
+      };
+    } else {
+      result = await upload.execute();
     }
 
     if (options.json || options.jsonEnvelope) {
@@ -261,7 +272,7 @@ async function handleFileUpload(
     }
 
     process.stdout.write(`Uploaded ${fileName} (${size} bytes)\n`);
-    process.stdout.write(`  Asset URL: ${assetUrl}\n`);
+    process.stdout.write(`  Asset URL: ${result.assetUrl}\n`);
     if (result.attachment !== undefined) {
       const att = result.attachment as { id: string; title: string; url: string };
       process.stdout.write(`  Attachment: ${att.id}\n`);
@@ -269,6 +280,9 @@ async function handleFileUpload(
 
     return ExitCode.Success;
   } catch (error) {
+    if (error instanceof WorkflowStepError) {
+      return ctx.emitFailure(error.errors, error.exitCode);
+    }
     return ctx.emitCaughtError(error);
   } finally {
     await file.close();

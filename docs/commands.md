@@ -111,6 +111,8 @@ linearctl project update <id> [--name <text>] [--description <text>|--descriptio
 linearctl project delete <id> --json              # [destructive]
 ```
 
+If `create-with-issues` creates the project but fails to create issues, its failure output retains the project and structured step errors. Reuse the returned project ID to create only missing issues; do not rerun project creation. See [workflow failures and recovery](output-modes.md#composite-workflow-failures).
+
 `project list --json` includes portfolio fields such as `progress`, `health`, `description`, `updatedAt`, `currentProgress`, a normalized `milestones` array with `name`, `targetDate`, `progress`, and `status`, and milestone pagination metadata (`milestonesPageInfo`, `milestonesTruncated`) so clients can detect truncation. Human output also shows progress, health, description, updated time, and milestone summaries.
 
 For `project create`, `project create-with-issues`, and `project update`, `--status` accepts a status name, status type, or status ID. `--state` remains supported as an alias for compatibility.
@@ -226,6 +228,8 @@ linearctl file url <attachment-id> [--expires-in <seconds>] --json
 # Download a file
 linearctl file download <url> [--output <path>] [--transfer-timeout <seconds>] --json
 ```
+
+If `file upload --issue` uploads successfully but attachment creation fails, its failure output retains `assetUrl`, `fileName`, `contentType`, and `size`, including on thrown transport failures. Reuse that asset with `attachment create` instead of uploading again. See [workflow failures and recovery](output-modes.md#composite-workflow-failures).
 
 File upload and download stream with backpressure instead of buffering entire files. Upload sizes come from local file metadata; upload sources must be regular files and should not be modified during a transfer.
 

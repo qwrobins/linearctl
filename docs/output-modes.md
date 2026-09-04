@@ -49,7 +49,7 @@ linearctl issue list --team INF --json-envelope
   "errors": [],
   "meta": {
     "profile": "work",
-    "timestamp": "2025-01-15T10:30:00Z"
+    "sourceLayer": "curated"
   }
 }
 ```
@@ -58,6 +58,59 @@ Use `--json-envelope` when you need:
 - Pagination cursors (`pageInfo`)
 - Error details alongside partial data
 - Request metadata
+
+Failures also emit a single envelope on stdout, including argument parsing, top-level validation, unknown or missing commands, and unexpected dispatch errors:
+
+```json
+{
+  "ok": false,
+  "data": null,
+  "pageInfo": null,
+  "errors": [{ "category": "validation", "message": "--team cannot be used with --all-teams" }],
+  "meta": { "sourceLayer": "curated" }
+}
+```
+
+`meta.sourceLayer` is `generated` for `api`, `raw-graphql` for `gql`, and `curated` otherwise (including unknown or missing commands). Validation failures exit with code 5; unexpected failures use the mapped error category and exit code, defaulting to `general` and code 1. The envelope flag may precede or follow the command, including an unknown command. Help, version, and curated metadata early-exit output remain unchanged.
+
+## Composite workflow failures
+
+`file upload --issue` and `project create-with-issues` do not roll back completed resources. Once their workflow starts, failures return an `ok: false` envelope on stdout in **both** `--json` and `--json-envelope` modes (successful output is unchanged). Preflight errors still use the command's normal error output.
+
+The failure envelope keeps `data: null` and reports:
+
+- `meta.partial`: whether an earlier step completed successfully.
+- `errors[].category`, `message`, and optional `code`: the mapped failure, not a generic replacement. Original structured details are retained in `errors[].details.cause`.
+- `errors[].details.workflow`: `ok`, `partialSuccess`, `exitCode`, original `errors`, `steps`, and `completed`.
+- `workflow.steps.first` / `second`: each has a `name` and `status` (`success`, `failed`, or `skipped`), with a `result`, structured `errors`, or a skip `reason`, respectively.
+- `workflow.completed.first`: confirmed upload metadata or the created project. A failed first step leaves `completed` empty and skips the second step. Failure while constructing the second step also preserves the first result.
+- `errors[].details.recovery`: guidance for reusing completed resources. For convenience, details also include upload fields (`assetUrl`, `fileName`, `contentType`, `size`) or `project` directly.
+
+An upload is marked completed only after the storage PUT succeeds; signed upload URLs and headers are not included. Authentication, rate-limit, not-found, and validation failures retain their meaningful nonzero exit codes, even after partial success. Human output reports completed resources and recovery guidance on stderr.
+
+### Recover without recreating resources
+
+Capture failure output even when the command exits nonzero (avoid chaining recovery with `&&`):
+
+```bash
+linearctl file upload screenshot.png --issue INF-42 --json-envelope > upload-result.json
+# If errors[0].details.workflow.partialSuccess is true:
+asset_url=$(jq -r '.errors[0].details.assetUrl' upload-result.json)
+linearctl attachment list --issue INF-42 --json
+# If the attachment does not already exist, reuse the uploaded asset:
+linearctl attachment create --issue INF-42 --url "$asset_url" --title screenshot.png --json-envelope
+```
+
+For project creation, reuse the reported project ID rather than rerunning `create-with-issues`:
+
+```bash
+project_id=$(jq -r '.errors[0].details.project.id' project-result.json)
+linearctl issue list --project "$project_id" --all --json
+# Create only missing issues, retaining their original fields:
+linearctl issue create --project "$project_id" --team INF --title 'Missing task' --json-envelope
+```
+
+Fix authentication or wait for the rate limit before retrying the failed operation. A transport failure can mean the server committed the second mutation but its response was lost: `failed` means success was not confirmed, not that no write occurred. Inspect existing attachments/issues before retrying to avoid duplicates. Neither workflow automatically retries the whole command or deletes completed resources.
 
 ## --jsonl
 
@@ -98,7 +151,7 @@ linearctl gql query '{ viewer { id name } }' --raw
 | Code | Meaning | Typical action |
 |---|---|---|
 | 0 | Success | -- |
-| 1 | General error | Read stderr for details |
+| 1 | General error | Read `errors[]` in envelope mode, otherwise stderr |
 | 2 | Authentication error | Run `linearctl auth status`, re-authenticate |
 | 3 | Rate limit exhausted | Wait, reduce result count, add filters |
 | 4 | Not found | Verify identifier or ID |
@@ -107,4 +160,4 @@ linearctl gql query '{ viewer { id name } }' --raw
 
 ## Stderr
 
-Errors and warnings are written to stderr. Stdout contains only the requested output. This separation is reliable for piping and redirection.
+Human-readable errors and warnings are written to stderr. Structured failures in `--json-envelope` (and the composite `--json` failures described above) are written to stdout, without a duplicate error on stderr. Other `--json` failures use human-readable stderr output. Warnings may still appear on stderr. Stdout contains only the requested output, so it can be redirected or piped separately from warnings.

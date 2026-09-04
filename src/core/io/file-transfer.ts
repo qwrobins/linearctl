@@ -4,7 +4,7 @@ import type { FileHandle } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { Readable, Transform, Writable } from "node:stream";
 import { finished, pipeline } from "node:stream/promises";
-import { DEFAULT_REQUEST_TIMEOUT_MS } from "../transport/graphql.js";
+import { DEFAULT_REQUEST_TIMEOUT_MS, GraphQLTransportError } from "../transport/graphql.js";
 import type { FetchLike } from "../transport/graphql.js";
 
 export interface TransferOptions {
@@ -172,7 +172,10 @@ export async function uploadFile(
     }, { file, size });
     if (!response.ok) {
       discardBody(response);
-      throw new Error(`File PUT failed with HTTP ${response.status}`);
+      throw new GraphQLTransportError(
+        `File PUT failed with HTTP ${response.status}`,
+        "http", response.status, undefined, { status: response.status }
+      );
     }
     // Consume even a PUT response incrementally, under the same deadline.
     await pipeline(responseStream(response), new Writable({
