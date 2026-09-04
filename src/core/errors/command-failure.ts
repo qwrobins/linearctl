@@ -91,12 +91,14 @@ export function mapCommandFailure(error: unknown): CommandFailure {
   }
 
   if (error instanceof Error) {
+    const details = "details" in error ? error.details : undefined;
     if (isNotFoundMessage(error.message)) {
       return {
         exitCode: ExitCode.NotFound,
         error: {
           category: "not-found",
-          message: error.message
+          message: error.message,
+          ...(details === undefined ? {} : { details })
         }
       };
     }
@@ -105,7 +107,8 @@ export function mapCommandFailure(error: unknown): CommandFailure {
       exitCode: ExitCode.GeneralError,
       error: {
         category: "general",
-        message: error.message
+        message: error.message,
+        ...(details === undefined ? {} : { details })
       }
     };
   }

@@ -100,10 +100,6 @@ function printApiHelp(manifest: ApiCommandManifest): void {
 
 function printResourceHelp(manifest: ApiCommandManifest, resource: string): void {
   const entries = manifest.filter((e) => e.resource === resource);
-  if (entries.length === 0) {
-    process.stderr.write(`Error: unknown resource '${resource}'. Use 'linearctl api --help' to list resources.\n`);
-    return;
-  }
   process.stdout.write(`linearctl api ${resource} <operation>\n\n`);
   process.stdout.write("Operations:\n");
   for (const entry of entries) {
@@ -322,10 +318,11 @@ export async function handleApiCommand(
 
   // linearctl api <resource> --help (no operation)
   if (operation === undefined) {
+    if (!manifest.some((entry) => entry.resource === resource)) {
+      return emitValidationError(`unknown resource '${resource}'. Use 'linearctl api --help' to list resources.`, { ...options, sourceLayer: "generated" });
+    }
     printResourceHelp(manifest, resource);
-    // Return exit 5 if resource is unknown
-    const entries = manifest.filter((e) => e.resource === resource);
-    return entries.length === 0 ? ExitCode.ValidationError : ExitCode.Success;
+    return ExitCode.Success;
   }
 
   // Find matching manifest entry

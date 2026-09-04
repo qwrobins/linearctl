@@ -49,7 +49,7 @@ linearctl issue list --team INF --json-envelope
   "errors": [],
   "meta": {
     "profile": "work",
-    "timestamp": "2025-01-15T10:30:00Z"
+    "sourceLayer": "curated"
   }
 }
 ```
@@ -58,6 +58,20 @@ Use `--json-envelope` when you need:
 - Pagination cursors (`pageInfo`)
 - Error details alongside partial data
 - Request metadata
+
+Failures also emit a single envelope on stdout, including argument parsing, top-level validation, unknown or missing commands, and unexpected dispatch errors:
+
+```json
+{
+  "ok": false,
+  "data": null,
+  "pageInfo": null,
+  "errors": [{ "category": "validation", "message": "--team cannot be used with --all-teams" }],
+  "meta": { "sourceLayer": "curated" }
+}
+```
+
+`meta.sourceLayer` is `generated` for `api`, `raw-graphql` for `gql`, and `curated` otherwise (including unknown or missing commands). Validation failures exit with code 5; unexpected failures use the mapped error category and exit code, defaulting to `general` and code 1. The envelope flag may precede or follow the command, including an unknown command. Help, version, and curated metadata early-exit output remain unchanged.
 
 ## Composite workflow failures
 
@@ -137,7 +151,7 @@ linearctl gql query '{ viewer { id name } }' --raw
 | Code | Meaning | Typical action |
 |---|---|---|
 | 0 | Success | -- |
-| 1 | General error | Read stderr for details |
+| 1 | General error | Read `errors[]` in envelope mode, otherwise stderr |
 | 2 | Authentication error | Run `linearctl auth status`, re-authenticate |
 | 3 | Rate limit exhausted | Wait, reduce result count, add filters |
 | 4 | Not found | Verify identifier or ID |
@@ -146,4 +160,4 @@ linearctl gql query '{ viewer { id name } }' --raw
 
 ## Stderr
 
-Human-readable errors and warnings are written to stderr. Structured failures in `--json-envelope` (and the composite `--json` failures described above) are written to stdout. Stdout contains only the requested output, so it can be redirected or piped separately from warnings.
+Human-readable errors and warnings are written to stderr. Structured failures in `--json-envelope` (and the composite `--json` failures described above) are written to stdout, without a duplicate error on stderr. Other `--json` failures use human-readable stderr output. Warnings may still appear on stderr. Stdout contains only the requested output, so it can be redirected or piped separately from warnings.
