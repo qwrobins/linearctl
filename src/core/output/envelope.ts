@@ -72,6 +72,16 @@ export function formatCommandErrorHuman(error: CommandError): string {
   } else if (typeof details === "object" && details !== null) {
     const obj = details as Record<string, unknown>;
 
+    const partialCount = Array.isArray(obj.partialItems) ? obj.partialItems.length : undefined;
+    const emittedCount = typeof obj.totalItems === "number" ? obj.totalItems : undefined;
+    if (partialCount !== undefined || emittedCount !== undefined) {
+      const count = emittedCount ?? partialCount;
+      lines.push(`  Pagination stopped after ${count} ${count === 1 ? "item" : "items"} ${emittedCount !== undefined ? "emitted" : "fetched"}.`);
+      if (typeof obj.endCursor === "string") {
+        lines.push(`  Resume with --after ${JSON.stringify(obj.endCursor)} (use --max <n> instead of --all).`);
+      }
+    }
+
     if ("candidates" in obj && Array.isArray(obj.candidates)) {
       const candidates = obj.candidates as Array<unknown>;
       const labels = candidates
