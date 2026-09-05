@@ -76,3 +76,17 @@ final smoke tests/upload. Both architectures then pass quarantined execution and
 online notarization checks on fresh native runners before publication. Checksums
 cover the final signed assets. See [macOS signing](macos-signing.md) for required
 secrets, the online-first-launch policy, and local signature repair.
+
+## npm publication
+
+The Node.js distribution is published as `@qwrobinson/linearctl` by
+`.github/workflows/publish-npm.yml` whenever a matching `vX.Y.Z` tag is pushed.
+The workflow builds the TypeScript distribution with the pinned Bun version, then
+publishes the compiled JavaScript and manifest assets through npm Trusted
+Publishing. It does not require an npm token secret.
+
+Before the first release, publish the initial version once from a logged-in local
+environment so the npm package exists, then configure the package's Trusted
+Publisher as GitHub Actions for user `qwrobins`, repository `linearctl`, and
+workflow filename `publish-npm.yml`. Allow the `npm publish` action. Future
+versions are published automatically from matching release tags.

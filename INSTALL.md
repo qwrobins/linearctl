@@ -35,6 +35,18 @@ Remove-Item $installer
 
 The PowerShell installer verifies `linearctl-windows-x64.zip`, extracts `linearctl.exe`, and installs it to `%LOCALAPPDATA%\Programs\linearctl\bin`. Use `-InstallDir C:\path\to\bin` or `LINEAR_INSTALL_DIR` to override the destination.
 
+If Node.js 20 or newer is already installed, you can install the CLI from npm on any supported platform:
+
+```bash
+npm install --global @qwrobinson/linearctl
+```
+
+Or run it once without a global install:
+
+```bash
+npx --yes @qwrobinson/linearctl --version
+```
+
 ## 2. Install agent skills
 
 ```bash

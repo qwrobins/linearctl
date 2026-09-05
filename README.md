@@ -24,6 +24,20 @@ On Debian/Ubuntu, the installer automatically uses the `.deb` package. To skip d
 LINEAR_NO_DEB=1 curl -fsSL https://raw.githubusercontent.com/qwrobins/linearctl/main/install.sh | sh
 ```
 
+### npm / Node.js
+
+If Node.js 20 or newer is already installed:
+
+```bash
+npm install --global @qwrobinson/linearctl
+```
+
+This installs the same `linearctl` command without downloading a platform-specific binary. To run it once without a global install:
+
+```bash
+npx --yes @qwrobinson/linearctl --version
+```
+
 macOS releases use Developer ID signing and notarization. First launch requires
 Internet access for Gatekeeper's ticket lookup; the standalone binaries cannot
 carry stapled tickets. See [macOS signing](docs/macos-signing.md) for the release
