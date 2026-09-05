@@ -213,6 +213,9 @@ export async function downloadFile(
         { signal }
       );
       signal.throwIfAborted();
+      // Commit boundary: rename has no cancellation API. Once dispatched, await
+      // its actual result even if cancellation arrives; reporting an abort after
+      // a successful replacement would misrepresent the destination's state.
       // No unlink-first fallback: a failed rename must preserve the destination.
       await rename(stagingPath, outputPath);
       return size;

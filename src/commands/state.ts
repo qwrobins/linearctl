@@ -1,27 +1,20 @@
+import { commandIO, type CommandOptions, type CommandIO } from "../core/runtime/options.js";
 import { emitValidationError } from "../core/output/validation-error.js";
 import type { PageInfo } from "../core/output/envelope.js";
 import { ExitCode } from "../core/errors/exit-codes.js";
-import type { FetchLike, GraphQLErrorPayload } from "../core/transport/graphql.js";
+import type { GraphQLErrorPayload } from "../core/transport/graphql.js";
 import { paginateGraphQL, validatePaginationOptions } from "../core/pagination/pagination.js";
 import type { PaginationOptions } from "../core/pagination/pagination.js";
 import { streamPaginateGraphQL } from "../core/pagination/streaming.js";
 import { emitDryRunResult } from "../core/output/dry-run.js";
 import { resolveTeamId, resolveStateId, looksLikeId } from "../core/resolution/resolve.js";
 import { normalizeRetryOptions } from "../core/transport/retry.js";
-import { CommandContext } from "../core/runtime/command-context.js";
+import { createCommandContext } from "../core/runtime/command-context.js";
 
 const VALID_STATE_TYPES = ["backlog", "unstarted", "started", "completed", "canceled"] as const;
 
-export interface StateCommandOptions {
-  json: boolean;
-  jsonEnvelope: boolean;
+export interface StateCommandOptions extends CommandOptions {
   jsonl?: boolean;
-  profile?: string;
-  configFile: string;
-  credentialsFile: string;
-  apiUrl?: string;
-  env: Record<string, string | undefined>;
-  fetchImpl?: FetchLike;
   dryRun?: boolean;
   // state create flags
   name?: string;
@@ -37,9 +30,6 @@ export interface StateCommandOptions {
   pageSize?: number;
   after?: string;
   quiet?: boolean;
-  // retry flags
-  noRetry?: boolean;
-  maxRetries?: number;
 }
 
 interface RawWorkflowState {
@@ -141,41 +131,21 @@ export function normalizeWorkflowState(raw: RawWorkflowState): NormalizedWorkflo
   };
 }
 
-function printHumanState(state: NormalizedWorkflowState): void {
-  process.stdout.write(`${state.name}  ${state.type}  (${state.color})\n`);
+function printHumanState(state: NormalizedWorkflowState, options: CommandIO): void {
+  const { stdout } = commandIO(options);
+  stdout.write(`${state.name}  ${state.type}  (${state.color})\n`);
   if (state.description !== null) {
-    process.stdout.write(`  Description: ${state.description}\n`);
+    stdout.write(`  Description: ${state.description}\n`);
   }
-  process.stdout.write(`  Team:        ${state.team.name}\n`);
-}
-
-/** Build a CommandContext from state handler options */
-function buildContext(options: StateCommandOptions): CommandContext {
-  return new CommandContext({
-    json: options.json,
-    jsonEnvelope: options.jsonEnvelope,
-    ...(options.profile === undefined ? {} : { profile: options.profile }),
-    configFile: options.configFile,
-    credentialsFile: options.credentialsFile,
-    ...(options.apiUrl === undefined ? {} : { apiUrl: options.apiUrl }),
-    env: options.env,
-    ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl }),
-    ...(options.noRetry === true || options.maxRetries !== undefined
-      ? {
-          retry: {
-            ...(options.noRetry === true ? { noRetry: true } : {}),
-            ...(options.maxRetries !== undefined ? { maxRetries: options.maxRetries } : {}),
-          },
-        }
-      : {}),
-  });
+  stdout.write(`  Team:        ${state.team.name}\n`);
 }
 
 async function handleStateGet(
   identifier: string,
   options: StateCommandOptions
 ): Promise<number> {
-  const ctx = buildContext(options);
+  const { stdout } = commandIO(options);
+  const ctx = createCommandContext(options);
 
   try {
     let response = await ctx.graphql<{ workflowState: RawWorkflowState | null }>(
@@ -207,9 +177,9 @@ async function handleStateGet(
     if (options.jsonEnvelope) {
       return ctx.emitSuccess(state);
     } else if (options.json) {
-      process.stdout.write(`${JSON.stringify(state, null, 2)}\n`);
+      stdout.write(`${JSON.stringify(state, null, 2)}\n`);
     } else {
-      printHumanState(state);
+      printHumanState(state, options);
     }
 
     return ExitCode.Success;
@@ -219,7 +189,9 @@ async function handleStateGet(
 }
 
 async function handleStateList(options: StateCommandOptions): Promise<number> {
+  const { stdout } = commandIO(options);
   const paginationOptions: PaginationOptions = {
+    stderr: commandIO(options).stderr,
     all: options.all,
     max: options.max,
     pageSize: options.pageSize,
@@ -232,7 +204,7 @@ async function handleStateList(options: StateCommandOptions): Promise<number> {
     return emitValidationError(validationError, options);
   }
 
-  const ctx = buildContext(options);
+  const ctx = createCommandContext(options);
 
   try {
     const profile = await ctx.resolveProfile();
@@ -269,7 +241,7 @@ async function handleStateList(options: StateCommandOptions): Promise<number> {
         ...commonPaginateInput,
         options: { ...paginationOptions, all: paginationOptions.all ?? true },
         onItem: (raw) => {
-          process.stdout.write(`${JSON.stringify(normalizeWorkflowState(raw))}\n`);
+          stdout.write(`${JSON.stringify(normalizeWorkflowState(raw))}\n`);
         }
       });
     } else {
@@ -283,11 +255,11 @@ async function handleStateList(options: StateCommandOptions): Promise<number> {
       if (options.jsonEnvelope) {
         return ctx.emitSuccess(states, pageInfo);
       } else if (options.json) {
-        process.stdout.write(`${JSON.stringify(states, null, 2)}\n`);
+        stdout.write(`${JSON.stringify(states, null, 2)}\n`);
       } else {
         for (const state of states) {
-          printHumanState(state);
-          process.stdout.write("\n");
+          printHumanState(state, options);
+          stdout.write("\n");
         }
       }
     }
@@ -299,6 +271,7 @@ async function handleStateList(options: StateCommandOptions): Promise<number> {
 }
 
 async function handleStateCreate(options: StateCommandOptions): Promise<number> {
+  const { stdout } = commandIO(options);
   if (options.name === undefined) {
     return emitValidationError("--name is required for state create.", options);
   }
@@ -335,7 +308,7 @@ async function handleStateCreate(options: StateCommandOptions): Promise<number> 
     input.position = pos;
   }
 
-  const ctx = buildContext(options);
+  const ctx = createCommandContext(options);
 
   try {
     const resolverOpts = await ctx.resolverOptions();
@@ -365,9 +338,9 @@ async function handleStateCreate(options: StateCommandOptions): Promise<number> 
     if (options.jsonEnvelope) {
       return ctx.emitSuccess(state);
     } else if (options.json) {
-      process.stdout.write(`${JSON.stringify(state, null, 2)}\n`);
+      stdout.write(`${JSON.stringify(state, null, 2)}\n`);
     } else {
-      process.stdout.write(`Created state: ${state.name} (${state.type})\n`);
+      stdout.write(`Created state: ${state.name} (${state.type})\n`);
     }
 
     return ExitCode.Success;
@@ -377,7 +350,8 @@ async function handleStateCreate(options: StateCommandOptions): Promise<number> 
 }
 
 async function handleStateArchive(identifier: string, options: StateCommandOptions): Promise<number> {
-  const ctx = buildContext(options);
+  const { stdout } = commandIO(options);
+  const ctx = createCommandContext(options);
 
   try {
     const profile = await ctx.resolveProfile();
@@ -410,9 +384,9 @@ async function handleStateArchive(identifier: string, options: StateCommandOptio
     if (options.jsonEnvelope) {
       return ctx.emitSuccess(result);
     } else if (options.json) {
-      process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+      stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     } else {
-      process.stdout.write(`Archived state ${stateId}\n`);
+      stdout.write(`Archived state ${stateId}\n`);
     }
     return ExitCode.Success;
   } catch (error) {

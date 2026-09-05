@@ -9,13 +9,14 @@ import { maybeWarnForStaleSchema } from "../core/schema/freshness.js";
 import { failureEnvelope } from "../core/output/envelope.js";
 import { mapCommandFailure, type CommandFailure } from "../core/errors/command-failure.js";
 import type { FetchLike } from "../core/transport/graphql.js";
+import type { OutputStream } from "../core/runtime/options.js";
 import packageJson from "../../package.json" with { type: "json" };
 
-interface MainRuntime {
+export interface MainRuntime {
   env: NodeJS.ProcessEnv;
   stdin: NodeJS.ReadableStream;
-  stdout: NodeJS.WriteStream | Pick<NodeJS.WriteStream, "write">;
-  stderr: NodeJS.WriteStream | Pick<NodeJS.WriteStream, "write">;
+  stdout: OutputStream;
+  stderr: OutputStream;
   fetchImpl?: FetchLike;
   schemaFreshnessTimeoutMs?: number;
 }
@@ -73,15 +74,24 @@ function parseCliOptionSet(
   argv: string[],
   options: Record<string, { type: "boolean"; short?: string; multiple?: true } | { type: "string"; short?: string; multiple?: true }>
 ): { values: Record<string, unknown>; positionals: string[] } {
-  const { values, positionals } = parseArgs({
+  const { values, positionals, tokens } = parseArgs({
     args: argv,
     options,
     allowPositionals: true,
-    strict: true
+    strict: true,
+    tokens: true
   });
 
+  // Normalize aliases before merging leading and command-position options.
+  // Tokens retain ordering even when both aliases occur in the same segment.
+  const bound = tokens.slice().reverse().find((token) => token.kind === "option" && (token.name === "max" || token.name === "limit"));
+  if (bound?.kind === "option") {
+    values.max = values[bound.name];
+    delete values.limit;
+  }
+
   return {
-    values: values as Record<string, unknown>,
+    values: { ...values, ...(bound?.kind === "option" ? { maxOptionName: bound.name } : {}) },
     positionals
   };
 }
@@ -208,7 +218,7 @@ function toParsedCliArguments(values: Record<string, unknown>, positionals: stri
   const jsonl = values.jsonl === true;
   const jsonEnvelope = values["json-envelope"] === true;
   const states = stringArrayValue(values.state);
-  const maxValue = typeof values.max === "string" ? values.max : typeof values.limit === "string" ? values.limit : undefined;
+  const maxValue = typeof values.max === "string" ? values.max : undefined;
 
   if (jsonl && jsonEnvelope) {
     throw new Error("--jsonl and --json-envelope are mutually exclusive");
@@ -296,7 +306,7 @@ function toParsedCliArguments(values: Record<string, unknown>, positionals: stri
     ...(typeof values["order-by"] === "string" ? { orderBy: values["order-by"] } : {}),
     ...(typeof values["order-dir"] === "string" ? { orderDir: values["order-dir"] } : {}),
     all: values.all === true,
-    ...(maxValue === undefined ? {} : { max: parsePositiveInt(maxValue, typeof values.max === "string" ? "max" : "limit") }),
+    ...(maxValue === undefined ? {} : { max: parsePositiveInt(maxValue, values.maxOptionName === "limit" ? "limit" : "max") }),
     ...(typeof values["page-size"] === "string" ? { pageSize: parsePositiveInt(values["page-size"], "page-size") } : {}),
     ...(typeof values.after === "string" ? { after: values.after } : {}),
     sync: values.sync === true,
@@ -383,8 +393,12 @@ export async function main(argv: string[], runtime: MainRuntime = defaultRuntime
     if (registration !== undefined) {
       try {
         const options = registration.buildOptions(args, runtime.env, runtime.stdin);
-        if (runtime.fetchImpl !== undefined && options !== null && typeof options === "object") {
-          (options as Record<string, unknown>).fetchImpl = runtime.fetchImpl;
+        if (options !== null && typeof options === "object") {
+          Object.assign(options, {
+            stdout: runtime.stdout,
+            stderr: runtime.stderr,
+            ...(runtime.fetchImpl === undefined ? {} : { fetchImpl: runtime.fetchImpl }),
+          });
         }
         const exitCode = await registration.handler(args.positionals.slice(1), options);
         if (!args.help && !args.dryRun) {
@@ -462,6 +476,7 @@ async function runSchemaFreshnessCheck(
         credentialsFile: args.credentialsFile,
         ...(args.apiUrl === undefined ? {} : { apiUrl: args.apiUrl }),
         env: runtime.env,
+        stderr: runtime.stderr,
         fetchImpl
       }),
       new Promise<void>((resolve) => {

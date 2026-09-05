@@ -1,3 +1,4 @@
+import { commandIO, type CommandOptions } from "../core/runtime/options.js";
 import { open } from "node:fs/promises";
 import type { FileHandle } from "node:fs/promises";
 import { downloadFile, uploadFile as streamUploadFile } from "../core/io/file-transfer.js";
@@ -8,18 +9,10 @@ import { emitValidationError } from "../core/output/validation-error.js";
 import { authorizationHeader } from "../core/transport/graphql.js";
 import type { FetchLike } from "../core/transport/graphql.js";
 import { emitDryRunResult } from "../core/output/dry-run.js";
-import { CommandContext } from "../core/runtime/command-context.js";
+import { createCommandContext } from "../core/runtime/command-context.js";
 import { runTwoStepWorkflow, WorkflowStepError } from "../core/runtime/workflow.js";
 
-export interface FileCommandOptions {
-  json: boolean;
-  jsonEnvelope: boolean;
-  profile?: string;
-  configFile: string;
-  credentialsFile: string;
-  apiUrl?: string;
-  env: Record<string, string | undefined>;
-  fetchImpl?: FetchLike;
+export interface FileCommandOptions extends CommandOptions {
   dryRun?: boolean;
   issue?: string;
   output?: string;
@@ -27,9 +20,6 @@ export interface FileCommandOptions {
   transferTimeout?: string;
   /** Optional cancellation for embedded callers, in addition to SIGINT/SIGTERM. */
   signal?: AbortSignal;
-  // retry flags
-  noRetry?: boolean;
-  maxRetries?: number;
 }
 
 const CONTENT_TYPE_MAP: Record<string, string> = {
@@ -133,33 +123,12 @@ interface AttachmentUrlResponse {
   } | null;
 }
 
-/** Build a CommandContext from file handler options */
-function buildContext(options: FileCommandOptions): CommandContext {
-  return new CommandContext({
-    json: options.json,
-    jsonEnvelope: options.jsonEnvelope,
-    ...(options.profile === undefined ? {} : { profile: options.profile }),
-    configFile: options.configFile,
-    credentialsFile: options.credentialsFile,
-    ...(options.apiUrl === undefined ? {} : { apiUrl: options.apiUrl }),
-    env: options.env,
-    ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl }),
-    ...(options.noRetry === true || options.maxRetries !== undefined
-      ? {
-          retry: {
-            ...(options.noRetry === true ? { noRetry: true } : {}),
-            ...(options.maxRetries !== undefined ? { maxRetries: options.maxRetries } : {}),
-          },
-        }
-      : {}),
-  });
-}
-
 async function handleFileUpload(
   filePath: string,
   options: FileCommandOptions,
   transferOptions: TransferOptions
 ): Promise<number> {
+  const { stdout } = commandIO(options);
   const resolvedPath = resolve(filePath);
   const fileName = basename(resolvedPath);
   const contentType = contentTypeFromExtension(fileName);
@@ -184,7 +153,7 @@ async function handleFileUpload(
     return emitValidationError(`cannot read regular file: ${resolvedPath}`, options);
   }
 
-  const ctx = buildContext(options);
+  const ctx = createCommandContext(options);
 
   try {
     const fetchImpl = options.fetchImpl ?? fetch;
@@ -271,11 +240,11 @@ async function handleFileUpload(
       return ctx.emitSuccess(result);
     }
 
-    process.stdout.write(`Uploaded ${fileName} (${size} bytes)\n`);
-    process.stdout.write(`  Asset URL: ${result.assetUrl}\n`);
+    stdout.write(`Uploaded ${fileName} (${size} bytes)\n`);
+    stdout.write(`  Asset URL: ${result.assetUrl}\n`);
     if (result.attachment !== undefined) {
       const att = result.attachment as { id: string; title: string; url: string };
-      process.stdout.write(`  Attachment: ${att.id}\n`);
+      stdout.write(`  Attachment: ${att.id}\n`);
     }
 
     return ExitCode.Success;
@@ -293,6 +262,7 @@ async function handleFileUrl(
   attachmentId: string,
   options: FileCommandOptions
 ): Promise<number> {
+  const { stdout } = commandIO(options);
   let expiresIn = 60;
   if (options.expiresIn !== undefined) {
     const parsed = Number(options.expiresIn);
@@ -314,7 +284,7 @@ async function handleFileUrl(
       headers: { ...existing, "public-file-urls-expire-in": String(expiresIn) },
     });
   };
-  const ctx = buildContext({ ...options, fetchImpl: wrappedFetch });
+  const ctx = createCommandContext({ ...options, fetchImpl: wrappedFetch });
 
   try {
     const response = await ctx.graphql<AttachmentUrlResponse>(
@@ -336,7 +306,7 @@ async function handleFileUrl(
       return ctx.emitSuccess(result);
     }
 
-    process.stdout.write(`${result.url}\n`);
+    stdout.write(`${result.url}\n`);
     return ExitCode.Success;
   } catch (error) {
     return ctx.emitCaughtError(error);
@@ -348,6 +318,7 @@ async function handleFileDownload(
   options: FileCommandOptions,
   transferOptions: TransferOptions
 ): Promise<number> {
+  const { stdout } = commandIO(options);
   try {
     const parsed = new URL(downloadUrl);
     if (parsed.protocol !== "https:") {
@@ -360,7 +331,7 @@ async function handleFileDownload(
     return emitValidationError("invalid URL.", options);
   }
 
-  const ctx = buildContext(options);
+  const ctx = createCommandContext(options);
 
   try {
     const profile = await ctx.resolveProfile();
@@ -379,7 +350,7 @@ async function handleFileDownload(
       return ctx.emitSuccess(result);
     }
 
-    process.stdout.write(`Downloaded ${outputPath} (${size} bytes)\n`);
+    stdout.write(`Downloaded ${outputPath} (${size} bytes)\n`);
     return ExitCode.Success;
   } catch (error) {
     return ctx.emitCaughtError(error);

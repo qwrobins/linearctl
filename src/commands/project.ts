@@ -1,35 +1,23 @@
+import { commandIO, type CommandOptions, type CommandIO } from "../core/runtime/options.js";
 import { emitValidationError } from "../core/output/validation-error.js";
-import { failureEnvelope, successEnvelope } from "../core/output/envelope.js";
 import type { PageInfo } from "../core/output/envelope.js";
-import { mapCommandFailure } from "../core/errors/command-failure.js";
 import { ExitCode } from "../core/errors/exit-codes.js";
-import { executeGraphQL } from "../core/transport/graphql.js";
-import type { FetchLike, GraphQLErrorPayload } from "../core/transport/graphql.js";
-import { resolveStoredProfile } from "../core/auth/runtime.js";
+import type { GraphQLErrorPayload } from "../core/transport/graphql.js";
 import { paginateGraphQL, validatePaginationOptions, type PaginationOptions } from "../core/pagination/pagination.js";
 import { streamPaginateGraphQL } from "../core/pagination/streaming.js";
 import { emitDryRunResult } from "../core/output/dry-run.js";
 import { resolveContentInput, resolveDescriptionInput } from "../core/io/text-input.js";
 import { resolveProjectId, resolveTeamId, resolveUserId, looksLikeId } from "../core/resolution/resolve.js";
-import type { ResolverOptions } from "../core/resolution/resolve.js";
 import { normalizeRetryOptions } from "../core/transport/retry.js";
-import { CommandContext } from "../core/runtime/command-context.js";
+import { CommandContext, createCommandContext } from "../core/runtime/command-context.js";
 import { runTwoStepWorkflow, WorkflowStepError } from "../core/runtime/workflow.js";
 
 // Linear's query-complexity budget is exceeded by 250-project pages because
 // each project includes nested milestones and teams in the stable JSON output.
 const PROJECT_LIST_PAGE_SIZE = 50;
 
-export interface ProjectCommandOptions {
-  json: boolean;
-  jsonEnvelope: boolean;
+export interface ProjectCommandOptions extends CommandOptions {
   jsonl?: boolean;
-  profile?: string;
-  configFile: string;
-  credentialsFile: string;
-  apiUrl?: string;
-  env: Record<string, string | undefined>;
-  fetchImpl?: FetchLike;
   dryRun?: boolean;
   // project flags
   name?: string;
@@ -55,9 +43,6 @@ export interface ProjectCommandOptions {
   pageSize?: number;
   after?: string;
   quiet?: boolean;
-  // retry flags
-  noRetry?: boolean;
-  maxRetries?: number;
 }
 
 const VALID_PROJECT_STATE_TYPES = ["backlog", "planned", "started", "paused", "completed", "canceled"] as const;
@@ -426,33 +411,34 @@ export function normalizeProjectDetail(raw: RawProjectDetail): NormalizedProject
   };
 }
 
-function printHumanProject(project: NormalizedProject): void {
-  process.stdout.write(`${project.name}\n`);
-  process.stdout.write(`  State:  ${project.state}\n`);
+function printHumanProject(project: NormalizedProject, options: CommandIO): void {
+  const { stdout } = commandIO(options);
+  stdout.write(`${project.name}\n`);
+  stdout.write(`  State:  ${project.state}\n`);
   if (project.progress !== null) {
     const percent = project.progress <= 1 ? project.progress * 100 : project.progress;
-    process.stdout.write(`  Progress: ${Math.round(percent)}%\n`);
+    stdout.write(`  Progress: ${Math.round(percent)}%\n`);
   }
   if (project.health !== null) {
-    process.stdout.write(`  Health: ${project.health}\n`);
+    stdout.write(`  Health: ${project.health}\n`);
   }
   if (project.lead !== null) {
-    process.stdout.write(`  Lead:   ${project.lead.name}\n`);
+    stdout.write(`  Lead:   ${project.lead.name}\n`);
   }
   if (project.startDate !== null) {
-    process.stdout.write(`  Start:  ${project.startDate}\n`);
+    stdout.write(`  Start:  ${project.startDate}\n`);
   }
   if (project.targetDate !== null) {
-    process.stdout.write(`  Target: ${project.targetDate}\n`);
+    stdout.write(`  Target: ${project.targetDate}\n`);
   }
   if (project.updatedAt !== "") {
-    process.stdout.write(`  Updated: ${project.updatedAt}\n`);
+    stdout.write(`  Updated: ${project.updatedAt}\n`);
   }
   if (project.description !== null && project.description !== "") {
-    process.stdout.write(`  Description: ${project.description}\n`);
+    stdout.write(`  Description: ${project.description}\n`);
   }
   if (project.milestones.length > 0) {
-    process.stdout.write("  Milestones:\n");
+    stdout.write("  Milestones:\n");
     for (const milestone of project.milestones) {
       const parts = [milestone.name];
       if (milestone.targetDate !== null) {
@@ -465,13 +451,13 @@ function printHumanProject(project: NormalizedProject): void {
       if (milestone.status !== null) {
         parts.push(milestone.status);
       }
-      process.stdout.write(`    - ${parts.join(" | ")}\n`);
+      stdout.write(`    - ${parts.join(" | ")}\n`);
     }
     if (project.milestonesTruncated) {
-      process.stdout.write("    - ... more milestones available via --json metadata\n");
+      stdout.write("    - ... more milestones available via --json metadata\n");
     }
   }
-  process.stdout.write(`  URL:    ${project.url}\n`);
+  stdout.write(`  URL:    ${project.url}\n`);
 }
 
 function validateIsoDate(value: string, flagName: string, options: ProjectCommandOptions): number | undefined {
@@ -486,33 +472,12 @@ function validateIsoDate(value: string, flagName: string, options: ProjectComman
   return undefined;
 }
 
-/** Build a CommandContext from project handler options */
-function buildContext(options: ProjectCommandOptions): CommandContext {
-  return new CommandContext({
-    json: options.json,
-    jsonEnvelope: options.jsonEnvelope,
-    ...(options.profile === undefined ? {} : { profile: options.profile }),
-    configFile: options.configFile,
-    credentialsFile: options.credentialsFile,
-    ...(options.apiUrl === undefined ? {} : { apiUrl: options.apiUrl }),
-    env: options.env,
-    ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl }),
-    ...(options.noRetry === true || options.maxRetries !== undefined
-      ? {
-          retry: {
-            ...(options.noRetry === true ? { noRetry: true } : {}),
-            ...(options.maxRetries !== undefined ? { maxRetries: options.maxRetries } : {}),
-          },
-        }
-      : {}),
-  });
-}
-
 async function handleProjectGet(
   id: string,
   options: ProjectCommandOptions
 ): Promise<number> {
-  const ctx = buildContext(options);
+  const { stdout } = commandIO(options);
+  const ctx = createCommandContext(options);
 
   try {
     let projectId = id;
@@ -547,9 +512,9 @@ async function handleProjectGet(
     if (options.jsonEnvelope) {
       return ctx.emitSuccess(project);
     } else if (options.json) {
-      process.stdout.write(`${JSON.stringify(project, null, 2)}\n`);
+      stdout.write(`${JSON.stringify(project, null, 2)}\n`);
     } else {
-      printHumanProject(project);
+      printHumanProject(project, options);
     }
 
     return ExitCode.Success;
@@ -559,7 +524,9 @@ async function handleProjectGet(
 }
 
 async function handleProjectList(options: ProjectCommandOptions): Promise<number> {
+  const { stdout } = commandIO(options);
   const paginationOptions: PaginationOptions = {
+    stderr: commandIO(options).stderr,
     all: options.all,
     max: options.max,
     pageSize: options.pageSize ?? PROJECT_LIST_PAGE_SIZE,
@@ -572,7 +539,7 @@ async function handleProjectList(options: ProjectCommandOptions): Promise<number
     return emitValidationError(validationError, options);
   }
 
-  const ctx = buildContext(options);
+  const ctx = createCommandContext(options);
 
   try {
     const profile = await ctx.resolveProfile();
@@ -633,7 +600,7 @@ async function handleProjectList(options: ProjectCommandOptions): Promise<number
         ...commonPaginateInput,
         options: { ...paginationOptions, all: paginationOptions.all ?? true },
         onItem: (raw) => {
-          process.stdout.write(`${JSON.stringify(normalizeProject(raw))}\n`);
+          stdout.write(`${JSON.stringify(normalizeProject(raw))}\n`);
         }
       });
     } else {
@@ -647,11 +614,11 @@ async function handleProjectList(options: ProjectCommandOptions): Promise<number
       if (options.jsonEnvelope) {
         return ctx.emitSuccess(projects, pageInfo);
       } else if (options.json) {
-        process.stdout.write(`${JSON.stringify(projects, null, 2)}\n`);
+        stdout.write(`${JSON.stringify(projects, null, 2)}\n`);
       } else {
         for (const project of projects) {
-          printHumanProject(project);
-          process.stdout.write("\n");
+          printHumanProject(project, options);
+          stdout.write("\n");
         }
       }
     }
@@ -663,6 +630,7 @@ async function handleProjectList(options: ProjectCommandOptions): Promise<number
 }
 
 async function handleProjectCreate(options: ProjectCommandOptions): Promise<number> {
+  const { stdout } = commandIO(options);
   if (options.name === undefined) {
     return emitValidationError("--name is required for project create.", options);
   }
@@ -704,7 +672,7 @@ async function handleProjectCreate(options: ProjectCommandOptions): Promise<numb
     input.targetDate = options.targetDate;
   }
 
-  const ctx = buildContext(options);
+  const ctx = createCommandContext(options);
 
   try {
     const profile = await ctx.resolveProfile();
@@ -756,10 +724,10 @@ async function handleProjectCreate(options: ProjectCommandOptions): Promise<numb
     if (options.jsonEnvelope) {
       return ctx.emitSuccess(project);
     } else if (options.json) {
-      process.stdout.write(`${JSON.stringify(project, null, 2)}\n`);
+      stdout.write(`${JSON.stringify(project, null, 2)}\n`);
     } else {
-      process.stdout.write(`Created project: ${project.name}\n`);
-      process.stdout.write(`  URL: ${project.url}\n`);
+      stdout.write(`Created project: ${project.name}\n`);
+      stdout.write(`  URL: ${project.url}\n`);
     }
 
     return ExitCode.Success;
@@ -772,6 +740,7 @@ async function handleProjectUpdate(
   id: string,
   options: ProjectCommandOptions
 ): Promise<number> {
+  const { stdout } = commandIO(options);
   const input: Record<string, unknown> = {};
 
   if (options.name !== undefined) {
@@ -820,7 +789,7 @@ async function handleProjectUpdate(
     return emitValidationError("project update requires at least one of --name, --description, --description-file, --content, --content-file, --status, --state, --lead, --start-date, --target-date.", options);
   }
 
-  const ctx = buildContext(options);
+  const ctx = createCommandContext(options);
 
   try {
     if (options.lead !== undefined && !looksLikeId(options.lead)) {
@@ -860,10 +829,10 @@ async function handleProjectUpdate(
     if (options.jsonEnvelope) {
       return ctx.emitSuccess(project);
     } else if (options.json) {
-      process.stdout.write(`${JSON.stringify(project, null, 2)}\n`);
+      stdout.write(`${JSON.stringify(project, null, 2)}\n`);
     } else {
-      process.stdout.write(`Updated project: ${project.name}\n`);
-      process.stdout.write(`  URL: ${project.url}\n`);
+      stdout.write(`Updated project: ${project.name}\n`);
+      stdout.write(`  URL: ${project.url}\n`);
     }
 
     return ExitCode.Success;
@@ -877,6 +846,7 @@ async function handleProjectUpdate(
  * Uses the workflow abstraction for typed partial-success reporting.
  */
 async function handleProjectCreateWithIssues(options: ProjectCommandOptions): Promise<number> {
+  const { stdout } = commandIO(options);
   if (options.name === undefined) {
     return emitValidationError("--name is required for project create-with-issues.", options);
   }
@@ -951,7 +921,7 @@ async function handleProjectCreateWithIssues(options: ProjectCommandOptions): Pr
     projectInput.targetDate = options.targetDate;
   }
 
-  const ctx = buildContext(options);
+  const ctx = createCommandContext(options);
 
   try {
     const resolverOpts = await ctx.resolverOptions();
@@ -1056,13 +1026,13 @@ async function handleProjectCreateWithIssues(options: ProjectCommandOptions): Pr
     if (options.jsonEnvelope) {
       return ctx.emitSuccess(result);
     } else if (options.json) {
-      process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+      stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     } else {
-      process.stdout.write(`Created project: ${project.name}\n`);
-      process.stdout.write(`  URL: ${project.url}\n`);
-      process.stdout.write(`  Issues created: ${issues.length}\n`);
+      stdout.write(`Created project: ${project.name}\n`);
+      stdout.write(`  URL: ${project.url}\n`);
+      stdout.write(`  Issues created: ${issues.length}\n`);
       for (const issue of issues) {
-        process.stdout.write(`    ${issue.identifier}: ${issue.title}\n`);
+        stdout.write(`    ${issue.identifier}: ${issue.title}\n`);
       }
     }
 
@@ -1073,11 +1043,12 @@ async function handleProjectCreateWithIssues(options: ProjectCommandOptions): Pr
 }
 
 async function handleProjectDelete(id: string, options: ProjectCommandOptions): Promise<number> {
+  const { stdout } = commandIO(options);
   if (options.dryRun === true) {
     return emitDryRunResult("delete", "project", { id }, options);
   }
 
-  const ctx = buildContext(options);
+  const ctx = createCommandContext(options);
 
   try {
     const response = await ctx.graphql<{
@@ -1099,9 +1070,9 @@ async function handleProjectDelete(id: string, options: ProjectCommandOptions): 
     if (options.jsonEnvelope) {
       return ctx.emitSuccess(result);
     } else if (options.json) {
-      process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+      stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     } else {
-      process.stdout.write(`Deleted project ${id}\n`);
+      stdout.write(`Deleted project ${id}\n`);
     }
 
     return ExitCode.Success;

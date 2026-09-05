@@ -1,25 +1,18 @@
+import { commandIO, type CommandOptions, type CommandIO } from "../core/runtime/options.js";
 import { emitValidationError } from "../core/output/validation-error.js";
 import type { PageInfo } from "../core/output/envelope.js";
 import { ExitCode } from "../core/errors/exit-codes.js";
-import type { FetchLike, GraphQLErrorPayload } from "../core/transport/graphql.js";
+import type { GraphQLErrorPayload } from "../core/transport/graphql.js";
 import { paginateGraphQL, validatePaginationOptions } from "../core/pagination/pagination.js";
 import type { PaginationOptions } from "../core/pagination/pagination.js";
 import { streamPaginateGraphQL } from "../core/pagination/streaming.js";
 import { emitDryRunResult } from "../core/output/dry-run.js";
 import { resolveTeamId, resolveLabelId, looksLikeId } from "../core/resolution/resolve.js";
 import { normalizeRetryOptions } from "../core/transport/retry.js";
-import { CommandContext } from "../core/runtime/command-context.js";
+import { createCommandContext } from "../core/runtime/command-context.js";
 
-export interface LabelCommandOptions {
-  json: boolean;
-  jsonEnvelope: boolean;
+export interface LabelCommandOptions extends CommandOptions {
   jsonl?: boolean;
-  profile?: string;
-  configFile: string;
-  credentialsFile: string;
-  apiUrl?: string;
-  env: Record<string, string | undefined>;
-  fetchImpl?: FetchLike;
   dryRun?: boolean;
   // label create flags
   name?: string;
@@ -35,9 +28,6 @@ export interface LabelCommandOptions {
   pageSize?: number;
   after?: string;
   quiet?: boolean;
-  // retry flags
-  noRetry?: boolean;
-  maxRetries?: number;
 }
 
 interface RawLabel {
@@ -131,49 +121,29 @@ export function normalizeLabel(raw: RawLabel): NormalizedLabel {
   };
 }
 
-function printHumanLabel(label: NormalizedLabel): void {
-  process.stdout.write(`${label.name}  (${label.color})\n`);
+function printHumanLabel(label: NormalizedLabel, options: CommandIO): void {
+  const { stdout } = commandIO(options);
+  stdout.write(`${label.name}  (${label.color})\n`);
   if (label.description !== null) {
-    process.stdout.write(`  Description: ${label.description}\n`);
+    stdout.write(`  Description: ${label.description}\n`);
   }
   if (label.team !== null) {
-    process.stdout.write(`  Team:        ${label.team.name}\n`);
+    stdout.write(`  Team:        ${label.team.name}\n`);
   }
   if (label.isGroup) {
-    process.stdout.write("  Group:       true\n");
+    stdout.write("  Group:       true\n");
   }
   if (label.parent !== null) {
-    process.stdout.write(`  Parent:      ${label.parent.name}\n`);
+    stdout.write(`  Parent:      ${label.parent.name}\n`);
   }
-}
-
-/** Build a CommandContext from label handler options */
-function buildContext(options: LabelCommandOptions): CommandContext {
-  return new CommandContext({
-    json: options.json,
-    jsonEnvelope: options.jsonEnvelope,
-    ...(options.profile === undefined ? {} : { profile: options.profile }),
-    configFile: options.configFile,
-    credentialsFile: options.credentialsFile,
-    ...(options.apiUrl === undefined ? {} : { apiUrl: options.apiUrl }),
-    env: options.env,
-    ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl }),
-    ...(options.noRetry === true || options.maxRetries !== undefined
-      ? {
-          retry: {
-            ...(options.noRetry === true ? { noRetry: true } : {}),
-            ...(options.maxRetries !== undefined ? { maxRetries: options.maxRetries } : {}),
-          },
-        }
-      : {}),
-  });
 }
 
 async function handleLabelGet(
   identifier: string,
   options: LabelCommandOptions
 ): Promise<number> {
-  const ctx = buildContext(options);
+  const { stdout } = commandIO(options);
+  const ctx = createCommandContext(options);
 
   try {
     let response = await ctx.graphql<{ issueLabel: RawLabel | null }>(
@@ -211,9 +181,9 @@ async function handleLabelGet(
     if (options.jsonEnvelope) {
       return ctx.emitSuccess(label);
     } else if (options.json) {
-      process.stdout.write(`${JSON.stringify(label, null, 2)}\n`);
+      stdout.write(`${JSON.stringify(label, null, 2)}\n`);
     } else {
-      printHumanLabel(label);
+      printHumanLabel(label, options);
     }
 
     return ExitCode.Success;
@@ -223,7 +193,9 @@ async function handleLabelGet(
 }
 
 async function handleLabelList(options: LabelCommandOptions): Promise<number> {
+  const { stdout } = commandIO(options);
   const paginationOptions: PaginationOptions = {
+    stderr: commandIO(options).stderr,
     all: options.all,
     max: options.max,
     pageSize: options.pageSize,
@@ -236,7 +208,7 @@ async function handleLabelList(options: LabelCommandOptions): Promise<number> {
     return emitValidationError(validationError, options);
   }
 
-  const ctx = buildContext(options);
+  const ctx = createCommandContext(options);
 
   try {
     const profile = await ctx.resolveProfile();
@@ -273,7 +245,7 @@ async function handleLabelList(options: LabelCommandOptions): Promise<number> {
         ...commonPaginateInput,
         options: { ...paginationOptions, all: paginationOptions.all ?? true },
         onItem: (raw) => {
-          process.stdout.write(`${JSON.stringify(normalizeLabel(raw))}\n`);
+          stdout.write(`${JSON.stringify(normalizeLabel(raw))}\n`);
         }
       });
     } else {
@@ -287,11 +259,11 @@ async function handleLabelList(options: LabelCommandOptions): Promise<number> {
       if (options.jsonEnvelope) {
         return ctx.emitSuccess(labels, pageInfo);
       } else if (options.json) {
-        process.stdout.write(`${JSON.stringify(labels, null, 2)}\n`);
+        stdout.write(`${JSON.stringify(labels, null, 2)}\n`);
       } else {
         for (const label of labels) {
-          printHumanLabel(label);
-          process.stdout.write("\n");
+          printHumanLabel(label, options);
+          stdout.write("\n");
         }
       }
     }
@@ -303,6 +275,7 @@ async function handleLabelList(options: LabelCommandOptions): Promise<number> {
 }
 
 async function handleLabelCreate(options: LabelCommandOptions): Promise<number> {
+  const { stdout } = commandIO(options);
   if (options.name === undefined) {
     return emitValidationError("--name is required for label create.", options);
   }
@@ -324,7 +297,7 @@ async function handleLabelCreate(options: LabelCommandOptions): Promise<number> 
     input.isGroup = true;
   }
 
-  const ctx = buildContext(options);
+  const ctx = createCommandContext(options);
 
   try {
     const resolverOpts = await ctx.resolverOptions();
@@ -366,9 +339,9 @@ async function handleLabelCreate(options: LabelCommandOptions): Promise<number> 
     if (options.jsonEnvelope) {
       return ctx.emitSuccess(label);
     } else if (options.json) {
-      process.stdout.write(`${JSON.stringify(label, null, 2)}\n`);
+      stdout.write(`${JSON.stringify(label, null, 2)}\n`);
     } else {
-      process.stdout.write(`Created label: ${label.name} (${label.color})\n`);
+      stdout.write(`Created label: ${label.name} (${label.color})\n`);
     }
 
     return ExitCode.Success;
@@ -378,11 +351,12 @@ async function handleLabelCreate(options: LabelCommandOptions): Promise<number> 
 }
 
 async function handleLabelDelete(labelId: string, options: LabelCommandOptions): Promise<number> {
+  const { stdout } = commandIO(options);
   if (options.dryRun === true) {
     return emitDryRunResult("delete", "label", { id: labelId }, options);
   }
 
-  const ctx = buildContext(options);
+  const ctx = createCommandContext(options);
 
   try {
     const response = await ctx.graphql<{
@@ -404,9 +378,9 @@ async function handleLabelDelete(labelId: string, options: LabelCommandOptions):
     if (options.jsonEnvelope) {
       return ctx.emitSuccess(result);
     } else if (options.json) {
-      process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+      stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     } else {
-      process.stdout.write(`Deleted label ${labelId}\n`);
+      stdout.write(`Deleted label ${labelId}\n`);
     }
 
     return ExitCode.Success;

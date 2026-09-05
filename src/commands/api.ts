@@ -1,9 +1,8 @@
+import { commandIO, type CommandOptions, type CommandIO } from "../core/runtime/options.js";
 import { readFile } from "node:fs/promises";
-import { failureEnvelope, successEnvelope } from "../core/output/envelope.js";
+import { successEnvelope } from "../core/output/envelope.js";
 import { ExitCode } from "../core/errors/exit-codes.js";
 import { emitValidationError } from "../core/output/validation-error.js";
-import type { FetchLike } from "../core/transport/graphql.js";
-import { normalizeRetryOptions } from "../core/transport/retry.js";
 import { readAllStdin, isTtyInput } from "../core/io/stdin.js";
 import { createCommandContext } from "../core/runtime/command-context.js";
 import type { ApiCommandEntry, ApiCommandManifest } from "../generated/generate-manifest.js";
@@ -11,26 +10,15 @@ import bundledApiCommands from "../generated/manifest/api-commands.json" with { 
 
 export type { ApiCommandEntry, ApiCommandManifest };
 
-export interface ApiCommandOptions {
+export interface ApiCommandOptions extends CommandOptions {
   help?: boolean;
-  json: boolean;
-  jsonEnvelope: boolean;
   raw: boolean;
-  profile?: string;
-  configFile: string;
-  credentialsFile: string;
-  apiUrl?: string;
   id?: string;
   inputJson?: string;
   inputFile?: string;
   inputStdin: boolean;
   fields?: string;
-  env: Record<string, string | undefined>;
   stdinStream?: NodeJS.ReadableStream;
-  fetchImpl?: FetchLike;
-  // retry flags
-  noRetry?: boolean;
-  maxRetries?: number;
   /** Override manifest path for testing */
   manifestPath?: string;
 }
@@ -84,68 +72,72 @@ export function searchManifest(manifest: ApiCommandManifest, term: string): ApiC
 // Help text generation
 // ---------------------------------------------------------------------------
 
-function printApiHelp(manifest: ApiCommandManifest): void {
+function printApiHelp(manifest: ApiCommandManifest, options: CommandIO): void {
+  const { stdout } = commandIO(options);
   const counts = new Map<string, number>();
   for (const e of manifest) {
     counts.set(e.resource, (counts.get(e.resource) ?? 0) + 1);
   }
-  process.stdout.write("linearctl api <resource> <operation>\n\n");
-  process.stdout.write("Available resources:\n");
+  stdout.write("linearctl api <resource> <operation>\n\n");
+  stdout.write("Available resources:\n");
   for (const [resource, count] of [...counts.entries()].sort(([a], [b]) => a.localeCompare(b))) {
-    process.stdout.write(`  ${resource}  (${count} operation${count !== 1 ? "s" : ""})\n`);
+    stdout.write(`  ${resource}  (${count} operation${count !== 1 ? "s" : ""})\n`);
   }
-  process.stdout.write("\nUse: linearctl api <resource> --help for operations\n");
-  process.stdout.write("Use: linearctl api search <term> to search commands\n");
+  stdout.write("\nUse: linearctl api <resource> --help for operations\n");
+  stdout.write("Use: linearctl api search <term> to search commands\n");
 }
 
-function printResourceHelp(manifest: ApiCommandManifest, resource: string): void {
+function printResourceHelp(manifest: ApiCommandManifest, resource: string, options: CommandIO): void {
+  const { stdout } = commandIO(options);
   const entries = manifest.filter((e) => e.resource === resource);
-  process.stdout.write(`linearctl api ${resource} <operation>\n\n`);
-  process.stdout.write("Operations:\n");
+  stdout.write(`linearctl api ${resource} <operation>\n\n`);
+  stdout.write("Operations:\n");
   for (const entry of entries) {
     const desc = entry.description !== "" ? `  ${entry.description}` : "";
     const type = entry.graphqlOperationType === "mutation" ? " [mutation]" : "";
-    process.stdout.write(`  ${entry.operation}${type}${desc}\n`);
+    stdout.write(`  ${entry.operation}${type}${desc}\n`);
   }
 }
 
-function printOperationHelp(entry: ApiCommandEntry): void {
-  process.stdout.write(`${entry.commandPath}\n\n`);
+function printOperationHelp(entry: ApiCommandEntry, options: CommandIO): void {
+  const { stdout } = commandIO(options);
+  stdout.write(`${entry.commandPath}\n\n`);
   if (entry.description !== "") {
-    process.stdout.write(`${entry.description}\n\n`);
+    stdout.write(`${entry.description}\n\n`);
   }
-  process.stdout.write("Usage:\n");
-  process.stdout.write(`  ${entry.commandPath}`);
+  stdout.write("Usage:\n");
+  stdout.write(`  ${entry.commandPath}`);
   if (entry.inputMode === "id" || entry.inputMode === "id-plus-json") {
-    process.stdout.write(" --id <id>");
+    stdout.write(" --id <id>");
   }
   if (entry.inputMode !== "none" && entry.inputMode !== "id") {
-    process.stdout.write(" [--input-json <json>|--input-file <path>|--input-stdin]");
+    stdout.write(" [--input-json <json>|--input-file <path>|--input-stdin]");
   }
-  process.stdout.write(" [--fields <selection>] [--json]\n");
+  stdout.write(" [--fields <selection>] [--json]\n");
 
   const args = [...entry.requiredArgs, ...entry.optionalArgs];
   if (args.length > 0) {
-    process.stdout.write("\nGraphQL arguments:\n");
+    stdout.write("\nGraphQL arguments:\n");
     for (const arg of args) {
       const required = entry.requiredArgs.some((requiredArg) => requiredArg.name === arg.name);
-      process.stdout.write(`  ${arg.name}: ${arg.typeName}${required ? " (required)" : ""}\n`);
+      stdout.write(`  ${arg.name}: ${arg.typeName}${required ? " (required)" : ""}\n`);
       if (arg.description !== null && arg.description !== "") {
-        process.stdout.write(`    ${arg.description}\n`);
+        stdout.write(`    ${arg.description}\n`);
       }
     }
   }
 }
 
-function printSearchResults(results: ApiCommandEntry[], term: string): void {
+function printSearchResults(results: ApiCommandEntry[], term: string, options: CommandIO): void {
+  const { stderr, stdout } = commandIO(options);
   if (results.length === 0) {
-    process.stderr.write(`No commands matching '${term}'.\n`);
+    stderr.write(`No commands matching '${term}'.\n`);
     return;
   }
-  process.stdout.write(`Commands matching '${term}':\n`);
+  stdout.write(`Commands matching '${term}':\n`);
   for (const entry of results) {
     const desc = entry.description !== "" ? `  ${entry.description}` : "";
-    process.stdout.write(`  ${entry.commandPath}${desc}\n`);
+    stdout.write(`  ${entry.commandPath}${desc}\n`);
   }
 }
 
@@ -280,6 +272,7 @@ export async function handleApiCommand(
   positionals: string[],
   options: ApiCommandOptions
 ): Promise<number> {
+  const { stdout } = commandIO(options);
   const manifest = await loadManifest(options.manifestPath);
 
   if (manifest === null) {
@@ -294,7 +287,7 @@ export async function handleApiCommand(
 
   // linearctl api --help (with no positionals)
   if (resource === undefined) {
-    printApiHelp(manifest);
+    printApiHelp(manifest, options);
     return ExitCode.Success;
   }
 
@@ -306,12 +299,12 @@ export async function handleApiCommand(
     }
     const results = searchManifest(manifest, term);
     if (options.json) {
-      process.stdout.write(`${JSON.stringify(results, null, 2)}\n`);
+      stdout.write(`${JSON.stringify(results, null, 2)}\n`);
     } else if (options.jsonEnvelope) {
       const envelope = successEnvelope(results, { sourceLayer: "generated" });
-      process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
+      stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
     } else {
-      printSearchResults(results, term);
+      printSearchResults(results, term, options);
     }
     return ExitCode.Success;
   }
@@ -321,7 +314,7 @@ export async function handleApiCommand(
     if (!manifest.some((entry) => entry.resource === resource)) {
       return emitValidationError(`unknown resource '${resource}'. Use 'linearctl api --help' to list resources.`, { ...options, sourceLayer: "generated" });
     }
-    printResourceHelp(manifest, resource);
+    printResourceHelp(manifest, resource, options);
     return ExitCode.Success;
   }
 
@@ -341,7 +334,7 @@ export async function handleApiCommand(
   }
 
   if (options.help === true) {
-    printOperationHelp(entry);
+    printOperationHelp(entry, options);
     return ExitCode.Success;
   }
 
@@ -376,41 +369,17 @@ export async function handleApiCommand(
     return emitValidationError("this command requires JSON input. Use --input-json, --input-file, or --input-stdin.", { ...options, sourceLayer: "generated" });
   }
 
-  const fallbackCtx = createCommandContext({
-    json: options.json,
-    jsonEnvelope: options.jsonEnvelope,
-    ...(options.profile === undefined ? {} : { profile: options.profile }),
-    configFile: options.configFile,
-    credentialsFile: options.credentialsFile,
-    ...(options.apiUrl === undefined ? {} : { apiUrl: options.apiUrl }),
-    env: options.env,
-    ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl }),
-    sourceLayer: "generated"
-  });
-
-  let retry;
+  let ctx;
   try {
-    retry = normalizeRetryOptions(options);
+    ctx = createCommandContext({ ...options, sourceLayer: "generated" });
   } catch (error) {
     if (error instanceof RangeError) {
       return emitValidationError(error.message, { ...options, sourceLayer: "generated" });
     }
-    return fallbackCtx.emitCaughtError(error);
+    throw error;
   }
 
   try {
-    const ctx = createCommandContext({
-      json: options.json,
-      jsonEnvelope: options.jsonEnvelope,
-      ...(options.profile === undefined ? {} : { profile: options.profile }),
-      configFile: options.configFile,
-      credentialsFile: options.credentialsFile,
-      ...(options.apiUrl === undefined ? {} : { apiUrl: options.apiUrl }),
-      env: options.env,
-      ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl }),
-      ...(retry === undefined ? {} : { retry }),
-      sourceLayer: "generated"
-    });
     const variables = buildVariables(entry, options.id, inputJson);
     const query = buildGraphQLOperation(entry, options.fields);
     const response = await ctx.graphql<Record<string, unknown>>(
@@ -428,18 +397,20 @@ export async function handleApiCommand(
     const data = response.body.data?.[entry.graphqlField] ?? null;
 
     if (options.raw) {
-      process.stdout.write(`${response.text}\n`);
+      stdout.write(`${response.text}\n`);
     } else if (options.jsonEnvelope) {
       return ctx.emitSuccess(data);
     } else if (options.json) {
-      process.stdout.write(`${JSON.stringify(data, null, 2)}\n`);
+      stdout.write(`${JSON.stringify(data, null, 2)}\n`);
     } else {
       // Human-readable fallback: just print JSON for generated commands
-      process.stdout.write(`${JSON.stringify(data, null, 2)}\n`);
+      stdout.write(`${JSON.stringify(data, null, 2)}\n`);
     }
 
     return ExitCode.Success;
   } catch (error) {
-    return fallbackCtx.emitCaughtError(error);
+    // Historically caught API failures include only an explicitly requested
+    // profile, unlike response errors emitted by the resolved context above.
+    return createCommandContext({ ...options, sourceLayer: "generated" }).emitCaughtError(error);
   }
 }

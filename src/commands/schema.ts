@@ -1,13 +1,10 @@
+import { commandIO, type CommandOptions } from "../core/runtime/options.js";
 import { join, dirname } from "node:path";
 import { mapCommandFailure } from "../core/errors/command-failure.js";
 import { ExitCode } from "../core/errors/exit-codes.js";
 import { emitValidationError } from "../core/output/validation-error.js";
 import { failureEnvelope, successEnvelope } from "../core/output/envelope.js";
-import type { CommandError } from "../core/output/envelope.js";
-import { resolveStoredProfile } from "../core/auth/runtime.js";
-import { executeGraphQL } from "../core/transport/graphql.js";
-import type { FetchLike } from "../core/transport/graphql.js";
-import { executeGraphQLWithRetry, normalizeRetryOptions, type RetryOptions } from "../core/transport/retry.js";
+import { createCommandContext } from "../core/runtime/command-context.js";
 import { INTROSPECTION_QUERY } from "../core/schema/introspection-query.js";
 import {
   computeSchemaFingerprint,
@@ -21,19 +18,8 @@ import type { SchemaMetadata } from "../core/schema/schema-meta.js";
 import { diffSchemas, formatDiffSummary } from "../core/schema/schema-diff.js";
 import type { SchemaDiff } from "../core/schema/schema-diff.js";
 
-export interface SchemaCommandOptions {
-  json: boolean;
-  jsonEnvelope: boolean;
-  profile?: string;
-  configFile: string;
-  credentialsFile: string;
-  apiUrl?: string;
+export interface SchemaCommandOptions extends CommandOptions {
   outputDir?: string;
-  env: Record<string, string | undefined>;
-  fetchImpl?: FetchLike;
-  // retry flags
-  noRetry?: boolean;
-  maxRetries?: number;
 }
 
 export async function handleSchemaCommand(
@@ -58,6 +44,7 @@ export async function handleSchemaCommand(
 }
 
 async function handleSchemaVersion(positionals: string[], options: SchemaCommandOptions): Promise<number> {
+  const { stdout } = commandIO(options);
   if (positionals.length > 0) {
     return emitValidationError("schema version does not accept positional arguments.", options);
   }
@@ -67,51 +54,36 @@ async function handleSchemaVersion(positionals: string[], options: SchemaCommand
 
   if (options.jsonEnvelope) {
     const envelope = successEnvelope(output, { sourceLayer: "curated" });
-    process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
+    stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
     return ExitCode.Success;
   }
 
   if (options.json) {
-    process.stdout.write(`${JSON.stringify(output, null, 2)}\n`);
+    stdout.write(`${JSON.stringify(output, null, 2)}\n`);
     return ExitCode.Success;
   }
 
   if (output.status === "not-bundled") {
-    process.stdout.write("No schema is bundled. Run linearctl schema pull to fetch the live schema.\n");
+    stdout.write("No schema is bundled. Run linearctl schema pull to fetch the live schema.\n");
   } else {
-    process.stdout.write(`Schema version: ${output.schemaVersion}\n`);
-    process.stdout.write(`Bundled at: ${output.bundledAt}\n`);
-    process.stdout.write(`Source: ${output.source}\n`);
+    stdout.write(`Schema version: ${output.schemaVersion}\n`);
+    stdout.write(`Bundled at: ${output.bundledAt}\n`);
+    stdout.write(`Source: ${output.source}\n`);
   }
 
   return ExitCode.Success;
 }
 
 async function handleSchemaPull(positionals: string[], options: SchemaCommandOptions): Promise<number> {
+  const { stdout, stderr } = commandIO(options);
   if (positionals.length > 0) {
     return emitValidationError("schema pull does not accept positional arguments.", options);
   }
 
   try {
-    const profile = await resolveStoredProfile({
-      paths: {
-        configFile: options.configFile,
-        credentialsFile: options.credentialsFile
-      },
-      ...(options.profile === undefined ? {} : { explicitProfile: options.profile }),
-      env: options.env
-    });
-
-    const response = await executeSchemaGraphQL<{ __schema: unknown }>({
-      query: INTROSPECTION_QUERY,
-      credentials: profile.credentials,
-      ...(options.apiUrl === undefined
-        ? profile.metadata.baseUrl === undefined
-          ? {}
-          : { apiUrl: profile.metadata.baseUrl }
-        : { apiUrl: options.apiUrl }),
-      ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl })
-    }, normalizeRetryOptions(options));
+    const ctx = createCommandContext(options);
+    const profile = await ctx.resolveProfile();
+    const response = await ctx.graphql<{ __schema: unknown }>(INTROSPECTION_QUERY);
 
     if (response.body.data === undefined || response.body.data.__schema === undefined) {
       return emitSchemaFailure("introspection response did not contain schema data.", options);
@@ -145,21 +117,21 @@ async function handleSchemaPull(positionals: string[], options: SchemaCommandOpt
         profile: profile.name,
         ...(schemaVersion === null ? {} : { schemaVersion })
       });
-      process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
+      stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
       return ExitCode.Success;
     }
 
     if (options.json) {
-      process.stdout.write(`${JSON.stringify(output, null, 2)}\n`);
+      stdout.write(`${JSON.stringify(output, null, 2)}\n`);
       return ExitCode.Success;
     }
 
-    process.stdout.write(`Schema pulled successfully.\n`);
+    stdout.write(`Schema pulled successfully.\n`);
     if (schemaVersion !== null) {
-      process.stdout.write(`Version: ${schemaVersion}\n`);
+      stdout.write(`Version: ${schemaVersion}\n`);
     }
-    process.stdout.write(`Schema: ${output.schemaFile}\n`);
-    process.stdout.write(`Metadata: ${output.metaFile}\n`);
+    stdout.write(`Schema: ${output.schemaFile}\n`);
+    stdout.write(`Metadata: ${output.metaFile}\n`);
 
     return ExitCode.Success;
   } catch (error) {
@@ -170,9 +142,9 @@ async function handleSchemaPull(positionals: string[], options: SchemaCommandOpt
         sourceLayer: "curated",
         ...(options.profile === undefined ? {} : { profile: options.profile })
       });
-      process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
+      stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
     } else {
-      process.stderr.write(`Error: ${failure.error.message}\n`);
+      stderr.write(`Error: ${failure.error.message}\n`);
     }
 
     return failure.exitCode;
@@ -180,6 +152,7 @@ async function handleSchemaPull(positionals: string[], options: SchemaCommandOpt
 }
 
 async function handleSchemaCheck(positionals: string[], options: SchemaCommandOptions): Promise<number> {
+  const { stdout, stderr } = commandIO(options);
   if (positionals.length > 0) {
     return emitValidationError("schema check does not accept positional arguments.", options);
   }
@@ -188,25 +161,8 @@ async function handleSchemaCheck(positionals: string[], options: SchemaCommandOp
     const bundledMeta = await loadPreferredSchemaMetadata(options.configFile);
     const bundledVersion = bundledMeta.schemaVersion;
 
-    const profile = await resolveStoredProfile({
-      paths: {
-        configFile: options.configFile,
-        credentialsFile: options.credentialsFile
-      },
-      ...(options.profile === undefined ? {} : { explicitProfile: options.profile }),
-      env: options.env
-    });
-
-    const response = await executeSchemaGraphQL<{ __schema: unknown }>({
-      query: INTROSPECTION_QUERY,
-      credentials: profile.credentials,
-      ...(options.apiUrl === undefined
-        ? profile.metadata.baseUrl === undefined
-          ? {}
-          : { apiUrl: profile.metadata.baseUrl }
-        : { apiUrl: options.apiUrl }),
-      ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl })
-    }, normalizeRetryOptions(options));
+    const ctx = createCommandContext(options);
+    const response = await ctx.graphql<{ __schema: unknown }>(INTROSPECTION_QUERY);
 
     if (response.body.data === undefined || response.body.data.__schema === undefined) {
       return emitSchemaFailure("introspection response did not contain schema data.", options);
@@ -238,22 +194,22 @@ async function handleSchemaCheck(positionals: string[], options: SchemaCommandOp
 
     if (options.jsonEnvelope) {
       const envelope = successEnvelope(output, { sourceLayer: "curated" });
-      process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
+      stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
       return drifted ? ExitCode.SchemaDrift : ExitCode.Success;
     }
 
     if (options.json) {
-      process.stdout.write(`${JSON.stringify(output, null, 2)}\n`);
+      stdout.write(`${JSON.stringify(output, null, 2)}\n`);
       return drifted ? ExitCode.SchemaDrift : ExitCode.Success;
     }
 
     if (drifted) {
-      process.stdout.write(`Schema drift detected. Bundled: ${bundledVersion ?? "(none)"}, Live: ${liveVersion ?? "(unknown)"}\n`);
+      stdout.write(`Schema drift detected. Bundled: ${bundledVersion ?? "(none)"}, Live: ${liveVersion ?? "(unknown)"}\n`);
       if (diff !== null) {
-        process.stdout.write(`${formatDiffSummary(diff)}\n`);
+        stdout.write(`${formatDiffSummary(diff)}\n`);
       }
     } else {
-      process.stdout.write("Schema is up to date.\n");
+      stdout.write("Schema is up to date.\n");
     }
 
     return drifted ? ExitCode.SchemaDrift : ExitCode.Success;
@@ -265,9 +221,9 @@ async function handleSchemaCheck(positionals: string[], options: SchemaCommandOp
         sourceLayer: "curated",
         ...(options.profile === undefined ? {} : { profile: options.profile })
       });
-      process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
+      stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
     } else {
-      process.stderr.write(`Error: ${failure.error.message}\n`);
+      stderr.write(`Error: ${failure.error.message}\n`);
     }
 
     return failure.exitCode;
@@ -279,27 +235,7 @@ function defaultSchemaOutputDir(configFile: string): string {
 }
 
 function emitSchemaFailure(message: string, options: SchemaCommandOptions): number {
-  const error: CommandError = { category: "general", message };
-  if (options.jsonEnvelope) {
-    const envelope = failureEnvelope([error], {
-      sourceLayer: "curated",
-      ...(options.profile === undefined ? {} : { profile: options.profile })
-    });
-    process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
-  } else {
-    process.stderr.write(`Error: ${message}\n`);
-  }
-  return ExitCode.GeneralError;
-}
-
-function executeSchemaGraphQL<TData>(
-  input: Parameters<typeof executeGraphQL<TData>>[0],
-  retry: RetryOptions | undefined
-) {
-  if (retry !== undefined) {
-    return executeGraphQLWithRetry<TData>({ ...input, retry });
-  }
-  return executeGraphQL<TData>(input);
+  return createCommandContext(options).emitFailure([{ category: "general", message }]);
 }
 
 function extractSchemaVersion(schema: Record<string, unknown>): string | null {

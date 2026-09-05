@@ -6,6 +6,8 @@ import { fetchPaginationPage } from "./page.js";
 import { buildPaginationVariables } from "./pagination.js";
 import type { PaginationOptions } from "./pagination.js";
 
+import { commandIO } from "../runtime/options.js";
+
 const SAFETY_CAP = 10_000;
 
 export interface StreamPaginateGraphQLInput<TNode> {
@@ -75,7 +77,7 @@ export async function streamPaginateGraphQL<TNode>(
 
     if (totalItems >= limit) {
       if (options.max === undefined && totalItems >= SAFETY_CAP && !options.quiet) {
-        process.stderr.write(
+        commandIO(options).stderr.write(
           `Warning: --jsonl fetched ${SAFETY_CAP} items (safety cap). Use --max to fetch more.\n`
         );
       }

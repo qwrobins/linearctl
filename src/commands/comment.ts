@@ -1,25 +1,17 @@
+import { commandIO, type CommandOptions, type CommandIO } from "../core/runtime/options.js";
 import { emitValidationError } from "../core/output/validation-error.js";
 import type { PageInfo } from "../core/output/envelope.js";
 import { ExitCode } from "../core/errors/exit-codes.js";
-import type { FetchLike } from "../core/transport/graphql.js";
 import { paginateGraphQL, validatePaginationOptions } from "../core/pagination/pagination.js";
 import type { PaginationOptions } from "../core/pagination/pagination.js";
 import { streamPaginateGraphQL } from "../core/pagination/streaming.js";
 import { emitDryRunResult } from "../core/output/dry-run.js";
 import { normalizeRetryOptions } from "../core/transport/retry.js";
-import { CommandContext } from "../core/runtime/command-context.js";
+import { createCommandContext } from "../core/runtime/command-context.js";
 import { resolveBodyInput } from "../core/io/text-input.js";
 
-export interface CommentCommandOptions {
-  json: boolean;
-  jsonEnvelope: boolean;
+export interface CommentCommandOptions extends CommandOptions {
   jsonl?: boolean;
-  profile?: string;
-  configFile: string;
-  credentialsFile: string;
-  apiUrl?: string;
-  env: Record<string, string | undefined>;
-  fetchImpl?: FetchLike;
   dryRun?: boolean;
   issue?: string;
   body?: string;
@@ -30,9 +22,6 @@ export interface CommentCommandOptions {
   pageSize?: number;
   after?: string;
   quiet?: boolean;
-  // retry flags
-  noRetry?: boolean;
-  maxRetries?: number;
 }
 
 interface RawComment {
@@ -132,45 +121,26 @@ mutation CommentDelete($id: String!) {
   }
 }`;
 
-function printHumanComment(comment: NormalizedCommentFull): void {
+function printHumanComment(comment: NormalizedCommentFull, options: CommandIO): void {
+  const { stdout } = commandIO(options);
   const author = comment.user?.name ?? "Unknown";
   const issueRef = comment.issue?.identifier ?? "";
-  process.stdout.write(`${issueRef}  Comment by ${author}\n`);
+  stdout.write(`${issueRef}  Comment by ${author}\n`);
   const bodyPreview = comment.body.split("\n")[0] ?? "";
   if (bodyPreview.length > 0) {
-    process.stdout.write(`  ${bodyPreview}\n`);
+    stdout.write(`  ${bodyPreview}\n`);
   }
-  process.stdout.write(`  URL: ${comment.url}\n`);
-}
-
-/** Build a CommandContext from comment handler options */
-function buildContext(options: CommentCommandOptions): CommandContext {
-  return new CommandContext({
-    json: options.json,
-    jsonEnvelope: options.jsonEnvelope,
-    ...(options.profile === undefined ? {} : { profile: options.profile }),
-    configFile: options.configFile,
-    credentialsFile: options.credentialsFile,
-    ...(options.apiUrl === undefined ? {} : { apiUrl: options.apiUrl }),
-    env: options.env,
-    ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl }),
-    ...(options.noRetry === true || options.maxRetries !== undefined
-      ? {
-          retry: {
-            ...(options.noRetry === true ? { noRetry: true } : {}),
-            ...(options.maxRetries !== undefined ? { maxRetries: options.maxRetries } : {}),
-          },
-        }
-      : {}),
-  });
+  stdout.write(`  URL: ${comment.url}\n`);
 }
 
 async function handleCommentList(options: CommentCommandOptions): Promise<number> {
+  const { stdout } = commandIO(options);
   if (options.issue === undefined) {
     return emitValidationError("<issue> or --issue is required for comment list.", options);
   }
 
   const paginationOptions: PaginationOptions = {
+    stderr: commandIO(options).stderr,
     ...(options.all === true ? { all: true } : {}),
     ...(options.max === undefined ? {} : { max: options.max }),
     ...(options.pageSize === undefined ? {} : { pageSize: options.pageSize }),
@@ -183,7 +153,7 @@ async function handleCommentList(options: CommentCommandOptions): Promise<number
     return emitValidationError(validationError, options);
   }
 
-  const ctx = buildContext(options);
+  const ctx = createCommandContext(options);
 
   try {
     let issueId = options.issue;
@@ -233,7 +203,7 @@ async function handleCommentList(options: CommentCommandOptions): Promise<number
         ...commonPaginateInput,
         options: streamOptions,
         onItem: (raw) => {
-          process.stdout.write(`${JSON.stringify(normalizeCommentFull(raw))}\n`);
+          stdout.write(`${JSON.stringify(normalizeCommentFull(raw))}\n`);
         }
       });
     } else {
@@ -247,13 +217,13 @@ async function handleCommentList(options: CommentCommandOptions): Promise<number
       if (options.jsonEnvelope) {
         return ctx.emitSuccess(comments, result.pageInfo);
       } else if (options.json) {
-        process.stdout.write(`${JSON.stringify(comments, null, 2)}\n`);
+        stdout.write(`${JSON.stringify(comments, null, 2)}\n`);
       } else {
         for (const comment of comments) {
-          printHumanComment(comment);
+          printHumanComment(comment, options);
         }
         if (comments.length === 0) {
-          process.stdout.write("No items found.\n");
+          stdout.write("No items found.\n");
         }
       }
     }
@@ -265,6 +235,7 @@ async function handleCommentList(options: CommentCommandOptions): Promise<number
 }
 
 async function handleCommentCreate(options: CommentCommandOptions): Promise<number> {
+  const { stdout } = commandIO(options);
   if (options.issue === undefined) {
     return emitValidationError("--issue is required for comment create.", options);
   }
@@ -284,7 +255,7 @@ async function handleCommentCreate(options: CommentCommandOptions): Promise<numb
     return emitDryRunResult("create", "comment", { issueId: options.issue, body }, options);
   }
 
-  const ctx = buildContext(options);
+  const ctx = createCommandContext(options);
 
   try {
     // commentCreate requires a UUID — resolve human-readable identifiers first.
@@ -323,10 +294,10 @@ async function handleCommentCreate(options: CommentCommandOptions): Promise<numb
     if (options.jsonEnvelope) {
       return ctx.emitSuccess(comment);
     } else if (options.json) {
-      process.stdout.write(`${JSON.stringify(comment, null, 2)}\n`);
+      stdout.write(`${JSON.stringify(comment, null, 2)}\n`);
     } else {
-      process.stdout.write(`Created comment on ${comment.issue?.identifier ?? options.issue}\n`);
-      process.stdout.write(`  URL: ${comment.url}\n`);
+      stdout.write(`Created comment on ${comment.issue?.identifier ?? options.issue}\n`);
+      stdout.write(`  URL: ${comment.url}\n`);
     }
 
     return ExitCode.Success;
@@ -336,6 +307,7 @@ async function handleCommentCreate(options: CommentCommandOptions): Promise<numb
 }
 
 async function handleCommentUpdate(commentId: string, options: CommentCommandOptions): Promise<number> {
+  const { stdout } = commandIO(options);
   let body: string | undefined;
   try {
     body = await resolveBodyInput(options);
@@ -351,7 +323,7 @@ async function handleCommentUpdate(commentId: string, options: CommentCommandOpt
     return emitDryRunResult("update", "comment", { id: commentId, body }, options);
   }
 
-  const ctx = buildContext(options);
+  const ctx = createCommandContext(options);
 
   try {
     const response = await ctx.graphql<{
@@ -374,10 +346,10 @@ async function handleCommentUpdate(commentId: string, options: CommentCommandOpt
     if (options.jsonEnvelope) {
       return ctx.emitSuccess(comment);
     } else if (options.json) {
-      process.stdout.write(`${JSON.stringify(comment, null, 2)}\n`);
+      stdout.write(`${JSON.stringify(comment, null, 2)}\n`);
     } else {
-      process.stdout.write(`Updated comment ${comment.id}\n`);
-      process.stdout.write(`  URL: ${comment.url}\n`);
+      stdout.write(`Updated comment ${comment.id}\n`);
+      stdout.write(`  URL: ${comment.url}\n`);
     }
 
     return ExitCode.Success;
@@ -387,11 +359,12 @@ async function handleCommentUpdate(commentId: string, options: CommentCommandOpt
 }
 
 async function handleCommentDelete(commentId: string, options: CommentCommandOptions): Promise<number> {
+  const { stdout } = commandIO(options);
   if (options.dryRun === true) {
     return emitDryRunResult("delete", "comment", { id: commentId }, options);
   }
 
-  const ctx = buildContext(options);
+  const ctx = createCommandContext(options);
 
   try {
     const response = await ctx.graphql<{
@@ -413,9 +386,9 @@ async function handleCommentDelete(commentId: string, options: CommentCommandOpt
     if (options.jsonEnvelope) {
       return ctx.emitSuccess(result);
     } else if (options.json) {
-      process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+      stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     } else {
-      process.stdout.write(`Deleted comment ${commentId}\n`);
+      stdout.write(`Deleted comment ${commentId}\n`);
     }
 
     return ExitCode.Success;

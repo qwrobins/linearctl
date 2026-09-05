@@ -1,24 +1,16 @@
+import { commandIO, type CommandOptions, type CommandIO } from "../core/runtime/options.js";
 import { emitValidationError } from "../core/output/validation-error.js";
 import type { PageInfo } from "../core/output/envelope.js";
 import { ExitCode } from "../core/errors/exit-codes.js";
-import type { FetchLike } from "../core/transport/graphql.js";
 import { paginateGraphQL, validatePaginationOptions, type PaginationOptions } from "../core/pagination/pagination.js";
 import { streamPaginateGraphQL } from "../core/pagination/streaming.js";
 import { emitDryRunResult } from "../core/output/dry-run.js";
 import { resolveTeamId, looksLikeId } from "../core/resolution/resolve.js";
 import { normalizeRetryOptions } from "../core/transport/retry.js";
-import { CommandContext } from "../core/runtime/command-context.js";
+import { createCommandContext } from "../core/runtime/command-context.js";
 
-export interface CycleCommandOptions {
-  json: boolean;
-  jsonEnvelope: boolean;
+export interface CycleCommandOptions extends CommandOptions {
   jsonl?: boolean;
-  profile?: string;
-  configFile: string;
-  credentialsFile: string;
-  apiUrl?: string;
-  env: Record<string, string | undefined>;
-  fetchImpl?: FetchLike;
   dryRun?: boolean;
   // cycle flags
   name?: string;
@@ -33,9 +25,6 @@ export interface CycleCommandOptions {
   pageSize?: number;
   after?: string;
   quiet?: boolean;
-  // retry flags
-  noRetry?: boolean;
-  maxRetries?: number;
 }
 
 const CURATED_CYCLE_BASE_FRAGMENT = `
@@ -161,6 +150,7 @@ async function handleCycleArchive(
   options: CycleCommandOptions,
   invokedAs: "archive" | "delete" = "archive"
 ): Promise<number> {
+  const { stdout } = commandIO(options);
   if (options.dryRun === true) {
     const input = invokedAs === "delete"
       ? {
@@ -173,7 +163,7 @@ async function handleCycleArchive(
     return emitDryRunResult(invokedAs, "cycle", input, options);
   }
 
-  const ctx = buildContext(options);
+  const ctx = createCommandContext(options);
 
   try {
     const response = await ctx.graphql<{ cycleArchive: { success: boolean } }>(
@@ -198,9 +188,9 @@ async function handleCycleArchive(
     if (options.jsonEnvelope) {
       return ctx.emitSuccess(result);
     } else if (options.json) {
-      process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+      stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     } else {
-      process.stdout.write(
+      stdout.write(
         invokedAs === "delete"
           ? `Linear does not support cycle deletion; archived cycle ${id} instead.\n`
           : `Archived cycle ${id}\n`
@@ -285,48 +275,28 @@ function lastNumber(values: number[]): number | null {
   return values.length > 0 ? values[values.length - 1]! : null;
 }
 
-function printHumanCycle(cycle: NormalizedCycle): void {
+function printHumanCycle(cycle: NormalizedCycle, options: CommandIO): void {
+  const { stdout } = commandIO(options);
   const label = cycle.name !== null ? `${cycle.name} (#${cycle.number})` : `Cycle #${cycle.number}`;
-  process.stdout.write(`${label}\n`);
-  process.stdout.write(`  Team:  ${cycle.team.name}\n`);
+  stdout.write(`${label}\n`);
+  stdout.write(`  Team:  ${cycle.team.name}\n`);
   if (cycle.startsAt !== null) {
-    process.stdout.write(`  Start: ${cycle.startsAt}\n`);
+    stdout.write(`  Start: ${cycle.startsAt}\n`);
   }
   if (cycle.endsAt !== null) {
-    process.stdout.write(`  End:   ${cycle.endsAt}\n`);
+    stdout.write(`  End:   ${cycle.endsAt}\n`);
   }
   if (cycle.completedAt !== null) {
-    process.stdout.write(`  Done:  ${cycle.completedAt}\n`);
+    stdout.write(`  Done:  ${cycle.completedAt}\n`);
   }
-}
-
-/** Build a CommandContext from cycle handler options */
-function buildContext(options: CycleCommandOptions): CommandContext {
-  return new CommandContext({
-    json: options.json,
-    jsonEnvelope: options.jsonEnvelope,
-    ...(options.profile === undefined ? {} : { profile: options.profile }),
-    configFile: options.configFile,
-    credentialsFile: options.credentialsFile,
-    ...(options.apiUrl === undefined ? {} : { apiUrl: options.apiUrl }),
-    env: options.env,
-    ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl }),
-    ...(options.noRetry === true || options.maxRetries !== undefined
-      ? {
-          retry: {
-            ...(options.noRetry === true ? { noRetry: true } : {}),
-            ...(options.maxRetries !== undefined ? { maxRetries: options.maxRetries } : {}),
-          },
-        }
-      : {}),
-  });
 }
 
 async function handleCycleGet(
   id: string,
   options: CycleCommandOptions
 ): Promise<number> {
-  const ctx = buildContext(options);
+  const { stdout } = commandIO(options);
+  const ctx = createCommandContext(options);
 
   try {
     const response = await ctx.graphql<{ cycle: RawCycle | null }>(
@@ -347,9 +317,9 @@ async function handleCycleGet(
     if (options.jsonEnvelope) {
       return ctx.emitSuccess(cycle);
     } else if (options.json) {
-      process.stdout.write(`${JSON.stringify(cycle, null, 2)}\n`);
+      stdout.write(`${JSON.stringify(cycle, null, 2)}\n`);
     } else {
-      printHumanCycle(cycle);
+      printHumanCycle(cycle, options);
     }
 
     return ExitCode.Success;
@@ -359,7 +329,9 @@ async function handleCycleGet(
 }
 
 async function handleCycleList(options: CycleCommandOptions): Promise<number> {
+  const { stdout } = commandIO(options);
   const paginationOptions: PaginationOptions = {
+    stderr: commandIO(options).stderr,
     all: options.all,
     max: options.max,
     pageSize: options.pageSize,
@@ -372,7 +344,7 @@ async function handleCycleList(options: CycleCommandOptions): Promise<number> {
     return emitValidationError(validationError, options);
   }
 
-  const ctx = buildContext(options);
+  const ctx = createCommandContext(options);
 
   try {
     const profile = await ctx.resolveProfile();
@@ -407,7 +379,7 @@ async function handleCycleList(options: CycleCommandOptions): Promise<number> {
         ...commonPaginateInput,
         options: { ...paginationOptions, all: paginationOptions.all ?? true },
         onItem: (raw) => {
-          process.stdout.write(`${JSON.stringify(normalizeCycle(raw))}\n`);
+          stdout.write(`${JSON.stringify(normalizeCycle(raw))}\n`);
         }
       });
     } else {
@@ -421,11 +393,11 @@ async function handleCycleList(options: CycleCommandOptions): Promise<number> {
       if (options.jsonEnvelope) {
         return ctx.emitSuccess(cycles, pageInfo);
       } else if (options.json) {
-        process.stdout.write(`${JSON.stringify(cycles, null, 2)}\n`);
+        stdout.write(`${JSON.stringify(cycles, null, 2)}\n`);
       } else {
         for (const cycle of cycles) {
-          printHumanCycle(cycle);
-          process.stdout.write("\n");
+          printHumanCycle(cycle, options);
+          stdout.write("\n");
         }
       }
     }
@@ -437,7 +409,8 @@ async function handleCycleList(options: CycleCommandOptions): Promise<number> {
 }
 
 async function handleCycleCurrent(options: CycleCommandOptions): Promise<number> {
-  const ctx = buildContext(options);
+  const { stdout } = commandIO(options);
+  const ctx = createCommandContext(options);
 
   try {
     const profile = await ctx.resolveProfile();
@@ -470,9 +443,9 @@ async function handleCycleCurrent(options: CycleCommandOptions): Promise<number>
     if (options.jsonEnvelope) {
       return ctx.emitSuccess(cycle);
     } else if (options.json) {
-      process.stdout.write(`${JSON.stringify(cycle, null, 2)}\n`);
+      stdout.write(`${JSON.stringify(cycle, null, 2)}\n`);
     } else {
-      printHumanCycle(cycle);
+      printHumanCycle(cycle, options);
     }
 
     return ExitCode.Success;
@@ -482,6 +455,7 @@ async function handleCycleCurrent(options: CycleCommandOptions): Promise<number>
 }
 
 async function handleCycleCreate(options: CycleCommandOptions): Promise<number> {
+  const { stdout } = commandIO(options);
   if (options.team === undefined) {
     return emitValidationError("--team is required for cycle create.", options);
   }
@@ -507,7 +481,7 @@ async function handleCycleCreate(options: CycleCommandOptions): Promise<number> 
     return emitDryRunResult("create", "cycle", input, options);
   }
 
-  const ctx = buildContext(options);
+  const ctx = createCommandContext(options);
 
   try {
     const resolverOpts = await ctx.resolverOptions();
@@ -533,10 +507,10 @@ async function handleCycleCreate(options: CycleCommandOptions): Promise<number> 
     if (options.jsonEnvelope) {
       return ctx.emitSuccess(cycle);
     } else if (options.json) {
-      process.stdout.write(`${JSON.stringify(cycle, null, 2)}\n`);
+      stdout.write(`${JSON.stringify(cycle, null, 2)}\n`);
     } else {
       const label = cycle.name !== null ? cycle.name : `Cycle #${cycle.number}`;
-      process.stdout.write(`Created cycle: ${label}\n`);
+      stdout.write(`Created cycle: ${label}\n`);
     }
 
     return ExitCode.Success;
@@ -549,6 +523,7 @@ async function handleCycleUpdate(
   id: string,
   options: CycleCommandOptions
 ): Promise<number> {
+  const { stdout } = commandIO(options);
   const input: Record<string, unknown> = {};
 
   if (options.name !== undefined) {
@@ -572,7 +547,7 @@ async function handleCycleUpdate(
     return emitDryRunResult("update", "cycle", { id, ...input }, options);
   }
 
-  const ctx = buildContext(options);
+  const ctx = createCommandContext(options);
 
   try {
     const response = await ctx.graphql<{
@@ -595,10 +570,10 @@ async function handleCycleUpdate(
     if (options.jsonEnvelope) {
       return ctx.emitSuccess(cycle);
     } else if (options.json) {
-      process.stdout.write(`${JSON.stringify(cycle, null, 2)}\n`);
+      stdout.write(`${JSON.stringify(cycle, null, 2)}\n`);
     } else {
       const label = cycle.name !== null ? cycle.name : `Cycle #${cycle.number}`;
-      process.stdout.write(`Updated cycle: ${label}\n`);
+      stdout.write(`Updated cycle: ${label}\n`);
     }
 
     return ExitCode.Success;

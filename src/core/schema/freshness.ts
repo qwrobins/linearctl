@@ -2,7 +2,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { resolveStoredProfile } from "../auth/runtime.js";
 import { loadLinearConfigFile } from "../config/config-file.js";
-import type { FetchLike } from "../transport/graphql.js";
+import { commandIO, type CommandRuntimeOptions } from "../runtime/options.js";
 import { executeGraphQL } from "../transport/graphql.js";
 import { INTROSPECTION_QUERY } from "./introspection-query.js";
 import {
@@ -12,14 +12,8 @@ import {
   writeSchemaMetadata
 } from "./schema-meta.js";
 
-export interface SchemaFreshnessOptions {
+export interface SchemaFreshnessOptions extends CommandRuntimeOptions {
   commandName?: string;
-  profile?: string;
-  configFile: string;
-  credentialsFile: string;
-  apiUrl?: string;
-  env: Record<string, string | undefined>;
-  fetchImpl?: FetchLike;
   now?: Date;
   cacheFile?: string;
   schemaOutputDir?: string;
@@ -73,7 +67,8 @@ export async function maybeWarnForStaleSchema(options: SchemaFreshnessOptions): 
         credentialsFile: options.credentialsFile
       },
       ...(options.profile === undefined ? {} : { explicitProfile: options.profile }),
-      env: options.env
+      env: options.env,
+      ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl })
     });
 
     const response = await executeGraphQL<{ __schema: unknown }>({
@@ -115,11 +110,11 @@ export async function maybeWarnForStaleSchema(options: SchemaFreshnessOptions): 
         bundledAt: now.toISOString(),
         source: "introspection"
       });
-      process.stderr.write("linearctl schema was stale and has been updated automatically.\n");
+      commandIO(options).stderr.write("linearctl schema was stale and has been updated automatically.\n");
       return;
     }
 
-    process.stderr.write(formatStaleSchemaWarning(schemaAgeDays(bundledMeta.bundledAt, now)));
+    commandIO(options).stderr.write(formatStaleSchemaWarning(schemaAgeDays(bundledMeta.bundledAt, now)));
   } catch {
     // Startup freshness checks are advisory; command execution should continue.
   }

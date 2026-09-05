@@ -1,26 +1,18 @@
+import { commandIO, type CommandOptions, type CommandIO } from "../core/runtime/options.js";
 import { emitValidationError } from "../core/output/validation-error.js";
 import type { PageInfo } from "../core/output/envelope.js";
 import { ExitCode } from "../core/errors/exit-codes.js";
-import type { FetchLike } from "../core/transport/graphql.js";
 import { loadOptionalConfig } from "../core/auth/runtime.js";
 import { setProfileMetadata, writeLinearConfigFile } from "../core/config/config-file.js";
 import { paginateGraphQL, validatePaginationOptions } from "../core/pagination/pagination.js";
 import type { PaginationOptions } from "../core/pagination/pagination.js";
 import { streamPaginateGraphQL } from "../core/pagination/streaming.js";
 import { normalizeRetryOptions } from "../core/transport/retry.js";
-import { CommandContext } from "../core/runtime/command-context.js";
+import { createCommandContext } from "../core/runtime/command-context.js";
 import { resolveTeamId, looksLikeId, ResolutionError } from "../core/resolution/resolve.js";
 
-export interface TeamCommandOptions {
-  json: boolean;
-  jsonEnvelope: boolean;
+export interface TeamCommandOptions extends CommandOptions {
   jsonl?: boolean;
-  profile?: string;
-  configFile: string;
-  credentialsFile: string;
-  apiUrl?: string;
-  env: Record<string, string | undefined>;
-  fetchImpl?: FetchLike;
   setDefault?: boolean;
   // pagination flags
   all?: boolean;
@@ -28,9 +20,6 @@ export interface TeamCommandOptions {
   pageSize?: number;
   after?: string;
   quiet?: boolean;
-  // retry flags
-  noRetry?: boolean;
-  maxRetries?: number;
 }
 
 interface RawTeam {
@@ -146,46 +135,27 @@ export function normalizeTeamMember(raw: RawTeamMember): NormalizedTeamMember {
   };
 }
 
-function printHumanTeam(team: NormalizedTeam): void {
-  process.stdout.write(`${team.key}  ${team.name}\n`);
+function printHumanTeam(team: NormalizedTeam, options: CommandIO): void {
+  const { stdout } = commandIO(options);
+  stdout.write(`${team.key}  ${team.name}\n`);
   if (team.description !== null) {
-    process.stdout.write(`  Description: ${team.description}\n`);
+    stdout.write(`  Description: ${team.description}\n`);
   }
 }
 
-function printHumanTeamMember(member: NormalizedTeamMember): void {
+function printHumanTeamMember(member: NormalizedTeamMember, options: CommandIO): void {
+  const { stdout } = commandIO(options);
   const email = member.email ?? "";
   const status = member.active ? "active" : "inactive";
-  process.stdout.write(`${member.name}\t${member.displayName}\t${email}\t${status}\n`);
-}
-
-/** Build a CommandContext from team handler options */
-function buildContext(options: TeamCommandOptions): CommandContext {
-  return new CommandContext({
-    json: options.json,
-    jsonEnvelope: options.jsonEnvelope,
-    ...(options.profile === undefined ? {} : { profile: options.profile }),
-    configFile: options.configFile,
-    credentialsFile: options.credentialsFile,
-    ...(options.apiUrl === undefined ? {} : { apiUrl: options.apiUrl }),
-    env: options.env,
-    ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl }),
-    ...(options.noRetry === true || options.maxRetries !== undefined
-      ? {
-          retry: {
-            ...(options.noRetry === true ? { noRetry: true } : {}),
-            ...(options.maxRetries !== undefined ? { maxRetries: options.maxRetries } : {}),
-          },
-        }
-      : {}),
-  });
+  stdout.write(`${member.name}\t${member.displayName}\t${email}\t${status}\n`);
 }
 
 async function handleTeamGet(
   identifier: string,
   options: TeamCommandOptions
 ): Promise<number> {
-  const ctx = buildContext(options);
+  const { stderr, stdout } = commandIO(options);
+  const ctx = createCommandContext(options);
 
   try {
     let response = await ctx.graphql<{ team: RawTeam | null }>(
@@ -223,16 +193,16 @@ async function handleTeamGet(
       });
       await writeLinearConfigFile(options.configFile, updatedConfig);
       if (!options.json && !options.jsonEnvelope) {
-        process.stderr.write(`Default team set to "${team.key}" (${team.name}) for profile "${profile.name}".\n`);
+        stderr.write(`Default team set to "${team.key}" (${team.name}) for profile "${profile.name}".\n`);
       }
     }
 
     if (options.jsonEnvelope) {
       return ctx.emitSuccess(team);
     } else if (options.json) {
-      process.stdout.write(`${JSON.stringify(team, null, 2)}\n`);
+      stdout.write(`${JSON.stringify(team, null, 2)}\n`);
     } else {
-      printHumanTeam(team);
+      printHumanTeam(team, options);
     }
 
     return ExitCode.Success;
@@ -242,7 +212,9 @@ async function handleTeamGet(
 }
 
 async function handleTeamList(options: TeamCommandOptions): Promise<number> {
+  const { stdout } = commandIO(options);
   const paginationOptions: PaginationOptions = {
+    stderr: commandIO(options).stderr,
     all: options.all,
     max: options.max,
     pageSize: options.pageSize,
@@ -255,7 +227,7 @@ async function handleTeamList(options: TeamCommandOptions): Promise<number> {
     return emitValidationError(validationError, options);
   }
 
-  const ctx = buildContext(options);
+  const ctx = createCommandContext(options);
 
   try {
     const profile = await ctx.resolveProfile();
@@ -281,7 +253,7 @@ async function handleTeamList(options: TeamCommandOptions): Promise<number> {
         ...commonPaginateInput,
         options: { ...paginationOptions, all: paginationOptions.all ?? true },
         onItem: (raw) => {
-          process.stdout.write(`${JSON.stringify(normalizeTeam(raw))}\n`);
+          stdout.write(`${JSON.stringify(normalizeTeam(raw))}\n`);
         }
       });
     } else {
@@ -295,11 +267,11 @@ async function handleTeamList(options: TeamCommandOptions): Promise<number> {
       if (options.jsonEnvelope) {
         return ctx.emitSuccess(teams, pageInfo);
       } else if (options.json) {
-        process.stdout.write(`${JSON.stringify(teams, null, 2)}\n`);
+        stdout.write(`${JSON.stringify(teams, null, 2)}\n`);
       } else {
         for (const team of teams) {
-          printHumanTeam(team);
-          process.stdout.write("\n");
+          printHumanTeam(team, options);
+          stdout.write("\n");
         }
       }
     }
@@ -314,7 +286,9 @@ async function handleTeamMembers(
   identifier: string,
   options: TeamCommandOptions
 ): Promise<number> {
+  const { stdout } = commandIO(options);
   const paginationOptions: PaginationOptions = {
+    stderr: commandIO(options).stderr,
     all: options.all,
     max: options.max,
     pageSize: options.pageSize,
@@ -327,7 +301,7 @@ async function handleTeamMembers(
     return emitValidationError(validationError, options);
   }
 
-  const ctx = buildContext(options);
+  const ctx = createCommandContext(options);
 
   try {
     const profile = await ctx.resolveProfile();
@@ -361,7 +335,7 @@ async function handleTeamMembers(
         ...commonPaginateInput,
         options: { ...paginationOptions, all: paginationOptions.all ?? true },
         onItem: (raw) => {
-          process.stdout.write(`${JSON.stringify(normalizeTeamMember(raw))}\n`);
+          stdout.write(`${JSON.stringify(normalizeTeamMember(raw))}\n`);
         }
       });
     } else {
@@ -375,10 +349,10 @@ async function handleTeamMembers(
       if (options.jsonEnvelope) {
         return ctx.emitSuccess(members, pageInfo);
       } else if (options.json) {
-        process.stdout.write(`${JSON.stringify(members, null, 2)}\n`);
+        stdout.write(`${JSON.stringify(members, null, 2)}\n`);
       } else {
         for (const member of members) {
-          printHumanTeamMember(member);
+          printHumanTeamMember(member, options);
         }
       }
     }

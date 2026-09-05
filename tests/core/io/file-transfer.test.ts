@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { createReadStream, createWriteStream } from "node:fs";
 import type { WriteStream } from "node:fs";
-import { mkdir, mkdtemp, open, readFile, readdir, rm, stat, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, open, readFile, readdir, rename, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -18,7 +18,7 @@ vi.mock("node:fs", async (importOriginal) => {
 
 vi.mock("node:fs/promises", async (importOriginal) => {
   const actual = await importOriginal<typeof import("node:fs/promises")>();
-  return { ...actual, rm: vi.fn(actual.rm) };
+  return { ...actual, rm: vi.fn(actual.rm), rename: vi.fn(actual.rename) };
 });
 
 const url = "https://uploads.linear.app/file";
@@ -36,6 +36,7 @@ beforeEach(async () => {
 afterEach(async () => {
   vi.mocked(createWriteStream).mockReset();
   vi.mocked(rm).mockReset();
+  vi.mocked(rename).mockReset();
   await rm(directory, { recursive: true, force: true });
   expect([process.listenerCount("SIGINT"), process.listenerCount("SIGTERM")]).toEqual(listeners);
 });
@@ -167,6 +168,21 @@ describe("streaming downloads", () => {
     expect(await readFile(destination, "utf8")).toBe(mode === "success" ? "new" : "original");
     expect(rm).toHaveBeenCalledOnce();
     expect((await readdir(directory)).some((entry) => entry.startsWith(".linearctl-download-"))).toBe(true);
+  });
+
+  it("reports the actual commit result when cancellation arrives after rename dispatch", async () => {
+    await writeFile(destination, "original");
+    const controller = new AbortController();
+    const actual = await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises");
+    vi.mocked(rename).mockImplementationOnce(async (source, target) => {
+      controller.abort();
+      await actual.rename(source, target);
+    });
+    await expect(downloadFile(async () => new Response("new"), url, headers, destination, {
+      signal: controller.signal,
+    })).resolves.toBe(3);
+    expect(await readFile(destination, "utf8")).toBe("new");
+    expect(await readdir(directory)).toEqual(["destination"]);
   });
 
   it("cleans up when the destination cannot be replaced", async () => {

@@ -1,20 +1,10 @@
+import { commandIO, type CommandOptions } from "../core/runtime/options.js";
 import { ExitCode } from "../core/errors/exit-codes.js";
 import { loadOptionalConfig, loadOptionalCredentials } from "../core/auth/runtime.js";
 import { setProfileMetadata, writeLinearConfigFile } from "../core/config/config-file.js";
-import type { FetchLike } from "../core/transport/graphql.js";
-import { CommandContext } from "../core/runtime/command-context.js";
+import { CommandContext, createCommandContext } from "../core/runtime/command-context.js";
 
-export interface WorkspaceCommandOptions {
-  json: boolean;
-  jsonEnvelope: boolean;
-  configFile: string;
-  credentialsFile: string;
-  env: Record<string, string | undefined>;
-  fetchImpl?: FetchLike;
-  // retry flags
-  noRetry?: boolean;
-  maxRetries?: number;
-}
+export interface WorkspaceCommandOptions extends CommandOptions {}
 
 interface WorkspaceListEntry {
   profile: string;
@@ -38,27 +28,8 @@ interface ViewerWorkspaceResponse {
   };
 }
 
-/** Build a CommandContext from workspace handler options */
-function buildContext(options: WorkspaceCommandOptions): CommandContext {
-  return new CommandContext({
-    json: options.json,
-    jsonEnvelope: options.jsonEnvelope,
-    configFile: options.configFile,
-    credentialsFile: options.credentialsFile,
-    env: options.env,
-    ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl }),
-    ...(options.noRetry === true || options.maxRetries !== undefined
-      ? {
-          retry: {
-            ...(options.noRetry === true ? { noRetry: true } : {}),
-            ...(options.maxRetries !== undefined ? { maxRetries: options.maxRetries } : {}),
-          },
-        }
-      : {}),
-  });
-}
-
 async function handleWorkspaceList(options: WorkspaceCommandOptions): Promise<number> {
+  const { stdout } = commandIO(options);
   const [config, credentials] = await Promise.all([
     loadOptionalConfig(options.configFile),
     loadOptionalCredentials(options.credentialsFile)
@@ -88,15 +59,7 @@ async function handleWorkspaceList(options: WorkspaceCommandOptions): Promise<nu
     if (!needsFetch) {
       continue;
     }
-    const ctx = new CommandContext({
-      json: options.json,
-      jsonEnvelope: options.jsonEnvelope,
-      profile: profileName,
-      configFile: options.configFile,
-      credentialsFile: options.credentialsFile,
-      env: options.env,
-      ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl }),
-    });
+    const ctx = createCommandContext({ ...options, profile: profileName });
     try {
       await ctx.resolveProfile();
       contexts.set(profileName, ctx);
@@ -159,27 +122,27 @@ async function handleWorkspaceList(options: WorkspaceCommandOptions): Promise<nu
 
   const result: WorkspaceListResult = { workspaces };
 
-  const ctx = buildContext(options);
+  const ctx = createCommandContext(options);
 
   if (options.jsonEnvelope) {
     return ctx.emitSuccess(result);
   } else if (options.json) {
-    process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+    stdout.write(`${JSON.stringify(result, null, 2)}\n`);
   } else {
     if (workspaces.length === 0) {
-      process.stdout.write("No workspaces configured. Run linearctl auth login to add one.\n");
+      stdout.write("No workspaces configured. Run linearctl auth login to add one.\n");
       return ExitCode.Success;
     }
 
-    process.stdout.write("Profile          Workspace        Workspace ID     User             Auth Type\n");
-    process.stdout.write("---------------- ---------------- ---------------- ---------------- ---------\n");
+    stdout.write("Profile          Workspace        Workspace ID     User             Auth Type\n");
+    stdout.write("---------------- ---------------- ---------------- ---------------- ---------\n");
     for (const entry of workspaces) {
       const profile = (entry.profile).padEnd(16);
       const workspace = (entry.workspace ?? "(unknown)").padEnd(16);
       const workspaceId = (entry.workspaceId ?? "(unknown)").padEnd(16);
       const user = (entry.userEmail ?? "(unknown)").padEnd(16);
       const authType = entry.authType;
-      process.stdout.write(`${profile} ${workspace} ${workspaceId} ${user} ${authType}\n`);
+      stdout.write(`${profile} ${workspace} ${workspaceId} ${user} ${authType}\n`);
     }
   }
 
@@ -190,17 +153,18 @@ export async function handleWorkspaceCommand(
   positionals: string[],
   options: WorkspaceCommandOptions
 ): Promise<number> {
+  const { stderr } = commandIO(options);
   const [subcommand, ...extraPositionals] = positionals;
 
   if (subcommand === "list" || subcommand === undefined) {
     if (extraPositionals.length > 0) {
-      process.stderr.write("Error: workspace list does not accept positional arguments.\n");
+      stderr.write("Error: workspace list does not accept positional arguments.\n");
       return ExitCode.ValidationError;
     }
 
     return handleWorkspaceList(options);
   }
 
-  process.stderr.write("Error: unsupported workspace command. Try linearctl workspace list.\n");
+  stderr.write("Error: unsupported workspace command. Try linearctl workspace list.\n");
   return ExitCode.ValidationError;
 }

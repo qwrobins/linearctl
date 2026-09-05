@@ -1,40 +1,29 @@
+import { commandIO, type CommandOptions, type CommandIO } from "../core/runtime/options.js";
 import { readFile } from "node:fs/promises";
 import { failureEnvelope, successEnvelope, formatCommandErrorHuman } from "../core/output/envelope.js";
 import type { JsonEnvelope, CommandError } from "../core/output/envelope.js";
 import { emitValidationError } from "../core/output/validation-error.js";
 import { mapCommandFailure } from "../core/errors/command-failure.js";
 import { ExitCode } from "../core/errors/exit-codes.js";
-import { executeGraphQL } from "../core/transport/graphql.js";
-import type { FetchLike, GraphQLErrorPayload } from "../core/transport/graphql.js";
-import { executeGraphQLWithRetry, normalizeRetryOptions } from "../core/transport/retry.js";
-import { resolveStoredProfile } from "../core/auth/runtime.js";
+import type { GraphQLErrorPayload } from "../core/transport/graphql.js";
+import { createCommandContext } from "../core/runtime/command-context.js";
 import { isTtyInput, readAllStdin } from "../core/io/stdin.js";
 import { INTROSPECTION_QUERY } from "../core/schema/introspection-query.js";
 
-export interface GqlCommandOptions {
-  json: boolean;
-  jsonEnvelope: boolean;
+export interface GqlCommandOptions extends CommandOptions {
   raw: boolean;
   stdin: boolean;
   file?: string;
   varsFile?: string;
   vars: string[];
-  profile?: string;
-  configFile: string;
-  credentialsFile: string;
-  apiUrl?: string;
-  env: Record<string, string | undefined>;
   stdinStream: NodeJS.ReadableStream;
-  fetchImpl?: FetchLike;
-  // retry flags
-  noRetry?: boolean;
-  maxRetries?: number;
 }
 
 export async function handleGqlCommand(
   positionals: string[],
   options: GqlCommandOptions
 ): Promise<number> {
+  const { stdout } = commandIO(options);
   const [subcommand, ...rest] = positionals;
 
   if (subcommand === undefined) {
@@ -79,35 +68,17 @@ export async function handleGqlCommand(
       return emitValidationError("gql introspect does not accept --var or --vars-file input.", { ...options, sourceLayer: "raw-graphql" });
     }
 
-    const profile = await resolveStoredProfile({
-      paths: {
-        configFile: options.configFile,
-        credentialsFile: options.credentialsFile
-      },
-      ...(options.profile === undefined ? {} : { explicitProfile: options.profile }),
-      env: options.env
-    });
-
-    const graphqlInput = {
-      query: document,
-      ...(Object.keys(variables).length === 0 ? {} : { variables }),
-      credentials: profile.credentials,
-      ...(options.apiUrl === undefined
-        ? profile.metadata.baseUrl === undefined
-          ? {}
-          : { apiUrl: profile.metadata.baseUrl }
-        : { apiUrl: options.apiUrl }),
-      ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl })
-    };
-    const retry = normalizeRetryOptions(options);
-    const response = retry === undefined
-      ? await executeGraphQL<unknown>(graphqlInput)
-      : await executeGraphQLWithRetry<unknown>({ ...graphqlInput, retry });
+    const ctx = createCommandContext({ ...options, sourceLayer: "raw-graphql" });
+    const profile = await ctx.resolveProfile();
+    const response = await ctx.graphql<unknown>(
+      document,
+      Object.keys(variables).length === 0 ? undefined : variables
+    );
 
     const errors = mapGraphQLErrors(response.body.errors);
 
     if (options.raw) {
-      process.stdout.write(`${response.text}\n`);
+      stdout.write(`${response.text}\n`);
       return errors.length > 0 ? 1 : 0;
     }
 
@@ -117,18 +88,18 @@ export async function handleGqlCommand(
         errors,
         profile: profile.name
       });
-      process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
+      stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
       return errors.length > 0 ? 1 : 0;
     }
 
     if (errors.length > 0) {
-      printCommandError(errors[0] ?? { category: "general", message: "GraphQL request failed" });
+      printCommandError(errors[0] ?? { category: "general", message: "GraphQL request failed" }, options);
       return 1;
     }
 
     if (options.json) {
       const data = response.body.data ?? null;
-      process.stdout.write(`${JSON.stringify(data, null, 2)}\n`);
+      stdout.write(`${JSON.stringify(data, null, 2)}\n`);
       return 0;
     }
 
@@ -141,9 +112,9 @@ export async function handleGqlCommand(
         sourceLayer: "raw-graphql",
         ...(options.profile === undefined ? {} : { profile: options.profile })
       });
-      process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
+      stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
     } else {
-      printCommandError(failure.error);
+      printCommandError(failure.error, options);
     }
 
     return failure.exitCode;
@@ -187,7 +158,7 @@ function findGraphQLOperationStart(document: string): number {
 async function resolveGraphQLDocument(
   subcommand: string,
   positionals: string[],
-  options: Pick<GqlCommandOptions, "stdin" | "file" | "stdinStream" | "jsonEnvelope">
+  options: Pick<GqlCommandOptions, "stdin" | "file" | "stdinStream" | "jsonEnvelope" | "stdout" | "stderr">
 ): Promise<string | undefined> {
   if (subcommand === "introspect") {
     if (positionals.length > 0 || options.stdin || options.file !== undefined) {
@@ -330,6 +301,7 @@ function buildRawGraphQLEnvelope(input: {
   };
 }
 
-function printCommandError(error: CommandError): void {
-  process.stderr.write(`${formatCommandErrorHuman(error)}\n`);
+function printCommandError(error: CommandError, options: CommandIO): void {
+  const { stderr } = commandIO(options);
+  stderr.write(`${formatCommandErrorHuman(error)}\n`);
 }

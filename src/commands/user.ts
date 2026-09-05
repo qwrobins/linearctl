@@ -1,33 +1,22 @@
+import { commandIO, type CommandOptions, type CommandIO } from "../core/runtime/options.js";
 import { emitValidationError } from "../core/output/validation-error.js";
 import type { PageInfo } from "../core/output/envelope.js";
 import { ExitCode } from "../core/errors/exit-codes.js";
-import type { FetchLike } from "../core/transport/graphql.js";
 import { paginateGraphQL, validatePaginationOptions } from "../core/pagination/pagination.js";
 import type { PaginationOptions } from "../core/pagination/pagination.js";
 import { streamPaginateGraphQL } from "../core/pagination/streaming.js";
 import { normalizeRetryOptions } from "../core/transport/retry.js";
-import { CommandContext } from "../core/runtime/command-context.js";
+import { createCommandContext } from "../core/runtime/command-context.js";
 import { resolveUserId, looksLikeId } from "../core/resolution/resolve.js";
 
-export interface UserCommandOptions {
-  json: boolean;
-  jsonEnvelope: boolean;
+export interface UserCommandOptions extends CommandOptions {
   jsonl?: boolean;
-  profile?: string;
-  configFile: string;
-  credentialsFile: string;
-  apiUrl?: string;
-  env: Record<string, string | undefined>;
-  fetchImpl?: FetchLike;
   // pagination flags
   all?: boolean;
   max?: number;
   pageSize?: number;
   after?: string;
   quiet?: boolean;
-  // retry flags
-  noRetry?: boolean;
-  maxRetries?: number;
 }
 
 interface RawUser {
@@ -111,40 +100,20 @@ export function normalizeUser(raw: RawUser): NormalizedUser {
   };
 }
 
-function printHumanUser(user: NormalizedUser): void {
-  process.stdout.write(`${user.displayName}  <${user.email}>\n`);
-  process.stdout.write(`  Active: ${user.active}\n`);
-  process.stdout.write(`  Admin:  ${user.admin}\n`);
-  process.stdout.write(`  URL:    ${user.url}\n`);
-}
-
-/** Build a CommandContext from user handler options */
-function buildContext(options: UserCommandOptions): CommandContext {
-  return new CommandContext({
-    json: options.json,
-    jsonEnvelope: options.jsonEnvelope,
-    ...(options.profile === undefined ? {} : { profile: options.profile }),
-    configFile: options.configFile,
-    credentialsFile: options.credentialsFile,
-    ...(options.apiUrl === undefined ? {} : { apiUrl: options.apiUrl }),
-    env: options.env,
-    ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl }),
-    ...(options.noRetry === true || options.maxRetries !== undefined
-      ? {
-          retry: {
-            ...(options.noRetry === true ? { noRetry: true } : {}),
-            ...(options.maxRetries !== undefined ? { maxRetries: options.maxRetries } : {}),
-          },
-        }
-      : {}),
-  });
+function printHumanUser(user: NormalizedUser, options: CommandIO): void {
+  const { stdout } = commandIO(options);
+  stdout.write(`${user.displayName}  <${user.email}>\n`);
+  stdout.write(`  Active: ${user.active}\n`);
+  stdout.write(`  Admin:  ${user.admin}\n`);
+  stdout.write(`  URL:    ${user.url}\n`);
 }
 
 async function handleUserGet(
   identifier: string,
   options: UserCommandOptions
 ): Promise<number> {
-  const ctx = buildContext(options);
+  const { stdout } = commandIO(options);
+  const ctx = createCommandContext(options);
 
   try {
     let response = await ctx.graphql<{ user: RawUser | null }>(
@@ -175,9 +144,9 @@ async function handleUserGet(
     if (options.jsonEnvelope) {
       return ctx.emitSuccess(user);
     } else if (options.json) {
-      process.stdout.write(`${JSON.stringify(user, null, 2)}\n`);
+      stdout.write(`${JSON.stringify(user, null, 2)}\n`);
     } else {
-      printHumanUser(user);
+      printHumanUser(user, options);
     }
 
     return ExitCode.Success;
@@ -187,7 +156,8 @@ async function handleUserGet(
 }
 
 async function handleUserMe(options: UserCommandOptions): Promise<number> {
-  const ctx = buildContext(options);
+  const { stdout } = commandIO(options);
+  const ctx = createCommandContext(options);
 
   try {
     const response = await ctx.graphql<{ viewer: RawUser | null }>(
@@ -210,9 +180,9 @@ async function handleUserMe(options: UserCommandOptions): Promise<number> {
     if (options.jsonEnvelope) {
       return ctx.emitSuccess(user);
     } else if (options.json) {
-      process.stdout.write(`${JSON.stringify(user, null, 2)}\n`);
+      stdout.write(`${JSON.stringify(user, null, 2)}\n`);
     } else {
-      printHumanUser(user);
+      printHumanUser(user, options);
     }
 
     return ExitCode.Success;
@@ -222,7 +192,9 @@ async function handleUserMe(options: UserCommandOptions): Promise<number> {
 }
 
 async function handleUserList(options: UserCommandOptions): Promise<number> {
+  const { stdout } = commandIO(options);
   const paginationOptions: PaginationOptions = {
+    stderr: commandIO(options).stderr,
     all: options.all,
     max: options.max,
     pageSize: options.pageSize,
@@ -235,7 +207,7 @@ async function handleUserList(options: UserCommandOptions): Promise<number> {
     return emitValidationError(validationError, options);
   }
 
-  const ctx = buildContext(options);
+  const ctx = createCommandContext(options);
 
   try {
     const profile = await ctx.resolveProfile();
@@ -261,7 +233,7 @@ async function handleUserList(options: UserCommandOptions): Promise<number> {
         ...commonPaginateInput,
         options: { ...paginationOptions, all: paginationOptions.all ?? true },
         onItem: (raw) => {
-          process.stdout.write(`${JSON.stringify(normalizeUser(raw))}\n`);
+          stdout.write(`${JSON.stringify(normalizeUser(raw))}\n`);
         }
       });
     } else {
@@ -275,11 +247,11 @@ async function handleUserList(options: UserCommandOptions): Promise<number> {
       if (options.jsonEnvelope) {
         return ctx.emitSuccess(users, result.pageInfo);
       } else if (options.json) {
-        process.stdout.write(`${JSON.stringify(users, null, 2)}\n`);
+        stdout.write(`${JSON.stringify(users, null, 2)}\n`);
       } else {
         for (const user of users) {
-          printHumanUser(user);
-          process.stdout.write("\n");
+          printHumanUser(user, options);
+          stdout.write("\n");
         }
       }
     }

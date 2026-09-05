@@ -8,24 +8,17 @@
 
 import { resolveStoredProfile } from "../auth/runtime.js";
 import type { ResolvedProfile } from "../auth/profile-resolution.js";
-import { type ExecutedGraphQLResponse, type FetchLike, type GraphQLErrorPayload } from "../transport/graphql.js";
-import { executeGraphQLWithRetry, type RetryOptions } from "../transport/retry.js";
+import { type ExecutedGraphQLResponse, type GraphQLErrorPayload } from "../transport/graphql.js";
+import { executeGraphQLWithRetry, normalizeRetryOptions, type RetryOptions } from "../transport/retry.js";
 import { failureEnvelope, successEnvelope, formatCommandErrorHuman, type CommandSourceLayer, type PageInfo, type CommandError } from "../output/envelope.js";
 import { exitCodeForErrors, mapCommandFailure, mapGraphQLErrorPayload } from "../errors/command-failure.js";
 import type { WorkflowResult } from "./workflow.js";
 import { ExitCode } from "../errors/exit-codes.js";
 import type { ResolverOptions } from "../resolution/resolve.js";
+import { commandIO, type CommandOptions, type OutputStream } from "./options.js";
 
 /** Options needed to create a command context */
-export interface CommandContextOptions {
-  json: boolean;
-  jsonEnvelope: boolean;
-  profile?: string;
-  configFile: string;
-  credentialsFile: string;
-  apiUrl?: string;
-  env: Record<string, string | undefined>;
-  fetchImpl?: FetchLike;
+export interface CommandContextOptions extends CommandOptions {
   /** Retry configuration — controls --no-retry and --max-retries */
   retry?: RetryOptions;
   /** The source layer for envelope metadata */
@@ -43,9 +36,17 @@ export class CommandContext {
   private _profile: ResolvedProfile | undefined;
   private readonly options: CommandContextOptions;
   private readonly layer: CommandSourceLayer;
+  readonly stdout: OutputStream;
+  readonly stderr: OutputStream;
 
   constructor(options: CommandContextOptions) {
-    this.options = options;
+    const io = commandIO(options);
+    this.stdout = io.stdout;
+    this.stderr = io.stderr;
+    this.options = {
+      ...options,
+      retry: { ...normalizeRetryOptions(options), ...options.retry, stderr: io.stderr },
+    };
     this.layer = options.sourceLayer ?? "curated";
   }
 
@@ -62,6 +63,7 @@ export class CommandContext {
       },
       ...(this.options.profile === undefined ? {} : { explicitProfile: this.options.profile }),
       env: this.options.env,
+      ...(this.options.fetchImpl === undefined ? {} : { fetchImpl: this.options.fetchImpl }),
     });
 
     return this._profile;
@@ -78,26 +80,15 @@ export class CommandContext {
     };
   }
 
-  /**
-   * Execute a GraphQL query/mutation with automatic retry on rate limits.
-   * Uses executeGraphQLWithRetry when retry is configured, otherwise executeGraphQL.
-   */
+  /** Execute a GraphQL query/mutation with the same transport and retry policy as resolvers. */
   async graphql<TData>(
     query: string,
     variables?: Record<string, unknown>
   ): Promise<ExecutedGraphQLResponse<TData>> {
-    const profile = await this.resolveProfile();
-    const input = {
+    return executeGraphQLWithRetry<TData>({
       query,
       ...(variables === undefined ? {} : { variables }),
-      credentials: profile.credentials,
-      ...this.apiUrlOption(profile),
-      ...(this.options.fetchImpl === undefined ? {} : { fetchImpl: this.options.fetchImpl }),
-    };
-
-    return executeGraphQLWithRetry<TData>({
-      ...input,
-      ...(this.options.retry === undefined ? {} : { retry: this.options.retry }),
+      ...await this.resolverOptions(),
     });
   }
 
@@ -106,9 +97,9 @@ export class CommandContext {
     const profileName = this._profile?.name;
     if (this.options.jsonEnvelope) {
       const envelope = successEnvelope(data, { sourceLayer: this.layer, ...(profileName ? { profile: profileName } : {}) }, pageInfo ?? null);
-      process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
+      this.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
     } else if (this.options.json) {
-      process.stdout.write(`${JSON.stringify(data, null, 2)}\n`);
+      this.stdout.write(`${JSON.stringify(data, null, 2)}\n`);
     }
     return ExitCode.Success;
   }
@@ -119,9 +110,9 @@ export class CommandContext {
     const profileName = this._profile?.name ?? this.options.profile;
     if (this.options.jsonEnvelope) {
       const envelope = failureEnvelope(errors, { sourceLayer: this.layer, ...(profileName ? { profile: profileName } : {}) });
-      process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
+      this.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
     } else {
-      process.stderr.write(`${formatCommandErrorHuman(errors[0] ?? { category: "general", message: "command failed" })}\n`);
+      this.stderr.write(`${formatCommandErrorHuman(errors[0] ?? { category: "general", message: "command failed" })}\n`);
     }
     return resolvedExitCode;
   }
@@ -148,13 +139,13 @@ export class CommandContext {
         ...(profile === undefined ? {} : { profile }),
         partial: workflow.partialSuccess,
       });
-      process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
+      this.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
     } else {
       for (const error of workflow.errors) {
-        process.stderr.write(`${formatCommandErrorHuman(error)}\n`);
+        this.stderr.write(`${formatCommandErrorHuman(error)}\n`);
       }
       if (workflow.partialSuccess) {
-        process.stderr.write(`Completed resources: ${JSON.stringify(resources)}\n${recovery}\n`);
+        this.stderr.write(`Completed resources: ${JSON.stringify(resources)}\n${recovery}\n`);
       }
     }
     return workflow.exitCode;

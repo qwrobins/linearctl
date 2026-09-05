@@ -1,14 +1,14 @@
+import { commandIO, type CommandOutputOptions, type CommandIO } from "../core/runtime/options.js";
 import { writeFile, mkdir, readFile } from "node:fs/promises";
 import { createInterface } from "node:readline";
+import { Writable } from "node:stream";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
 import { ExitCode } from "../core/errors/exit-codes.js";
 import { EMBEDDED_SKILLS } from "../generated/embedded-skills.js";
 
-export interface SkillsCommandOptions {
-  json: boolean;
-  jsonEnvelope: boolean;
+export interface SkillsCommandOptions extends CommandOutputOptions {
   scope?: string;
   stdinStream?: NodeJS.ReadableStream;
 }
@@ -110,17 +110,28 @@ async function inspectSkillInstall(
   }
 }
 
-async function promptScope(stdinStream?: NodeJS.ReadableStream): Promise<"user" | "project"> {
+async function promptScope(stdinStream?: NodeJS.ReadableStream, options: CommandIO = {}): Promise<"user" | "project"> {
+  const { stderr } = commandIO(options);
   const rl = createInterface({
     input: stdinStream ?? process.stdin,
-    output: process.stderr
+    output: new Writable({
+      write(chunk, _encoding, callback) {
+        try {
+          stderr.write(chunk);
+          callback();
+        } catch (error) {
+          callback(error as Error);
+        }
+      }
+    }),
+    terminal: "isTTY" in stderr && stderr.isTTY === true
   });
 
   return new Promise((resolve) => {
-    process.stderr.write("\nWhere should skills be installed?\n");
-    process.stderr.write("  1. Project level (.claude/skills/ and .codex/skills/ in current directory)\n");
-    process.stderr.write("  2. User level (~/.claude/skills/ and ~/.codex/skills/)\n");
-    process.stderr.write("\n");
+    stderr.write("\nWhere should skills be installed?\n");
+    stderr.write("  1. Project level (.claude/skills/ and .codex/skills/ in current directory)\n");
+    stderr.write("  2. User level (~/.claude/skills/ and ~/.codex/skills/)\n");
+    stderr.write("\n");
 
     const ask = () => {
       rl.question("Choice [1]: ", (answer) => {
@@ -132,7 +143,7 @@ async function promptScope(stdinStream?: NodeJS.ReadableStream): Promise<"user" 
           rl.close();
           resolve("user");
         } else {
-          process.stderr.write("  Please enter 1 or 2.\n");
+          stderr.write("  Please enter 1 or 2.\n");
           ask();
         }
       });
@@ -143,18 +154,19 @@ async function promptScope(stdinStream?: NodeJS.ReadableStream): Promise<"user" 
 }
 
 async function handleSkillsInstall(options: SkillsCommandOptions): Promise<number> {
+  const { stderr, stdout } = commandIO(options);
   let scope: "user" | "project";
 
   if (options.scope === "user" || options.scope === "project") {
     scope = options.scope;
   } else if (options.scope !== undefined) {
-    process.stderr.write(`Error: --scope must be "project" or "user"\n`);
+    stderr.write(`Error: --scope must be "project" or "user"\n`);
     return ExitCode.ValidationError;
   } else if (options.json || options.jsonEnvelope || !isTty(options.stdinStream)) {
     // Non-interactive mode defaults to project
     scope = "project";
   } else {
-    scope = await promptScope(options.stdinStream);
+    scope = await promptScope(options.stdinStream, options);
   }
 
   const targets = discoverAgentTargets(scope);
@@ -175,13 +187,13 @@ async function handleSkillsInstall(options: SkillsCommandOptions): Promise<numbe
   const result: SkillInstallResult = { installed, targets: targetDirs };
 
   if (options.jsonEnvelope) {
-    process.stdout.write(`${JSON.stringify({ ok: true, data: result }, null, 2)}\n`);
+    stdout.write(`${JSON.stringify({ ok: true, data: result }, null, 2)}\n`);
   } else if (options.json) {
-    process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+    stdout.write(`${JSON.stringify(result, null, 2)}\n`);
   } else {
-    process.stdout.write(`\nInstalled ${installed.length} skill(s) to ${targets.length} location(s):\n`);
+    stdout.write(`\nInstalled ${installed.length} skill(s) to ${targets.length} location(s):\n`);
     for (const entry of installed) {
-      process.stdout.write(`  [${entry.displayName}] ${entry.name} → ${entry.path}\n`);
+      stdout.write(`  [${entry.displayName}] ${entry.name} → ${entry.path}\n`);
     }
   }
 
@@ -189,6 +201,7 @@ async function handleSkillsInstall(options: SkillsCommandOptions): Promise<numbe
 }
 
 async function handleSkillsList(options: SkillsCommandOptions): Promise<number> {
+  const { stdout } = commandIO(options);
   const targets = knownAgentTargets();
   const entries: SkillListEntry[] = await Promise.all(
     Object.entries(EMBEDDED_SKILLS).map(async ([name, skill]) => ({
@@ -201,20 +214,20 @@ async function handleSkillsList(options: SkillsCommandOptions): Promise<number> 
   );
 
   if (options.jsonEnvelope) {
-    process.stdout.write(`${JSON.stringify({ ok: true, data: entries }, null, 2)}\n`);
+    stdout.write(`${JSON.stringify({ ok: true, data: entries }, null, 2)}\n`);
   } else if (options.json) {
-    process.stdout.write(`${JSON.stringify(entries, null, 2)}\n`);
+    stdout.write(`${JSON.stringify(entries, null, 2)}\n`);
   } else {
-    process.stdout.write("Available skills:\n");
+    stdout.write("Available skills:\n");
     for (const entry of entries) {
-      process.stdout.write(`  ${entry.name} (${entry.filename})\n`);
+      stdout.write(`  ${entry.name} (${entry.filename})\n`);
       for (const install of entry.installs) {
         const status = install.error !== undefined
           ? `inspection failed: ${install.error}`
           : install.installed
             ? `installed, ${install.upToDate ? "up to date" : "out of date"}`
             : "not installed";
-        process.stdout.write(`    ${install.tool} (${install.scope}): ${status} — ${install.path}\n`);
+        stdout.write(`    ${install.tool} (${install.scope}): ${status} — ${install.path}\n`);
       }
     }
   }
@@ -226,6 +239,7 @@ export async function handleSkillsCommand(
   positionals: string[],
   options: SkillsCommandOptions
 ): Promise<number> {
+  const { stderr } = commandIO(options);
   const [subcommand] = positionals;
 
   if (subcommand === "install") {
@@ -236,6 +250,6 @@ export async function handleSkillsCommand(
     return handleSkillsList(options);
   }
 
-  process.stderr.write("Error: usage: linearctl skills install or linearctl skills list\n");
+  stderr.write("Error: usage: linearctl skills install or linearctl skills list\n");
   return ExitCode.ValidationError;
 }

@@ -10,6 +10,8 @@ Warning: results truncated at 50 items. Use --all to fetch all results, or --max
 
 This prevents silently incomplete data. Always check stderr or use `--all`/`--max` when you need complete results.
 
+`--max` and `--limit` share one bound: the last occurrence wins, including across leading and command-position options. For example, `--max 10 issue list --limit 20` uses a bound of 20.
+
 `project list` requests 50 projects per page by default, including with `--all`, to stay under Linear's query-complexity limit while preserving milestone and team fields in JSON output. An explicit `--page-size <n>` still takes precedence.
 
 ### Flags

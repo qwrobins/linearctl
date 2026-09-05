@@ -110,7 +110,7 @@ Raw GraphQL should not be used merely because it is possible. It is the fallback
 - `linearctl file upload <path> [--issue <id>] [--transfer-timeout <seconds>] --json`
 - `linearctl file url <attachment-id> [--expires-in <seconds>] --json`
 - `linearctl file download <url> [--output <path>] [--transfer-timeout <seconds>] --json`
-- Upload/download stream with backpressure. Upload sources must be regular files; do not modify them during transfer. `--transfer-timeout` is a total PUT/GET deadline in whole seconds (default 120, range 1–2147483), including redirects, response bodies, and download writes; GraphQL requests keep their separate timeout/retry policy. Transfers are not automatically retried. Ctrl-C/SIGINT or SIGTERM cancels an active transfer; timeout/cancellation returns exit 1.
+- Upload/download stream with backpressure. Upload sources must be regular files; do not modify them during transfer. `--transfer-timeout` is a total PUT/GET deadline in whole seconds (default 120, range 1–2147483), including redirects, response bodies, and download writes; GraphQL requests keep their separate timeout/retry policy. Transfers are not automatically retried. Ctrl-C/SIGINT or SIGTERM cancels an active transfer; timeout/cancellation returns exit 1 before download commit. The final atomic rename is checked for cancellation before dispatch, but cannot be cancelled once in flight; its actual result is reported even if the deadline or cancellation arrives meanwhile.
 - Downloads stage beside the destination and atomically overwrite it only after success. Transfer/write/rename failures preserve existing contents and attempt staging cleanup; cleanup failures do not change the primary transfer outcome. The parent must exist and be writable. Destination symlinks are replaced rather than followed; new files have private permissions (0600 on POSIX), not the old metadata. Cleanup failures or SIGKILL/crashes can leave staging directories; this is not a crash-durability guarantee.
 - Requests and redirects require HTTPS, with at most five redirects; downloads must start at `uploads.linear.app`. Same-host redirects keep signed upload headers or Linear authorization; cross-host redirects drop sensitive headers permanently. Redirected PUTs replay the file from byte zero.
 
@@ -201,7 +201,7 @@ Use `--dry-run` on any mutating command to preview what would happen without exe
 - Default list behavior returns the first page only (up to 50 items)
 - **When results are truncated, a warning is emitted to stderr** — check stderr to know if you have incomplete data
 - Use `--all` to fetch all results (with `--max` or `--limit` to limit)
-- Use `--max <n>` or `--limit <n>` to cap total results
+- Use `--max <n>` or `--limit <n>` to cap total results; the last occurrence of either alias wins, including across leading and command-position flags
 - Use `--quiet` / `-q` to suppress the truncation warning (useful when piping JSON)
 - Add filters before broad pagination whenever possible
 - Prefer `--jsonl` for large result sets — it streams one object per line; pass `--all` or `--max <n>`

@@ -1,7 +1,9 @@
 import type { ExecutedGraphQLResponse, GraphQLRequestInput } from "./graphql.js";
 import { executeGraphQL, GraphQLTransportError } from "./graphql.js";
 
-export interface RetryOptions {
+import { commandIO, type CommandIO } from "../runtime/options.js";
+
+export interface RetryOptions extends CommandIO {
   noRetry?: boolean;
   maxRetries?: number;
   onRetryDelay?: (event: RetryDelayEvent) => void;
@@ -14,7 +16,7 @@ export interface RetryDelayEvent {
   source: "retry-after" | "backoff";
 }
 
-export interface RetryOptionInput {
+export interface RetryOptionInput extends CommandIO {
   noRetry?: boolean;
   maxRetries?: number;
 }
@@ -53,7 +55,7 @@ export async function executeGraphQLWithRetry<TData>(
       input.retry?.onRetryDelay?.({ delayMs: delay, attempt: attempt + 1, maxRetries, source });
 
       const retrySource = source === "retry-after" ? " from Retry-After" : "";
-      process.stderr.write(
+      commandIO(input.retry ?? {}).stderr.write(
         `Warning: rate limited, retrying in ${Math.round(delay / 1000)}s${retrySource} (attempt ${attempt + 1}/${maxRetries})...\n`
       );
 
@@ -73,6 +75,7 @@ export function normalizeRetryOptions(input: RetryOptionInput): RetryOptions {
   }
 
   return {
+    ...(input.stderr === undefined ? {} : { stderr: input.stderr }),
     ...(input.noRetry === true ? { noRetry: true } : {}),
     ...(input.maxRetries !== undefined ? { maxRetries: input.maxRetries } : {}),
   };

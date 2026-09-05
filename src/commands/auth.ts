@@ -1,3 +1,4 @@
+import { commandIO, type CommandOptions, type CommandIO } from "../core/runtime/options.js";
 import { execFile } from "node:child_process";
 import { constants } from "node:fs";
 import { access } from "node:fs/promises";
@@ -6,8 +7,7 @@ import type { CredentialsStore, ProfileCredentials } from "../core/auth/credenti
 import {
   loadCredentialsFile,
   removeCredentialsProfile,
-  setCredentialsProfile,
-  writeCredentialsFile
+  setCredentialsProfile
 } from "../core/auth/credentials.js";
 import {
   isNotFoundError,
@@ -18,9 +18,7 @@ import {
 } from "../core/auth/runtime.js";
 import type { LinearConfig, ProfileMetadata } from "../core/config/config-file.js";
 import {
-  clearDefaultProfile,
-  loadLinearConfigFile,
-  removeProfileMetadata,
+  clearDefaultProfile, removeProfileMetadata,
   setDefaultProfile,
   setProfileMetadata,
   writeLinearConfigFile
@@ -37,14 +35,8 @@ import {
 import { OAuthCallbackError, startCallbackServer } from "../core/auth/oauth-server.js";
 import { successEnvelope } from "../core/output/envelope.js";
 import { GraphQLTransportError, requestGraphQL } from "../core/transport/graphql.js";
-import type { FetchLike } from "../core/transport/graphql.js";
 
-export interface AuthCommandOptions {
-  json: boolean;
-  jsonEnvelope: boolean;
-  configFile: string;
-  credentialsFile: string;
-  profile?: string;
+export interface AuthCommandOptions extends CommandOptions {
   apiKeyEnv?: string;
   apiKeyStdin: boolean;
   oauth: boolean;
@@ -61,10 +53,7 @@ export interface AuthCommandOptions {
   noBrowser: boolean;
   setDefault: boolean;
   removeConfig: boolean;
-  apiUrl?: string;
-  env: Record<string, string | undefined>;
   stdin: NodeJS.ReadableStream;
-  fetchImpl?: FetchLike;
   openUrl?: (url: string) => Promise<void>;
 }
 
@@ -149,10 +138,11 @@ async function fileExists(filePath: string): Promise<boolean> {
 }
 
 function requireProfile(options: AuthCommandOptions, command: string): string | undefined {
+  const { stderr } = commandIO(options);
   const profileName = options.profile?.trim();
 
   if (profileName === undefined || profileName === "") {
-    process.stderr.write(`Error: --profile <name> is required for ${command}.\n`);
+    stderr.write(`Error: --profile <name> is required for ${command}.\n`);
     return undefined;
   }
 
@@ -160,21 +150,22 @@ function requireProfile(options: AuthCommandOptions, command: string): string | 
 }
 
 async function readApiKey(options: AuthCommandOptions): Promise<string | undefined> {
+  const { stderr } = commandIO(options);
   if (options.apiKeyEnv !== undefined && options.apiKeyStdin) {
-    process.stderr.write("Error: --api-key-env and --api-key-stdin are mutually exclusive.\n");
+    stderr.write("Error: --api-key-env and --api-key-stdin are mutually exclusive.\n");
     return undefined;
   }
 
   if (options.apiKeyEnv !== undefined) {
     const envName = options.apiKeyEnv.trim();
     if (envName === "") {
-      process.stderr.write("Error: --api-key-env requires a non-empty environment variable name.\n");
+      stderr.write("Error: --api-key-env requires a non-empty environment variable name.\n");
       return undefined;
     }
 
     const apiKey = options.env[envName];
     if (apiKey === undefined || apiKey.trim() === "") {
-      process.stderr.write(`Error: environment variable ${envName} is not set or is empty.\n`);
+      stderr.write(`Error: environment variable ${envName} is not set or is empty.\n`);
       return undefined;
     }
 
@@ -183,26 +174,27 @@ async function readApiKey(options: AuthCommandOptions): Promise<string | undefin
 
   if (options.apiKeyStdin) {
     if (isTtyInput(options.stdin)) {
-      process.stderr.write("Error: --api-key-stdin requires piped stdin.\n");
+      stderr.write("Error: --api-key-stdin requires piped stdin.\n");
       return undefined;
     }
 
     const apiKey = (await readAllStdin(options.stdin)).trim();
     if (apiKey === "") {
-      process.stderr.write("Error: --api-key-stdin received empty input.\n");
+      stderr.write("Error: --api-key-stdin received empty input.\n");
       return undefined;
     }
 
     return apiKey;
   }
 
-  process.stderr.write("Error: API key login requires --api-key-env <ENV> or --api-key-stdin.\n");
+  stderr.write("Error: API key login requires --api-key-env <ENV> or --api-key-stdin.\n");
   return undefined;
 }
 
 function readOAuthClientId(options: AuthCommandOptions): string | undefined {
+  const { stderr } = commandIO(options);
   if (options.oauthClientId !== undefined && options.oauthClientIdEnv !== undefined) {
-    process.stderr.write("Error: --oauth-client-id and --oauth-client-id-env are mutually exclusive.\n");
+    stderr.write("Error: --oauth-client-id and --oauth-client-id-env are mutually exclusive.\n");
     return undefined;
   }
 
@@ -210,13 +202,13 @@ function readOAuthClientId(options: AuthCommandOptions): string | undefined {
   if (options.oauthClientIdEnv !== undefined) {
     const envName = options.oauthClientIdEnv.trim();
     if (envName === "") {
-      process.stderr.write("Error: --oauth-client-id-env requires a non-empty environment variable name.\n");
+      stderr.write("Error: --oauth-client-id-env requires a non-empty environment variable name.\n");
       return undefined;
     }
 
     clientId = options.env[envName];
     if (clientId === undefined || clientId.trim() === "") {
-      process.stderr.write(`Error: environment variable ${envName} is not set or is empty.\n`);
+      stderr.write(`Error: environment variable ${envName} is not set or is empty.\n`);
       return undefined;
     }
   } else {
@@ -224,9 +216,9 @@ function readOAuthClientId(options: AuthCommandOptions): string | undefined {
   }
 
   if (clientId === undefined || clientId.trim() === "") {
-    process.stderr.write("Error: --oauth-client-id or LINEAR_CLI_CLIENT_ID environment variable is required for OAuth login.\n");
-    process.stderr.write("  Create an OAuth application at: https://linear.app/settings/api/applications\n");
-    process.stderr.write("  Then pass the client ID via --oauth-client-id <id> or set LINEAR_CLI_CLIENT_ID.\n");
+    stderr.write("Error: --oauth-client-id or LINEAR_CLI_CLIENT_ID environment variable is required for OAuth login.\n");
+    stderr.write("  Create an OAuth application at: https://linear.app/settings/api/applications\n");
+    stderr.write("  Then pass the client ID via --oauth-client-id <id> or set LINEAR_CLI_CLIENT_ID.\n");
     return undefined;
   }
 
@@ -234,22 +226,23 @@ function readOAuthClientId(options: AuthCommandOptions): string | undefined {
 }
 
 async function readOAuthClientSecret(options: AuthCommandOptions): Promise<string | undefined> {
+  const { stderr } = commandIO(options);
   const readFromStdin = options.oauthClientSecretStdin === true;
   if (options.oauthClientSecretEnv !== undefined && readFromStdin) {
-    process.stderr.write("Error: --oauth-client-secret-env and --oauth-client-secret-stdin are mutually exclusive.\n");
+    stderr.write("Error: --oauth-client-secret-env and --oauth-client-secret-stdin are mutually exclusive.\n");
     return undefined;
   }
 
   if (options.oauthClientSecretEnv !== undefined) {
     const envName = options.oauthClientSecretEnv.trim();
     if (envName === "") {
-      process.stderr.write("Error: --oauth-client-secret-env requires a non-empty environment variable name.\n");
+      stderr.write("Error: --oauth-client-secret-env requires a non-empty environment variable name.\n");
       return undefined;
     }
 
     const clientSecret = options.env[envName];
     if (clientSecret === undefined || clientSecret.trim() === "") {
-      process.stderr.write(`Error: environment variable ${envName} is not set or is empty.\n`);
+      stderr.write(`Error: environment variable ${envName} is not set or is empty.\n`);
       return undefined;
     }
 
@@ -258,20 +251,20 @@ async function readOAuthClientSecret(options: AuthCommandOptions): Promise<strin
 
   if (readFromStdin) {
     if (isTtyInput(options.stdin)) {
-      process.stderr.write("Error: --oauth-client-secret-stdin requires piped stdin.\n");
+      stderr.write("Error: --oauth-client-secret-stdin requires piped stdin.\n");
       return undefined;
     }
 
     const clientSecret = (await readAllStdin(options.stdin)).trim();
     if (clientSecret === "") {
-      process.stderr.write("Error: --oauth-client-secret-stdin received empty input.\n");
+      stderr.write("Error: --oauth-client-secret-stdin received empty input.\n");
       return undefined;
     }
 
     return clientSecret;
   }
 
-  process.stderr.write("Error: OAuth client-credentials login requires --oauth-client-secret-env <ENV> or --oauth-client-secret-stdin.\n");
+  stderr.write("Error: OAuth client-credentials login requires --oauth-client-secret-env <ENV> or --oauth-client-secret-stdin.\n");
   return undefined;
 }
 
@@ -279,6 +272,7 @@ async function validateApiKey(
   apiKey: string,
   options: AuthCommandOptions
 ): Promise<ViewerValidationResponse["viewer"] | undefined> {
+  const { stderr } = commandIO(options);
   try {
     const data = await requestGraphQL<ViewerValidationResponse>({
       query: "query LinearCliAuthViewer { viewer { id name email organization { id name urlKey } } }",
@@ -294,7 +288,7 @@ async function validateApiKey(
     return data.viewer;
   } catch (error) {
     if (error instanceof GraphQLTransportError && (error.status === 401 || error.status === 403)) {
-      process.stderr.write(`Error: authentication failed: ${error.message}\n`);
+      stderr.write(`Error: authentication failed: ${error.message}\n`);
       return undefined;
     }
 
@@ -358,32 +352,33 @@ function buildAuthStatusProfile(
   };
 }
 
-function printAuthStatus(status: AuthStatus): void {
-  process.stdout.write(`Default profile: ${status.defaultProfile ?? "(none)"}\n\n`);
+function printAuthStatus(status: AuthStatus, options: CommandIO): void {
+  const { stdout } = commandIO(options);
+  stdout.write(`Default profile: ${status.defaultProfile ?? "(none)"}\n\n`);
 
   if (status.profiles.length === 0) {
-    process.stdout.write("Profiles: (none)\n");
+    stdout.write("Profiles: (none)\n");
     return;
   }
 
-  process.stdout.write("Profiles:\n");
+  stdout.write("Profiles:\n");
   for (const profile of status.profiles) {
-    process.stdout.write(`  ${profile.name}\n`);
-    process.stdout.write(`    Type: ${profile.type ?? "(missing credentials)"}\n`);
+    stdout.write(`  ${profile.name}\n`);
+    stdout.write(`    Type: ${profile.type ?? "(missing credentials)"}\n`);
 
     if (profile.workspace !== undefined) {
-      process.stdout.write(`    Workspace: ${profile.workspace}\n`);
+      stdout.write(`    Workspace: ${profile.workspace}\n`);
     }
 
     if (profile.userEmail !== undefined) {
-      process.stdout.write(`    User: ${profile.userEmail}\n`);
+      stdout.write(`    User: ${profile.userEmail}\n`);
     }
 
     if (profile.expiresAt !== undefined) {
-      process.stdout.write(`    Expires: ${profile.expiresAt}\n`);
+      stdout.write(`    Expires: ${profile.expiresAt}\n`);
     }
 
-    process.stdout.write(`    Source: ${profile.source === "credentials-file" ? "credentials file" : "missing"}\n\n`);
+    stdout.write(`    Source: ${profile.source === "credentials-file" ? "credentials file" : "missing"}\n\n`);
   }
 }
 
@@ -397,12 +392,14 @@ interface WhoamiViewerResponse {
 }
 
 async function handleWhoami(options: AuthCommandOptions, extraPositionals: string[]): Promise<number> {
+  const { stderr, stdout } = commandIO(options);
   if (extraPositionals.length > 0) {
-    process.stderr.write("Error: auth whoami does not accept positional arguments.\n");
+    stderr.write("Error: auth whoami does not accept positional arguments.\n");
     return ExitCode.ValidationError;
   }
 
   const profile = await resolveStoredProfile({
+      ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl }),
     paths: {
       configFile: options.configFile,
       credentialsFile: options.credentialsFile
@@ -434,11 +431,11 @@ async function handleWhoami(options: AuthCommandOptions, extraPositionals: strin
 
   if (options.jsonEnvelope) {
     const envelope = successEnvelope(result, { sourceLayer: "curated", profile: profile.name });
-    process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
+    stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
   } else if (options.json) {
-    process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+    stdout.write(`${JSON.stringify(result, null, 2)}\n`);
   } else {
-    process.stdout.write(`Logged in as ${result.user.name} (${result.user.email}) in workspace ${result.organization.name} (${result.organization.urlKey})\n`);
+    stdout.write(`Logged in as ${result.user.name} (${result.user.email}) in workspace ${result.organization.name} (${result.organization.urlKey})\n`);
   }
 
   return ExitCode.Success;
@@ -448,6 +445,7 @@ const DEFAULT_CALLBACK_PORT = 8765;
 const DEFAULT_OAUTH_SCOPE = "read write";
 
 async function handleOAuthLogin(options: AuthCommandOptions): Promise<number> {
+  const { stderr, stdout } = commandIO(options);
   const profileName = requireProfile(options, "auth login --oauth");
   if (profileName === undefined) {
     return ExitCode.ValidationError;
@@ -459,7 +457,7 @@ async function handleOAuthLogin(options: AuthCommandOptions): Promise<number> {
   }
 
   const port = options.callbackPort !== undefined
-    ? parseCallbackPort(options.callbackPort)
+    ? parseCallbackPort(options.callbackPort, options)
     : DEFAULT_CALLBACK_PORT;
   if (port === undefined) {
     return ExitCode.ValidationError;
@@ -476,13 +474,13 @@ async function handleOAuthLogin(options: AuthCommandOptions): Promise<number> {
     codeChallenge
   });
 
-  process.stderr.write(`OAuth callback URL: ${redirectUri}\n`);
-  process.stderr.write("Register this exact URL as a redirect URI on your Linear OAuth application.\n");
+  stderr.write(`OAuth callback URL: ${redirectUri}\n`);
+  stderr.write("Register this exact URL as a redirect URI on your Linear OAuth application.\n");
 
   if (options.noBrowser) {
-    process.stderr.write(`Open this URL in your browser to authorize:\n${authorizeUrl}\n\n`);
+    stderr.write(`Open this URL in your browser to authorize:\n${authorizeUrl}\n\n`);
   } else {
-    process.stderr.write("Opening browser for Linear authorization...\n");
+    stderr.write("Opening browser for Linear authorization...\n");
     try {
       if (options.openUrl !== undefined) {
         await options.openUrl(authorizeUrl);
@@ -490,18 +488,18 @@ async function handleOAuthLogin(options: AuthCommandOptions): Promise<number> {
         await openUrlInBrowser(authorizeUrl);
       }
     } catch {
-      process.stderr.write(`Could not open browser. Open this URL manually:\n${authorizeUrl}\n\n`);
+      stderr.write(`Could not open browser. Open this URL manually:\n${authorizeUrl}\n\n`);
     }
   }
 
-  process.stderr.write("Waiting for authorization callback...\n");
+  stderr.write("Waiting for authorization callback...\n");
 
   let callbackResult: { code: string };
   try {
     callbackResult = await startCallbackServer({ port, expectedState: state });
   } catch (error) {
     if (error instanceof OAuthCallbackError) {
-      process.stderr.write(`Error: ${error.message}\n`);
+      stderr.write(`Error: ${error.message}\n`);
       return error.reason === "state-mismatch" ? ExitCode.AuthenticationError : ExitCode.GeneralError;
     }
     throw error;
@@ -518,7 +516,7 @@ async function handleOAuthLogin(options: AuthCommandOptions): Promise<number> {
     });
   } catch (error) {
     if (error instanceof OAuthTokenError) {
-      process.stderr.write(`Error: ${error.message}\n`);
+      stderr.write(`Error: ${error.message}\n`);
       return ExitCode.AuthenticationError;
     }
     throw error;
@@ -581,13 +579,13 @@ async function handleOAuthLogin(options: AuthCommandOptions): Promise<number> {
 
   if (options.jsonEnvelope) {
     const envelope = successEnvelope(result, { sourceLayer: "curated", profile: profileName });
-    process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
+    stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
   } else if (options.json) {
-    process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+    stdout.write(`${JSON.stringify(result, null, 2)}\n`);
   } else {
-    process.stdout.write(`Logged in to Linear as profile "${profileName}" using OAuth.\n`);
+    stdout.write(`Logged in to Linear as profile "${profileName}" using OAuth.\n`);
     if (viewer.email !== undefined) {
-      process.stdout.write(`User: ${viewer.email}\n`);
+      stdout.write(`User: ${viewer.email}\n`);
     }
   }
 
@@ -595,6 +593,7 @@ async function handleOAuthLogin(options: AuthCommandOptions): Promise<number> {
 }
 
 async function handleOAuthClientCredentialsLogin(options: AuthCommandOptions): Promise<number> {
+  const { stderr, stdout } = commandIO(options);
   const profileName = requireProfile(options, "auth login --oauth-client-credentials");
   if (profileName === undefined) {
     return ExitCode.ValidationError;
@@ -622,7 +621,7 @@ async function handleOAuthClientCredentialsLogin(options: AuthCommandOptions): P
     });
   } catch (error) {
     if (error instanceof OAuthTokenError) {
-      process.stderr.write(`Error: ${redactSecret(error.message, clientSecret)}\n`);
+      stderr.write(`Error: ${redactSecret(error.message, clientSecret)}\n`);
       return ExitCode.AuthenticationError;
     }
     throw error;
@@ -665,11 +664,11 @@ async function handleOAuthClientCredentialsLogin(options: AuthCommandOptions): P
 
   if (options.jsonEnvelope) {
     const envelope = successEnvelope(result, { sourceLayer: "curated", profile: profileName });
-    process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
+    stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
   } else if (options.json) {
-    process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+    stdout.write(`${JSON.stringify(result, null, 2)}\n`);
   } else {
-    process.stdout.write(`Logged in to Linear as profile "${profileName}" using OAuth client credentials.\n`);
+    stdout.write(`Logged in to Linear as profile "${profileName}" using OAuth client credentials.\n`);
   }
 
   return ExitCode.Success;
@@ -706,10 +705,11 @@ function openUrlInBrowser(url: string): Promise<void> {
   });
 }
 
-function parseCallbackPort(value: string): number | undefined {
+function parseCallbackPort(value: string, options: CommandIO): number | undefined {
+  const { stderr } = commandIO(options);
   const port = parseInt(value, 10);
   if (!Number.isFinite(port) || port < 1 || port > 65535) {
-    process.stderr.write("Error: --callback-port must be a valid port number (1-65535).\n");
+    stderr.write("Error: --callback-port must be a valid port number (1-65535).\n");
     return undefined;
   }
   return port;
@@ -719,6 +719,7 @@ async function validateOAuthToken(
   accessToken: string,
   options: AuthCommandOptions
 ): Promise<ViewerValidationResponse["viewer"] | undefined> {
+  const { stderr } = commandIO(options);
   try {
     const data = await requestGraphQL<ViewerValidationResponse>({
       query: "query LinearCliAuthViewer { viewer { id name email organization { id name urlKey } } }",
@@ -736,7 +737,7 @@ async function validateOAuthToken(
     return data.viewer;
   } catch (error) {
     if (error instanceof GraphQLTransportError && (error.status === 401 || error.status === 403)) {
-      process.stderr.write(`Error: OAuth token validation failed: ${error.message}\n`);
+      stderr.write(`Error: OAuth token validation failed: ${error.message}\n`);
       return undefined;
     }
 
@@ -745,13 +746,14 @@ async function validateOAuthToken(
 }
 
 async function handleLogin(options: AuthCommandOptions, extraPositionals: string[]): Promise<number> {
+  const { stderr, stdout } = commandIO(options);
   if (extraPositionals.length > 0) {
-    process.stderr.write("Error: auth login does not accept positional arguments.\n");
+    stderr.write("Error: auth login does not accept positional arguments.\n");
     return ExitCode.ValidationError;
   }
 
   if (options.oauth && options.oauthClientCredentials === true) {
-    process.stderr.write("Error: --oauth and --oauth-client-credentials are mutually exclusive.\n");
+    stderr.write("Error: --oauth and --oauth-client-credentials are mutually exclusive.\n");
     return ExitCode.ValidationError;
   }
 
@@ -825,13 +827,13 @@ async function handleLogin(options: AuthCommandOptions, extraPositionals: string
 
   if (options.jsonEnvelope) {
     const envelope = successEnvelope(result, { sourceLayer: "curated", profile: profileName });
-    process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
+    stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
   } else if (options.json) {
-    process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+    stdout.write(`${JSON.stringify(result, null, 2)}\n`);
   } else {
-    process.stdout.write(`Logged in to Linear as profile "${profileName}" using API key authentication.\n`);
+    stdout.write(`Logged in to Linear as profile "${profileName}" using API key authentication.\n`);
     if (viewer.email !== undefined) {
-      process.stdout.write(`User: ${viewer.email}\n`);
+      stdout.write(`User: ${viewer.email}\n`);
     }
   }
 
@@ -839,8 +841,9 @@ async function handleLogin(options: AuthCommandOptions, extraPositionals: string
 }
 
 async function handleLogout(options: AuthCommandOptions, extraPositionals: string[]): Promise<number> {
+  const { stderr, stdout } = commandIO(options);
   if (extraPositionals.length > 0) {
-    process.stderr.write("Error: auth logout does not accept positional arguments.\n");
+    stderr.write("Error: auth logout does not accept positional arguments.\n");
     return ExitCode.ValidationError;
   }
 
@@ -878,14 +881,14 @@ async function handleLogout(options: AuthCommandOptions, extraPositionals: strin
 
   if (options.jsonEnvelope) {
     const envelope = successEnvelope(result, { sourceLayer: "curated", profile: profileName });
-    process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
+    stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
   } else if (options.json) {
-    process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+    stdout.write(`${JSON.stringify(result, null, 2)}\n`);
   } else {
-    process.stdout.write(`Logged out profile "${profileName}".\n`);
-    process.stdout.write(credentialsRemoved ? "Credentials removed.\n" : "No credentials were present.\n");
+    stdout.write(`Logged out profile "${profileName}".\n`);
+    stdout.write(credentialsRemoved ? "Credentials removed.\n" : "No credentials were present.\n");
     if (defaultProfileCleared) {
-      process.stdout.write("Default profile cleared.\n");
+      stdout.write("Default profile cleared.\n");
     }
   }
 
@@ -896,6 +899,7 @@ export async function handleAuthCommand(
   positionals: string[],
   options: AuthCommandOptions
 ): Promise<number> {
+  const { stderr, stdout } = commandIO(options);
   const [subcommand, profileName, ...extraPositionals] = positionals;
 
   if (subcommand === "whoami") {
@@ -912,7 +916,7 @@ export async function handleAuthCommand(
 
   if (subcommand === "status") {
     if (profileName !== undefined || extraPositionals.length > 0) {
-      process.stderr.write("Error: auth status does not accept positional arguments.\n");
+      stderr.write("Error: auth status does not accept positional arguments.\n");
       return ExitCode.ValidationError;
     }
 
@@ -924,11 +928,11 @@ export async function handleAuthCommand(
 
     if (options.jsonEnvelope) {
       const envelope = successEnvelope(status, { sourceLayer: "curated" });
-      process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
+      stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
     } else if (options.json) {
-      process.stdout.write(`${JSON.stringify(status, null, 2)}\n`);
+      stdout.write(`${JSON.stringify(status, null, 2)}\n`);
     } else {
-      printAuthStatus(status);
+      printAuthStatus(status, options);
     }
 
     return ExitCode.Success;
@@ -936,18 +940,18 @@ export async function handleAuthCommand(
 
   if (subcommand === "switch") {
     if (profileName === undefined || extraPositionals.length > 0) {
-      process.stderr.write("Error: usage: linearctl auth switch <profile>\n");
+      stderr.write("Error: usage: linearctl auth switch <profile>\n");
       return ExitCode.ValidationError;
     }
 
     if (!(await fileExists(options.credentialsFile))) {
-      process.stderr.write(`Error: Profile "${profileName}" does not exist.\n`);
+      stderr.write(`Error: Profile "${profileName}" does not exist.\n`);
       return ExitCode.ValidationError;
     }
 
     const credentials = await loadCredentialsFile(options.credentialsFile);
     if (!Object.hasOwn(credentials.profiles, profileName)) {
-      process.stderr.write(`Error: Profile "${profileName}" does not exist.\n`);
+      stderr.write(`Error: Profile "${profileName}" does not exist.\n`);
       return ExitCode.ValidationError;
     }
 
@@ -959,16 +963,16 @@ export async function handleAuthCommand(
 
     if (options.jsonEnvelope) {
       const envelope = successEnvelope(switchResult, { sourceLayer: "curated", profile: profileName });
-      process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
+      stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
     } else if (options.json) {
-      process.stdout.write(`${JSON.stringify(switchResult, null, 2)}\n`);
+      stdout.write(`${JSON.stringify(switchResult, null, 2)}\n`);
     } else {
-      process.stdout.write(`Default Linear profile set to "${profileName}".\n`);
+      stdout.write(`Default Linear profile set to "${profileName}".\n`);
     }
 
     return ExitCode.Success;
   }
 
-  process.stderr.write("Error: unsupported auth command. Try linearctl auth status or linearctl auth switch <profile>.\n");
+  stderr.write("Error: unsupported auth command. Try linearctl auth status or linearctl auth switch <profile>.\n");
   return ExitCode.ValidationError;
 }
