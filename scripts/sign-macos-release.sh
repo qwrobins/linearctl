@@ -19,10 +19,23 @@ if [[ ! "$APPLE_TEAM_ID" =~ ^[A-Z0-9]{10}$ ]] ||
 fi
 [[ -f "$binary" ]]
 
+# codesign's private-key lookup also uses the user search list, even when its
+# certificate lookup is restricted with --keychain. Preserve paths with spaces.
+keychain_list="$(security list-keychains -d user)"
+original_keychains=()
+while IFS= read -r path; do
+  [[ "$path" == *\"*\"* ]] || continue
+  path="${path#*\"}"
+  path="${path%\"*}"
+  original_keychains+=("$path")
+done <<< "$keychain_list"
+
 work_dir="$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/linearctl-sign.XXXXXX")"
 keychain="$work_dir/signing.keychain-db"
 cleanup() {
   local result=$? cleanup_result=0
+  # The conditional array expansion is compatible with nounset in macOS Bash 3.
+  security list-keychains -d user -s ${original_keychains[@]+"${original_keychains[@]}"} || cleanup_result=$?
   if [[ -f "$keychain" ]]; then
     security delete-keychain "$keychain" || cleanup_result=$?
   fi
@@ -43,13 +56,14 @@ printf '%s' "$MACOS_CERTIFICATE_BASE64" | base64 --decode > "$work_dir/certifica
 security create-keychain -p "$keychain_password" "$keychain"
 security set-keychain-settings -lut 21600 "$keychain"
 security unlock-keychain -p "$keychain_password" "$keychain"
+security list-keychains -d user -s "$keychain" ${original_keychains[@]+"${original_keychains[@]}"}
 security import "$work_dir/certificate.p12" -P "$MACOS_CERTIFICATE_PASSWORD" \
   -k "$keychain" -T /usr/bin/codesign
 security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$keychain_password" "$keychain"
 rm "$work_dir/certificate.p12"
 
-# Match the exact identity, then sign by fingerprint. Do not alter the user's
-# default keychain or search list; codesign uses this temporary keychain only.
+# Match the exact identity, then sign by fingerprint from this keychain only.
+# The default keychain is unchanged; the search list is restored on exit.
 identities="$(security find-identity -v -p codesigning "$keychain")"
 fingerprint="$(printf '%s\n' "$identities" | awk -F '"' -v identity="$MACOS_SIGN_IDENTITY" \
   '$2 == identity { split($1, fields, " "); print fields[2] }')"

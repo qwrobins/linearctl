@@ -32,6 +32,15 @@ printf '%s %s\\n' "$tool" "$*" >> "$MOCK_LOG"
 case "$tool" in
   security)
     case "$1" in
+      list-keychains)
+        if [[ "$#" -eq 3 ]]; then
+          if [[ "\${MOCK_EMPTY_SEARCH_LIST:-}" != true ]]; then
+            printf '    "%s"\\n' '/Users/runner/Library/Keychains/login.keychain-db' '/Users/runner/Library/Keychains/shared identity.keychain-db'
+          fi
+        else
+          : > "$MOCK_SEARCH_LIST"
+          for path in "\${@:5}"; do printf '%s\\n' "$path" >> "$MOCK_SEARCH_LIST"; done
+        fi ;;
       create-keychain) touch "\${!#}" ;;
       import) [[ "\${MOCK_FAIL:-}" != import ]] ;;
       find-identity) printf '  1) %s "%s"\\n' '${fingerprint}' "$MOCK_IDENTITY" ;;
@@ -40,7 +49,9 @@ case "$tool" in
   codesign)
     case "$*" in
       *--remove-signature*) [[ "\${MOCK_FAIL:-}" != remove ]] ;;
-      *--force*) [[ "\${MOCK_FAIL:-}" != sign ]] ;;
+      *--force*)
+        grep -q '/linearctl-sign\\.' "$MOCK_SEARCH_LIST"
+        [[ "\${MOCK_FAIL:-}" != sign ]] ;;
       *--check-notarization*) [[ "\${MOCK_FAIL:-}" != ticket ]] ;;
       *--verify*) [[ "\${MOCK_FAIL:-}" != verify ]] ;;
     esac ;;
@@ -61,6 +72,7 @@ esac
       RUNNER_TEMP: dir,
       GITHUB_ACTIONS: "false",
       MOCK_LOG: logPath,
+      MOCK_SEARCH_LIST: join(dir, "search-list"),
       MOCK_IDENTITY: identity,
       MOCK_NOTARY_RESPONSE: JSON.stringify({ id: "submission-id", status: "Accepted" }),
       MACOS_CERTIFICATE_BASE64: Buffer.from("test certificate").toString("base64"),
@@ -83,6 +95,8 @@ esac
   function expectCleanedUp() {
     expect(readdirSync(dir).filter((name) => name.startsWith("linearctl-sign."))).toEqual([]);
     expect(log()).toContain("security delete-keychain");
+    expect(readFileSync(join(dir, "search-list"), "utf8")).toBe(env.MOCK_EMPTY_SEARCH_LIST === "true" ? "" :
+      "/Users/runner/Library/Keychains/login.keychain-db\n/Users/runner/Library/Keychains/shared identity.keychain-db\n");
   }
 
   it("repairs, signs, verifies, notarizes and smoke-tests in order, then removes credentials", () => {
@@ -104,7 +118,14 @@ esac
     expect(commands).toContain(`--sign ${fingerprint} --keychain`);
     expect(commands).toContain("--options runtime --timestamp --entitlements");
     expect(commands).toContain('certificate leaf[subject.OU] = "ABCDEFGHIJ"');
-    expect(commands).not.toContain("security list-keychains");
+    expect(commands).toContain("security list-keychains -d user -s");
+    expectCleanedUp();
+  });
+
+  it("restores an originally empty keychain search list", () => {
+    env.MOCK_EMPTY_SEARCH_LIST = "true";
+    const result = run();
+    expect(result.status, result.stderr).toBe(0);
     expectCleanedUp();
   });
 
