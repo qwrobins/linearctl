@@ -77,11 +77,6 @@ main() {
 
   chmod +x "${INSTALL_DIR}/${BINARY_NAME}"
 
-  # Remove macOS quarantine attribute so Gatekeeper doesn't block unsigned binary
-  if [ "$os" = "darwin" ] && command -v xattr > /dev/null 2>&1; then
-    xattr -d com.apple.quarantine "${INSTALL_DIR}/${BINARY_NAME}" 2>/dev/null || true
-  fi
-
   echo "Installed ${BINARY_NAME} to ${INSTALL_DIR}/${BINARY_NAME}"
 
   if ! echo "$PATH" | tr ':' '\n' | grep -qx "$INSTALL_DIR"; then

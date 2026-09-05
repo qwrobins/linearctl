@@ -26,7 +26,7 @@ jobs:
             target: bun-linux-arm64
             binary: linearctl-linux-arm64
             artifact: linearctl-linux-arm64
-          - os: macos-latest
+          - os: macos-15-intel
             target: bun-darwin-x64
             binary: linearctl-darwin-x64
             artifact: linearctl-darwin-x64
@@ -55,8 +55,21 @@ jobs:
       - name: Build binary
         run: bun build src/cli/main.ts --compile --target=${{ matrix.target }} --outfile=dist/${{ matrix.binary }}
 
+      - name: Sign, notarize, and verify macOS binary
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          BINARY_NAME: ${{ matrix.binary }}
+          MACOS_CERTIFICATE_BASE64: ${{ secrets.MACOS_CERTIFICATE_BASE64 }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          MACOS_SIGN_IDENTITY: ${{ secrets.MACOS_SIGN_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: bash scripts/sign-macos-release.sh "./dist/$BINARY_NAME"
+
       - name: Smoke test binary
-        if: matrix.target == 'bun-linux-x64' || matrix.target == 'bun-darwin-arm64'
+        if: matrix.target == 'bun-linux-x64'
         env:
           BINARY_NAME: ${{ matrix.binary }}
         run: ./dist/"$BINARY_NAME" --help
@@ -98,9 +111,37 @@ jobs:
         with:
           name: ${{ matrix.artifact }}
           path: dist/${{ matrix.artifact }}
+          if-no-files-found: error
+
+  verify-macos:
+    # Fresh machines: no signing keychain or notarization cache from the build.
+    needs: build
+    strategy:
+      matrix:
+        include:
+          - os: macos-15-intel
+            artifact: linearctl-darwin-x64
+          - os: macos-latest
+            artifact: linearctl-darwin-arm64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: dist
+
+      - name: Verify quarantined macOS release on a clean runner
+        shell: bash
+        env:
+          BINARY_NAME: ${{ matrix.artifact }}
+        run: bash scripts/verify-macos-release.sh "./dist/$BINARY_NAME"
 
   release:
-    needs: build
+    needs: [build, verify-macos]
     runs-on: ubuntu-latest
 
     steps:
