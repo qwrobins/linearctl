@@ -1,8 +1,8 @@
 import type { PageInfo } from "../output/envelope.js";
 import type { ProfileCredentials } from "../auth/credentials.js";
 import type { FetchLike } from "../transport/graphql.js";
-import { GraphQLTransportError } from "../transport/graphql.js";
-import { executeGraphQLWithRetry, type RetryOptions } from "../transport/retry.js";
+import type { RetryOptions } from "../transport/retry.js";
+import { fetchPaginationPage } from "./page.js";
 import { buildPaginationVariables } from "./pagination.js";
 import type { PaginationOptions } from "./pagination.js";
 
@@ -49,35 +49,20 @@ export async function streamPaginateGraphQL<TNode>(
       ...(cursor === undefined ? {} : { after: cursor })
     };
 
-    const response = await executeGraphQLWithRetry<unknown>({
+    const connection = await fetchPaginationPage({
       query,
       variables,
       credentials,
+      extractConnection,
       ...(apiUrl === undefined ? {} : { apiUrl }),
       ...(fetchImpl === undefined ? {} : { fetchImpl }),
       ...(input.retry === undefined ? {} : { retry: input.retry }),
       ...(input.sleepImpl === undefined ? {} : { sleepImpl: input.sleepImpl })
-    });
-
-    if (Array.isArray(response.body.errors) && response.body.errors.length > 0) {
-      throw new GraphQLTransportError(
-        response.body.errors[0]?.message ?? "Linear GraphQL request failed",
-        "graphql",
-        undefined,
-        response.body.errors,
-        {
-          totalItems,
-          endCursor: lastPageInfo.endCursor ?? null,
-          pageInfo: lastPageInfo
-        }
-      );
-    }
-
-    if (response.body.data === undefined) {
-      throw new Error("Linear GraphQL response was missing data");
-    }
-
-    const connection = extractConnection(response.body.data);
+    }, () => ({
+      totalItems,
+      endCursor: lastPageInfo.endCursor ?? options.after ?? null,
+      pageInfo: lastPageInfo
+    }));
     const previousTotal = totalItems;
 
     for (const node of connection.nodes) {

@@ -1,5 +1,8 @@
 import { commandIO, type CommandOptions } from "../core/runtime/options.js";
-import { readFile, writeFile } from "node:fs/promises";
+import { open } from "node:fs/promises";
+import type { FileHandle } from "node:fs/promises";
+import { downloadFile, uploadFile as streamUploadFile } from "../core/io/file-transfer.js";
+import type { TransferOptions } from "../core/io/file-transfer.js";
 import { basename, resolve } from "node:path";
 import { ExitCode } from "../core/errors/exit-codes.js";
 import { emitValidationError } from "../core/output/validation-error.js";
@@ -7,12 +10,16 @@ import { authorizationHeader } from "../core/transport/graphql.js";
 import type { FetchLike } from "../core/transport/graphql.js";
 import { emitDryRunResult } from "../core/output/dry-run.js";
 import { createCommandContext } from "../core/runtime/command-context.js";
+import { runTwoStepWorkflow, WorkflowStepError } from "../core/runtime/workflow.js";
 
 export interface FileCommandOptions extends CommandOptions {
   dryRun?: boolean;
   issue?: string;
   output?: string;
   expiresIn?: string;
+  transferTimeout?: string;
+  /** Optional cancellation for embedded callers, in addition to SIGINT/SIGTERM. */
+  signal?: AbortSignal;
 }
 
 const CONTENT_TYPE_MAP: Record<string, string> = {
@@ -47,97 +54,6 @@ function contentTypeFromExtension(filename: string): string {
   }
   const ext = filename.slice(dotIndex).toLowerCase();
   return CONTENT_TYPE_MAP[ext] ?? "application/octet-stream";
-}
-
-function isRedirectStatus(status: number): boolean {
-  return status === 301 || status === 302 || status === 303 || status === 307 || status === 308;
-}
-
-function resolveRedirectUrl(currentUrl: string, location: string | null): string | undefined {
-  if (location === null || location.trim() === "") {
-    return undefined;
-  }
-
-  try {
-    return new URL(location, currentUrl).toString();
-  } catch {
-    return undefined;
-  }
-}
-
-const MAX_FILE_REDIRECTS = 5;
-const CROSS_HOST_HEADER_ALLOWLIST = new Set([
-  "accept",
-  "accept-language",
-  "content-language",
-  "content-type"
-]);
-
-async function fetchWithHostValidatedRedirects(
-  fetchImpl: FetchLike,
-  url: string,
-  init: RequestInit
-): Promise<Response> {
-  let currentUrl = url;
-  const originalUrl = new URL(url);
-  if (originalUrl.protocol !== "https:") {
-    throw new Error("File request URL must use HTTPS.");
-  }
-  const originalHost = originalUrl.host;
-  let currentInit: RequestInit = init;
-
-  for (let redirectCount = 0; redirectCount <= MAX_FILE_REDIRECTS; redirectCount++) {
-    const response = await fetchImpl(currentUrl, {
-      ...currentInit,
-      redirect: "manual"
-    });
-
-    if (!isRedirectStatus(response.status)) {
-      return response;
-    }
-
-    if (redirectCount === MAX_FILE_REDIRECTS) {
-      throw new Error("File request exceeded the redirect limit.");
-    }
-
-    const nextUrl = resolveRedirectUrl(currentUrl, response.headers.get("location"));
-    if (nextUrl === undefined) {
-      throw new Error(`File request redirected without a valid Location header.`);
-    }
-
-    const parsedNextUrl = new URL(nextUrl);
-    if (parsedNextUrl.protocol !== "https:") {
-      // Credentials or uploaded content may accompany this request — never
-      // allow a redirect to downgrade to plaintext HTTP.
-      throw new Error(`File request redirected to non-HTTPS protocol: ${parsedNextUrl.protocol}`);
-    }
-
-    if (parsedNextUrl.host !== originalHost) {
-      const safeHeaders = safeCrossHostHeaders(currentInit.headers);
-      const { headers: _headers, ...rest } = currentInit;
-      currentInit = safeHeaders === undefined ? rest : { ...rest, headers: safeHeaders };
-    }
-
-    currentUrl = nextUrl;
-  }
-
-  throw new Error("File request exceeded the redirect limit.");
-}
-
-function safeCrossHostHeaders(headers: HeadersInit | undefined): Record<string, string> | undefined {
-  if (headers === undefined) {
-    return undefined;
-  }
-
-  const entries = new Headers(headers).entries();
-  const safe: Record<string, string> = {};
-  for (const [key, value] of entries) {
-    if (CROSS_HOST_HEADER_ALLOWLIST.has(key.toLowerCase())) {
-      safe[key] = value;
-    }
-  }
-
-  return Object.keys(safe).length === 0 ? undefined : safe;
 }
 
 const FILE_UPLOAD_MUTATION = `
@@ -209,7 +125,8 @@ interface AttachmentUrlResponse {
 
 async function handleFileUpload(
   filePath: string,
-  options: FileCommandOptions
+  options: FileCommandOptions,
+  transferOptions: TransferOptions
 ): Promise<number> {
   const { stdout } = commandIO(options);
   const resolvedPath = resolve(filePath);
@@ -224,94 +141,99 @@ async function handleFileUpload(
     return emitDryRunResult("upload", "file", input, options);
   }
 
-  let fileBytes: Buffer;
+  let file: FileHandle | undefined;
+  let size: number;
   try {
-    fileBytes = await readFile(resolvedPath);
+    file = await open(resolvedPath, "r");
+    const metadata = await file.stat();
+    if (!metadata.isFile()) throw new Error("not a regular file");
+    size = metadata.size;
   } catch {
-    return emitValidationError(`cannot read file: ${resolvedPath}`, options);
+    await file?.close();
+    return emitValidationError(`cannot read regular file: ${resolvedPath}`, options);
   }
-
-  const size = fileBytes.length;
 
   const ctx = createCommandContext(options);
 
   try {
     const fetchImpl = options.fetchImpl ?? fetch;
 
-    const uploadResponse = await ctx.graphql<FileUploadResponse>(
-      FILE_UPLOAD_MUTATION,
-      { contentType, filename: fileName, size }
-    );
+    const upload = {
+      name: "upload file",
+      execute: async () => {
+        const uploadResponse = await ctx.graphql<FileUploadResponse>(
+          FILE_UPLOAD_MUTATION,
+          { contentType, filename: fileName, size }
+        );
 
-    const uploadPayload = uploadResponse.body.data?.fileUpload;
-    const uploadFile = uploadPayload?.uploadFile;
-    if (
-      ctx.hasErrors(uploadResponse.body.errors) ||
-      uploadPayload == null ||
-      uploadPayload.success !== true ||
-      uploadFile == null ||
-      typeof uploadFile.uploadUrl !== "string" ||
-      typeof uploadFile.assetUrl !== "string" ||
-      !Array.isArray(uploadFile.headers)
-    ) {
-      const errors = ctx.mapGraphQLErrors(uploadResponse.body.errors);
-      return ctx.emitFailure(
-        errors.length > 0 ? errors : [{ category: "general", message: "File upload request failed" }]
-      );
-    }
+        const uploadPayload = uploadResponse.body.data?.fileUpload;
+        const uploadFile = uploadPayload?.uploadFile;
+        if (
+          ctx.hasErrors(uploadResponse.body.errors) ||
+          uploadPayload == null ||
+          uploadPayload.success !== true ||
+          uploadFile == null ||
+          typeof uploadFile.uploadUrl !== "string" ||
+          typeof uploadFile.assetUrl !== "string" ||
+          !Array.isArray(uploadFile.headers)
+        ) {
+          const errors = ctx.mapGraphQLErrors(uploadResponse.body.errors);
+          throw new WorkflowStepError(
+            errors.length > 0 ? errors : [{ category: "general", message: "File upload request failed" }]
+          );
+        }
 
-    const { uploadUrl, assetUrl, headers } = uploadFile;
+        const { uploadUrl, assetUrl, headers } = uploadFile;
 
-    const putHeaders: Record<string, string> = {};
-    for (const header of headers) {
-      putHeaders[header.key] = header.value;
-    }
-    if (!Object.keys(putHeaders).some((key) => key.toLowerCase() === "content-type")) {
-      putHeaders["Content-Type"] = contentType;
-    }
+        const putHeaders: Record<string, string> = {};
+        for (const header of headers) {
+          putHeaders[header.key] = header.value;
+        }
+        if (!Object.keys(putHeaders).some((key) => key.toLowerCase() === "content-type")) {
+          putHeaders["Content-Type"] = contentType;
+        }
 
-    const putResponse = await fetchWithHostValidatedRedirects(fetchImpl, uploadUrl, {
-      method: "PUT",
-      headers: putHeaders,
-      body: fileBytes as unknown as BodyInit
-    });
+        await streamUploadFile(fetchImpl, uploadUrl, putHeaders, file, size, transferOptions);
 
-    if (!putResponse.ok) {
-      return ctx.emitFailure([{ category: "general", message: `File PUT failed with HTTP ${putResponse.status}` }]);
-    }
-
-    const result: Record<string, unknown> = {
-      assetUrl,
-      contentType,
-      fileName,
-      size
+        return { assetUrl, contentType, fileName, size };
+      },
     };
 
+    let result: Record<string, unknown>;
     if (options.issue !== undefined) {
-      const attachResponse = await ctx.graphql<AttachmentCreateResponse>(
-        ATTACHMENT_CREATE_MUTATION,
-        {
-          input: {
-            issueId: options.issue,
-            url: assetUrl,
-            title: fileName
+      const workflow = await runTwoStepWorkflow(upload, (uploaded) => ({
+        name: "create attachment",
+        execute: async () => {
+          const response = await ctx.graphql<AttachmentCreateResponse>(
+            ATTACHMENT_CREATE_MUTATION,
+            { input: { issueId: options.issue, url: uploaded.assetUrl, title: uploaded.fileName } }
+          );
+          const payload = response.body.data?.attachmentCreate;
+          if (ctx.hasErrors(response.body.errors) || payload?.success !== true || payload.attachment == null) {
+            const errors = ctx.mapGraphQLErrors(response.body.errors);
+            throw new WorkflowStepError(
+              errors.length > 0 ? errors : [{ category: "general", message: "Attachment creation failed" }]
+            );
           }
-        }
-      );
+          const { id, title, url } = payload.attachment;
+          return { id, title, url };
+        },
+      }), "create attachment");
 
-      if (
-        ctx.hasErrors(attachResponse.body.errors) ||
-        attachResponse.body.data?.attachmentCreate?.attachment == null
-      ) {
-        const errors = ctx.mapGraphQLErrors(attachResponse.body.errors);
-        return ctx.emitFailure(
-          errors.length > 0 ? errors : [{ category: "general", message: "Attachment creation failed" }]
-        );
+      if (!workflow.ok) {
+        return ctx.emitWorkflowFailure(workflow, {
+          ...workflow.completed.first,
+          attachment: null,
+          issue: { id: options.issue },
+        }, "Reuse assetUrl with `linearctl attachment create --issue <issue> --url <assetUrl> --title <fileName>`; do not upload again. If the response was lost, check existing attachments before retrying.");
       }
-
-      const att = attachResponse.body.data.attachmentCreate.attachment;
-      result.attachment = { id: att.id, title: att.title, url: att.url };
-      result.issue = { id: options.issue };
+      result = {
+        ...workflow.completed.first!,
+        attachment: workflow.completed.second!,
+        issue: { id: options.issue },
+      };
+    } else {
+      result = await upload.execute();
     }
 
     if (options.json || options.jsonEnvelope) {
@@ -319,7 +241,7 @@ async function handleFileUpload(
     }
 
     stdout.write(`Uploaded ${fileName} (${size} bytes)\n`);
-    stdout.write(`  Asset URL: ${assetUrl}\n`);
+    stdout.write(`  Asset URL: ${result.assetUrl}\n`);
     if (result.attachment !== undefined) {
       const att = result.attachment as { id: string; title: string; url: string };
       stdout.write(`  Attachment: ${att.id}\n`);
@@ -327,7 +249,12 @@ async function handleFileUpload(
 
     return ExitCode.Success;
   } catch (error) {
+    if (error instanceof WorkflowStepError) {
+      return ctx.emitFailure(error.errors, error.exitCode);
+    }
     return ctx.emitCaughtError(error);
+  } finally {
+    await file.close();
   }
 }
 
@@ -388,7 +315,8 @@ async function handleFileUrl(
 
 async function handleFileDownload(
   downloadUrl: string,
-  options: FileCommandOptions
+  options: FileCommandOptions,
+  transferOptions: TransferOptions
 ): Promise<number> {
   const { stdout } = commandIO(options);
   try {
@@ -409,33 +337,20 @@ async function handleFileDownload(
     const profile = await ctx.resolveProfile();
     const fetchImpl = options.fetchImpl ?? fetch;
 
-    const response = await fetchWithHostValidatedRedirects(fetchImpl, downloadUrl, {
-      method: "GET",
-      headers: {
-        authorization: authorizationHeader(profile.credentials)
-      }
-    });
-
-    if (!response.ok) {
-      return ctx.emitFailure([{ category: "general", message: `Download failed with HTTP ${response.status}` }]);
-    }
-
-    const arrayBuffer = await response.arrayBuffer();
-    const bytes = Buffer.from(arrayBuffer);
-
     const urlPath = new URL(downloadUrl).pathname;
     const derivedName = basename(urlPath) || "download";
     const outputPath = resolve(options.output ?? derivedName);
+    const size = await downloadFile(fetchImpl, downloadUrl, {
+      authorization: authorizationHeader(profile.credentials)
+    }, outputPath, transferOptions);
 
-    await writeFile(outputPath, bytes);
-
-    const result = { path: outputPath, size: bytes.length };
+    const result = { path: outputPath, size };
 
     if (options.json || options.jsonEnvelope) {
       return ctx.emitSuccess(result);
     }
 
-    stdout.write(`Downloaded ${outputPath} (${bytes.length} bytes)\n`);
+    stdout.write(`Downloaded ${outputPath} (${size} bytes)\n`);
     return ExitCode.Success;
   } catch (error) {
     return ctx.emitCaughtError(error);
@@ -447,6 +362,19 @@ export async function handleFileCommand(
   options: FileCommandOptions
 ): Promise<number> {
   const [subcommand, ...rest] = positionals;
+  const transferOptions: TransferOptions = {
+    ...(options.signal === undefined ? {} : { signal: options.signal })
+  };
+  if (options.transferTimeout !== undefined) {
+    if (subcommand !== "upload" && subcommand !== "download") {
+      return emitValidationError("--transfer-timeout only applies to file upload/download.", options);
+    }
+    const seconds = Number(options.transferTimeout);
+    if (!Number.isInteger(seconds) || seconds < 1 || seconds > 2_147_483) {
+      return emitValidationError("--transfer-timeout must be an integer between 1 and 2147483 seconds.", options);
+    }
+    transferOptions.timeoutMs = seconds * 1000;
+  }
 
   if (subcommand === "upload") {
     const filePath = rest[0];
@@ -456,7 +384,7 @@ export async function handleFileCommand(
     if (rest.length > 1) {
       return emitValidationError("file upload accepts exactly one path.", options);
     }
-    return handleFileUpload(filePath, options);
+    return handleFileUpload(filePath, options, transferOptions);
   }
 
   if (subcommand === "url") {
@@ -478,7 +406,7 @@ export async function handleFileCommand(
     if (rest.length > 1) {
       return emitValidationError("file download accepts exactly one URL.", options);
     }
-    return handleFileDownload(downloadUrl, options);
+    return handleFileDownload(downloadUrl, options, transferOptions);
   }
 
   return emitValidationError("unknown file subcommand. Use: upload, url, download", options);

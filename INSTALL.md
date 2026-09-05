@@ -12,6 +12,12 @@ curl -fsSL https://raw.githubusercontent.com/qwrobins/linearctl/main/install.sh 
 
 This detects your OS and architecture and installs to `~/.local/bin/linearctl`. On Debian/Ubuntu it uses a `.deb` package automatically.
 
+macOS releases are Developer ID signed and notarized. First launch needs Internet
+access so Gatekeeper can retrieve Apple's ticket; standalone binaries cannot be
+stapled for offline first launch. The installer does not remove quarantine. See
+[macOS signing](docs/macos-signing.md) for details and the separate repair path
+for locally built binaries.
+
 If `~/.local/bin` is not in your PATH, add it:
 
 ```bash

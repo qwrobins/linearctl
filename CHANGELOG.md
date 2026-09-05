@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+## [0.8.12] - 2026-09-05
+
+### Fixed
+
+- Make the temporary macOS signing keychain discoverable to codesign's private-key lookup, restoring the original keychain search list on every exit path. The v0.8.11 release was blocked before publication by this lookup failure.
+
+## [0.8.11] - 2026-09-05
+
+### Changed
+
+- Require Developer ID signing and Apple notarization for both macOS release binaries, with fresh native-runner verification before publication. First launch requires online ticket retrieval; standalone binaries cannot carry stapled tickets.
+- Share the pinned, verified build pipeline between CI and releases, and gate publication on validation of the exact tagged commit.
+
+### Fixed
+
+- Preserve completed upload/project resources, structured errors, and meaningful exit codes when composite workflows fail; report skipped steps and provide recovery guidance in human and both JSON modes.
+- Verify staged Unix installer downloads before atomically replacing an existing installation, and preserve macOS quarantine instead of bypassing Gatekeeper.
+- Stream file transfers with cancellation and atomic downloads.
+- Preserve partial pagination results and resume context when transport requests fail.
+- Honor JSON envelopes in remaining top-level CLI error paths.
+
 ## [0.8.10] - 2026-09-02
 
 ### Added

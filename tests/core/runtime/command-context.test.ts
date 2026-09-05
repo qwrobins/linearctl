@@ -8,6 +8,7 @@ import { ExitCode } from "../../../src/core/errors/exit-codes.js";
 import { writeLinearConfigFile } from "../../../src/core/config/config-file.js";
 import { loadCredentialsFile, writeCredentialsFile } from "../../../src/core/auth/credentials.js";
 import { captureCommandOutput } from "../../helpers/output.js";
+import { runTwoStepWorkflow } from "../../../src/core/runtime/workflow.js";
 
 function makeFetch(body: object, status = 200): FetchLike {
   return async () => new Response(JSON.stringify(body), { status });
@@ -95,6 +96,28 @@ describe("CommandContext", () => {
     } else {
       expect(output.stderr.join("")).toContain("Project not found");
       expect(output.stdout).toEqual([]);
+    }
+  });
+
+  it.each(["human", "json", "envelope"])("emits recoverable workflow failures to supplied streams (%s)", async (mode) => {
+    const output = captureCommandOutput();
+    const ctx = createCommandContext({ ...options(), ...output.io, json: mode === "json", jsonEnvelope: mode === "envelope" });
+    const workflow = await runTwoStepWorkflow(
+      { name: "create", execute: async () => ({ id: "created-1" }) },
+      () => ({ name: "attach", execute: async () => { throw new Error("Attachment failed"); } })
+    );
+    expect(ctx.emitWorkflowFailure(workflow, { resource: workflow.completed.first }, "Reuse the created resource")).toBe(ExitCode.GeneralError);
+    if (mode === "human") {
+      expect(output.stdout).toEqual([]);
+      expect(output.stderr.join("")).toContain("Attachment failed");
+      expect(output.stderr.join("")).toContain("created-1");
+      expect(output.stderr.join("")).toContain("Reuse the created resource");
+    } else {
+      expect(output.stderr).toEqual([]);
+      expect(JSON.parse(output.stdout.join(""))).toMatchObject({
+        ok: false, meta: { partial: true },
+        errors: [{ details: { resource: { id: "created-1" }, recovery: "Reuse the created resource" } }],
+      });
     }
   });
 

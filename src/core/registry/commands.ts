@@ -334,12 +334,12 @@ export const COMMAND_REGISTRY: readonly CommandRegistration[] = [
       ...OPTION_GROUPS.global,
       ...OPTION_GROUPS.dryRun,
       ...OPTION_GROUPS.retry,
-      "issue", "output", "expires-in",
+      "issue", "output", "expires-in", "transfer-timeout",
     ],
     subcommands: {
-      upload:   { usage: "linearctl file upload <path> [--issue <id>] [--json]" },
+      upload:   { usage: "linearctl file upload <path> [--issue <id>] [--transfer-timeout <seconds>] [--json]" },
       url:      { usage: "linearctl file url <attachment-id> [--expires-in <seconds>] [--json]" },
-      download: { usage: "linearctl file download <url> [--output <path>] [--json]" },
+      download: { usage: "linearctl file download <url> [--output <path>] [--transfer-timeout <seconds>] [--json]" },
     },
     handler: handleFileCommand,
     buildOptions: (args, env) => ({
@@ -347,7 +347,7 @@ export const COMMAND_REGISTRY: readonly CommandRegistration[] = [
       dryRun: args.dryRun,
       noRetry: args.noRetry,
       ...pickFields(args, "maxRetries"),
-      ...pickFields(args, "issue", "output", "expiresIn"),
+      ...pickFields(args, "issue", "output", "expiresIn", "transferTimeout"),
     }),
   },
 

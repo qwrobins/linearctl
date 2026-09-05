@@ -8,6 +8,7 @@ import { describe, expect, it, vi } from "vitest";
 import { main } from "../../src/cli/main.js";
 import { writeCredentialsFile } from "../../src/core/auth/credentials.js";
 import { COMMAND_REGISTRY } from "../../src/core/registry/commands.js";
+import { ProfileResolutionError } from "../../src/core/auth/profile-resolution.js";
 
 const CLI_PATH = "src/cli/main.ts";
 const execFileAsync = promisify(execFile);
@@ -51,7 +52,156 @@ async function runMainWithThrowingFetch(args: string[]) {
   return { code, stdout, stderr, fetchImpl };
 }
 
+describe("CLI failure output contract", () => {
+  const validationCases = [
+    { name: "unknown command", args: ["bogus", "--profile", "personal"], message: "unknown command 'bogus'. Run 'linearctl --help' for available commands." },
+    { name: "missing command", args: ["--profile", "personal"], message: "No command provided. Run 'linearctl --help' for available commands." },
+    { name: "conflicting team flags", args: ["issue", "list", "--team", "TEST", "--all-teams", "--profile", "personal"], message: "--team cannot be used with --all-teams" },
+    { name: "metadata without JSON", args: ["--metadata", "curated"], message: "--metadata curated requires --json" }
+  ];
+
+  it.each(validationCases)("preserves human output for $name", async ({ args, message }) => {
+    const result = await runMainWithThrowingFetch(args);
+    expect(result.code).toBe(5);
+    expect(result.stdout).toBe("");
+    expect(result.stderr).toBe(`Error: ${message}\n`);
+    expect(result.fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["bogus"],
+    ["issue", "list", "--team", "TEST", "--all-teams"]
+  ])("does not treat positional envelope tokens as flags (%s)", async (...args) => {
+    const result = await runMainWithThrowingFetch([...args, "--", "--json-envelope"]);
+    expect(result.code).toBe(5);
+    expect(result.stdout).toBe("");
+    expect(result.stderr).toMatch(/^Error: /);
+    expect(result.fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it("preserves human output for an unknown generated resource without an operation", async () => {
+    const result = await runMainWithThrowingFetch(["api", "bogus"]);
+    expect(result.code).toBe(5);
+    expect(result.stdout).toBe("");
+    expect(result.stderr).toBe("Error: unknown resource 'bogus'. Use 'linearctl api --help' to list resources.\n");
+    expect(result.fetchImpl).not.toHaveBeenCalled();
+  });
+
+  describe.each(["leading", "trailing"])("%s envelope flag", (placement) => {
+    it.each(validationCases)("envelopes $name", async ({ args, message }) => {
+      const argv = placement === "leading" ? ["--json-envelope", ...args] : [...args, "--json-envelope"];
+      const result = await runMainWithThrowingFetch(argv);
+      expect(result.code).toBe(5);
+      expect(result.stderr).toBe("");
+      expect(JSON.parse(result.stdout)).toEqual({
+        ok: false,
+        data: null,
+        pageInfo: null,
+        errors: [{ category: "validation", message }],
+        meta: { sourceLayer: "curated" }
+      });
+      expect(result.fetchImpl).not.toHaveBeenCalled();
+    });
+  });
+
+  describe.each([
+    { command: "issue", sourceLayer: "curated" },
+    { command: "api", sourceLayer: "generated" },
+    { command: "gql", sourceLayer: "raw-graphql" }
+  ])("$sourceLayer failures", ({ command, sourceLayer }) => {
+    it.each([
+      { name: "parse", args: ["--no-such-flag"] },
+      { name: "top-level validation", args: ["--metadata", "curated"] },
+      { name: "handler validation", args: ["bogus"] }
+    ])("preserves the source layer for $name errors", async ({ args }) => {
+      const result = await runMainWithThrowingFetch(["--profile", "api", command, ...args, "--json-envelope"]);
+      expect(result.code).toBe(5);
+      expect(result.stderr).toBe("");
+      expect(JSON.parse(result.stdout)).toEqual({
+        ok: false,
+        data: null,
+        pageInfo: null,
+        errors: [expect.objectContaining({ category: "validation", message: expect.any(String) })],
+        meta: expect.objectContaining({ sourceLayer })
+      });
+      expect(result.fetchImpl).not.toHaveBeenCalled();
+    });
+
+    describe.each([false, true])("envelope mode: %s", (jsonEnvelope) => {
+      it.each(["buildOptions", "handler"] as const)("handles unexpected %s failures", async (method) => {
+        const registration = COMMAND_REGISTRY.find((entry) => entry.name === command)!;
+        const spy = vi.spyOn(registration, method);
+        if (method === "handler") {
+          spy.mockRejectedValue(new Error("unexpected dispatch failure"));
+        } else {
+          spy.mockImplementation(() => { throw new Error("unexpected dispatch failure"); });
+        }
+        try {
+          const result = await runMainWithThrowingFetch([command, ...(jsonEnvelope ? ["--json-envelope"] : [])]);
+          expect(result.code).toBe(1);
+          if (jsonEnvelope) {
+            expect(result.stderr).toBe("");
+            expect(JSON.parse(result.stdout)).toEqual({
+              ok: false,
+              data: null,
+              pageInfo: null,
+              errors: [{ category: "general", message: "unexpected dispatch failure" }],
+              meta: { sourceLayer }
+            });
+          } else {
+            expect(result.stdout).toBe("");
+            expect(result.stderr).toBe("Error: unexpected dispatch failure\n");
+          }
+          expect(result.fetchImpl).not.toHaveBeenCalled();
+        } finally {
+          spy.mockRestore();
+        }
+      });
+    });
+
+    it("preserves mapped dispatch error categories and exit codes", async () => {
+      const registration = COMMAND_REGISTRY.find((entry) => entry.name === command)!;
+      const spy = vi.spyOn(registration, "handler").mockRejectedValue(
+        new ProfileResolutionError("profile-not-resolved", "No profile")
+      );
+      try {
+        const result = await runMainWithThrowingFetch([command, "--json-envelope"]);
+        expect(result.code).toBe(2);
+        expect(result.stderr).toBe("");
+        expect(JSON.parse(result.stdout)).toEqual({
+          ok: false,
+          data: null,
+          pageInfo: null,
+          errors: [{ category: "authentication", message: "No profile", code: "profile-not-resolved" }],
+          meta: { sourceLayer }
+        });
+        expect(result.fetchImpl).not.toHaveBeenCalled();
+      } finally {
+        spy.mockRestore();
+      }
+    });
+  });
+});
+
 describe("CLI scaffold", () => {
+  it("documents and parses file transfer timeout flags", async () => {
+    const { stdout } = await runCli(["file", "--help"]);
+    expect(stdout).toContain("--transfer-timeout <seconds>");
+    const result = await runMainWithThrowingFetch([
+      "file", "upload", "missing-file", "--transfer-timeout", "300", "--dry-run", "--json"
+    ]);
+    expect(result.code).toBe(0);
+    expect(result.fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it.each(["0", "-1", "1.5", "NaN", "Infinity", "2147484"])("validates transfer timeout %s before I/O", async (timeout) => {
+    const result = await runMainWithThrowingFetch([
+      "file", "download", "https://uploads.linear.app/file", `--transfer-timeout=${timeout}`, "--json-envelope"
+    ]);
+    expect(result.code).toBe(5);
+    expect(JSON.parse(result.stdout).errors[0].message).toContain("--transfer-timeout must be an integer");
+  });
+
   it("prints top-level agent-facing help", async () => {
     const { stdout: output } = await runCli(["--help"]);
 

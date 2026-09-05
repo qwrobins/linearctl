@@ -991,7 +991,7 @@
   },
   {
     "commandPath": "linearctl file upload",
-    "usage": "linearctl file upload <path> [--issue <id>] [--json]",
+    "usage": "linearctl file upload <path> [--issue <id>] [--transfer-timeout <seconds>] [--json]",
     "layer": "curated",
     "resource": "file",
     "operation": "upload",
@@ -1025,7 +1025,7 @@
   },
   {
     "commandPath": "linearctl file download",
-    "usage": "linearctl file download <url> [--output <path>] [--json]",
+    "usage": "linearctl file download <url> [--output <path>] [--transfer-timeout <seconds>] [--json]",
     "layer": "curated",
     "resource": "file",
     "operation": "download",

@@ -15,7 +15,7 @@ curl -fsSL https://raw.githubusercontent.com/qwrobins/linearctl/main/install.sh 
 Or install a specific version:
 
 ```bash
-LINEAR_VERSION=v0.8.10 curl -fsSL https://raw.githubusercontent.com/qwrobins/linearctl/main/install.sh | sh
+LINEAR_VERSION=v0.8.12 curl -fsSL https://raw.githubusercontent.com/qwrobins/linearctl/main/install.sh | sh
 ```
 
 On Debian/Ubuntu, the installer automatically uses the `.deb` package. To skip deb and install the raw binary instead:
@@ -23,6 +23,11 @@ On Debian/Ubuntu, the installer automatically uses the `.deb` package. To skip d
 ```bash
 LINEAR_NO_DEB=1 curl -fsSL https://raw.githubusercontent.com/qwrobins/linearctl/main/install.sh | sh
 ```
+
+macOS releases use Developer ID signing and notarization. First launch requires
+Internet access for Gatekeeper's ticket lookup; the standalone binaries cannot
+carry stapled tickets. See [macOS signing](docs/macos-signing.md) for the release
+policy and required maintainer secrets.
 
 ### Windows
 
@@ -46,7 +51,10 @@ cp dist/linearctl ~/.local/bin/linearctl
 
 On Windows, `bun run build:binary` produces `dist\linearctl.exe`; copy it to a directory on your user `PATH`.
 
-The compiled binary has no runtime dependencies. Building from source requires [Bun](https://bun.sh).
+The compiled binary has no runtime dependencies. Building from source requires the [Bun](https://bun.sh) version pinned in `.bun-version`. See [build and release validation](docs/releasing.md) for toolchain updates, generated-artifact checks, and release gates.
+Local macOS builds are not Developer ID signed or notarized. If Bun leaves an
+invalid signature (verification fails or execution exits 137), follow the
+[local signature verification and repair steps](docs/macos-signing.md#local-builds-and-signature-repair).
 
 ## Quick start
 

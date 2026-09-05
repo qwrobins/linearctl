@@ -11,7 +11,8 @@ import type { ResolvedProfile } from "../auth/profile-resolution.js";
 import { type ExecutedGraphQLResponse, type GraphQLErrorPayload } from "../transport/graphql.js";
 import { executeGraphQLWithRetry, normalizeRetryOptions, type RetryOptions } from "../transport/retry.js";
 import { failureEnvelope, successEnvelope, formatCommandErrorHuman, type CommandSourceLayer, type PageInfo, type CommandError } from "../output/envelope.js";
-import { mapCommandFailure, mapGraphQLErrorPayload } from "../errors/command-failure.js";
+import { exitCodeForErrors, mapCommandFailure, mapGraphQLErrorPayload } from "../errors/command-failure.js";
+import type { WorkflowResult } from "./workflow.js";
 import { ExitCode } from "../errors/exit-codes.js";
 import type { ResolverOptions } from "../resolution/resolve.js";
 import { commandIO, type CommandOptions, type OutputStream } from "./options.js";
@@ -116,6 +117,40 @@ export class CommandContext {
     return resolvedExitCode;
   }
 
+  /** Emit recoverable workflow failures in both JSON modes and human output. */
+  emitWorkflowFailure<T extends Record<string, unknown>>(
+    workflow: WorkflowResult<T>,
+    resources: Record<string, unknown>,
+    recovery: string
+  ): number {
+    const errors = workflow.errors.map((error) => ({
+      ...error,
+      details: {
+        ...(error.details === undefined ? {} : { cause: error.details }),
+        ...resources,
+        workflow,
+        ...(workflow.partialSuccess ? { recovery } : {}),
+      },
+    }));
+    if (this.options.json || this.options.jsonEnvelope) {
+      const profile = this._profile?.name ?? this.options.profile;
+      const envelope = failureEnvelope(errors, {
+        sourceLayer: this.layer,
+        ...(profile === undefined ? {} : { profile }),
+        partial: workflow.partialSuccess,
+      });
+      this.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
+    } else {
+      for (const error of workflow.errors) {
+        this.stderr.write(`${formatCommandErrorHuman(error)}\n`);
+      }
+      if (workflow.partialSuccess) {
+        this.stderr.write(`Completed resources: ${JSON.stringify(resources)}\n${recovery}\n`);
+      }
+    }
+    return workflow.exitCode;
+  }
+
   /** Map a caught error into a structured failure and emit it. */
   emitCaughtError(error: unknown): number {
     const failure = mapCommandFailure(error);
@@ -162,11 +197,4 @@ export class CommandContext {
  */
 export function createCommandContext(options: CommandContextOptions): CommandContext {
   return new CommandContext(options);
-}
-
-function exitCodeForErrors(errors: CommandError[]): number {
-  if (errors.some((error) => error.category === "authentication")) return ExitCode.AuthenticationError;
-  if (errors.some((error) => error.category === "rate-limit")) return ExitCode.RateLimitExhausted;
-  if (errors.some((error) => error.category === "not-found")) return ExitCode.NotFound;
-  return ExitCode.GeneralError;
 }
