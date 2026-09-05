@@ -1,6 +1,6 @@
 {
   "name": "@qwrobinson/linearctl",
-  "version": "0.8.12",
+  "version": "0.8.13",
   "description": "Agent-first CLI for the Linear API",
   "license": "MIT",
   "repository": {
