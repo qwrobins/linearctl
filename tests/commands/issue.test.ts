@@ -702,6 +702,45 @@ describe("handleIssueCommand — issue list", () => {
     }
   });
 
+  it.each([false, true].flatMap((jsonl) =>
+    ["http", "network", "graphql"].map((failure) => ({ jsonl, failure }))
+  ))("retains pagination recovery output for $failure (jsonl=$jsonl)", async ({ jsonl, failure }) => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-issue-"));
+    const paths = await writeProfileFiles(directory);
+    const raw = makeRawIssue();
+    const pageInfo = { hasNextPage: true, endCursor: "resume-here" };
+    const fetchImpl = vi.fn<FetchLike>(async () => {
+      if (failure === "network") throw new TypeError("fetch failed");
+      return new Response(JSON.stringify({ errors: [{ message: "Service unavailable" }] }), {
+        status: failure === "http" ? 503 : 200
+      });
+    }).mockResolvedValueOnce(new Response(JSON.stringify({ data: { issues: { nodes: [raw], pageInfo } } })));
+    const output = captureOutput();
+
+    try {
+      const exitCode = await handleIssueCommand(["list"], {
+        ...baseOptions(paths), json: false, jsonEnvelope: !jsonl, jsonl, all: true, fetchImpl
+      });
+      expect(exitCode).toBe(1);
+      expect(fetchImpl).toHaveBeenCalledTimes(2);
+      if (jsonl) {
+        const lines = output.stdout.join("").trim().split("\n");
+        expect(lines).toHaveLength(1);
+        expect(JSON.parse(lines[0]!)).toMatchObject({ id: raw.id, identifier: raw.identifier });
+        expect(output.stderr.join("")).toContain("Pagination stopped after 1 item emitted.");
+        expect(output.stderr.join("")).toContain('Resume with --after "resume-here"');
+      } else {
+        expect(JSON.parse(output.stdout.join(""))).toMatchObject({
+          ok: false,
+          data: null,
+          errors: [{ category: "general", details: { partialItems: [raw], endCursor: "resume-here", pageInfo } }]
+        });
+      }
+    } finally {
+      output.restore();
+    }
+  });
+
   it("outputs one JSON line per issue with --jsonl", async () => {
     const directory = await mkdtemp(join(tmpdir(), "linear-cli-issue-"));
     const paths = await writeProfileFiles(directory);

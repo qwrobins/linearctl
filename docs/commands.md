@@ -111,6 +111,8 @@ linearctl project update <id> [--name <text>] [--description <text>|--descriptio
 linearctl project delete <id> --json              # [destructive]
 ```
 
+If `create-with-issues` creates the project but fails to create issues, its failure output retains the project and structured step errors. Reuse the returned project ID to create only missing issues; do not rerun project creation. See [workflow failures and recovery](output-modes.md#composite-workflow-failures).
+
 `project list --json` includes portfolio fields such as `progress`, `health`, `description`, `updatedAt`, `currentProgress`, a normalized `milestones` array with `name`, `targetDate`, `progress`, and `status`, and milestone pagination metadata (`milestonesPageInfo`, `milestonesTruncated`) so clients can detect truncation. Human output also shows progress, health, description, updated time, and milestone summaries.
 
 For `project create`, `project create-with-issues`, and `project update`, `--status` accepts a status name, status type, or status ID. `--state` remains supported as an alias for compatibility.
@@ -218,16 +220,24 @@ linearctl attachment delete <id> --json            # [destructive]
 
 ```bash
 # Upload a file (optionally attach to an issue)
-linearctl file upload <path> [--issue <id>] --json
+linearctl file upload <path> [--issue <id>] [--transfer-timeout <seconds>] --json
 
 # Get a signed URL for an attachment
 linearctl file url <attachment-id> [--expires-in <seconds>] --json
 
 # Download a file
-linearctl file download <url> [--output <path>] --json
+linearctl file download <url> [--output <path>] [--transfer-timeout <seconds>] --json
 ```
 
-File upload and download requests use manual redirect handling. Same-host redirects keep signed upload headers and Linear authorization. Cross-host redirects are followed only after dropping those headers.
+If `file upload --issue` uploads successfully but attachment creation fails, its failure output retains `assetUrl`, `fileName`, `contentType`, and `size`, including on thrown transport failures. Reuse that asset with `attachment create` instead of uploading again. See [workflow failures and recovery](output-modes.md#composite-workflow-failures).
+
+File upload and download stream with backpressure instead of buffering entire files. Upload sizes come from local file metadata; upload sources must be regular files and should not be modified during a transfer.
+
+`--transfer-timeout` sets a total transfer deadline in whole seconds (default **120**, range 1–2147483). The deadline starts with the first PUT/GET and covers all redirects and response-body consumption, including stalled bodies and download writes. It does not change the separate GraphQL request timeout or retry policy; file transfers are not automatically retried. Ctrl-C (SIGINT) or SIGTERM cancels an active transfer and cleans up local resources. Timeout/cancellation returns exit 1.
+
+Downloads overwrite existing destinations **only after successful completion**, using a private staging directory beside the output and an atomic rename on the same filesystem. Transfer, write, or rename failures leave the existing destination unchanged and attempt to remove staging files; the parent directory must already exist and be writable. A destination symlink is replaced, not followed. The new file uses private permissions (0600 on POSIX); existing permissions/metadata are not retained. Staging cleanup is best effort: filesystem cleanup failures do not hide the original transfer error or turn a committed download into a failure. Cleanup failures, forced termination (SIGKILL), crashes, or power loss can leave staging directories; atomic replacement is not a crash-durability guarantee.
+
+Requests and redirects must use HTTPS, with at most five redirects. Downloads must start at `uploads.linear.app`. Same-host redirects keep signed upload headers and Linear authorization. Cross-host redirects drop sensitive headers, even if a later redirect returns to the original host. Redirected PUTs replay the file from the beginning.
 
 ## Auth
 

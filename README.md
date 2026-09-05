@@ -51,7 +51,7 @@ cp dist/linearctl ~/.local/bin/linearctl
 
 On Windows, `bun run build:binary` produces `dist\linearctl.exe`; copy it to a directory on your user `PATH`.
 
-The compiled binary has no runtime dependencies. Building from source requires [Bun](https://bun.sh).
+The compiled binary has no runtime dependencies. Building from source requires the [Bun](https://bun.sh) version pinned in `.bun-version`. See [build and release validation](docs/releasing.md) for toolchain updates, generated-artifact checks, and release gates.
 Local macOS builds are not Developer ID signed or notarized. If Bun leaves an
 invalid signature (verification fails or execution exits 137), follow the
 [local signature verification and repair steps](docs/macos-signing.md#local-builds-and-signature-repair).

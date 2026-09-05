@@ -14,7 +14,7 @@ import { resolveProjectId, resolveTeamId, resolveUserId, looksLikeId } from "../
 import type { ResolverOptions } from "../core/resolution/resolve.js";
 import { normalizeRetryOptions } from "../core/transport/retry.js";
 import { CommandContext } from "../core/runtime/command-context.js";
-import { runTwoStepWorkflow } from "../core/runtime/workflow.js";
+import { runTwoStepWorkflow, WorkflowStepError } from "../core/runtime/workflow.js";
 
 // Linear's query-complexity budget is exceeded by 250-project pages because
 // each project includes nested milestones and teams in the stable JSON output.
@@ -997,11 +997,14 @@ async function handleProjectCreateWithIssues(options: ProjectCommandOptions): Pr
 
           if (
             ctx.hasErrors(response.body.errors) ||
+            response.body.data?.projectCreate?.success !== true ||
             response.body.data?.projectCreate?.project === null ||
             response.body.data?.projectCreate?.project === undefined
           ) {
-            const msg = response.body.errors?.[0]?.message ?? "Project creation failed";
-            throw new Error(msg);
+            const errors = ctx.mapGraphQLErrors(response.body.errors);
+            throw new WorkflowStepError(
+              errors.length > 0 ? errors : [{ category: "general", message: "Project creation failed" }]
+            );
           }
 
           return normalizeProject(response.body.data.projectCreate.project);
@@ -1026,44 +1029,23 @@ async function handleProjectCreateWithIssues(options: ProjectCommandOptions): Pr
             ctx.hasErrors(response.body.errors) ||
             !response.body.data?.issueBatchCreate?.success
           ) {
-            const msg = response.body.errors?.[0]?.message ?? "Issue batch creation failed";
-            throw new Error(`${msg} (project was created: ${project.id})`);
+            const errors = ctx.mapGraphQLErrors(response.body.errors);
+            throw new WorkflowStepError(
+              errors.length > 0 ? errors : [{ category: "general", message: "Issue batch creation failed" }]
+            );
           }
 
           return response.body.data.issueBatchCreate.issues ?? [];
         },
-      })
+      }),
+      "batch create issues"
     );
 
     if (!workflowResult.ok) {
-      // Partial failure: include step details so the agent knows what completed
-      const firstStep = workflowResult.steps.first;
-      const secondStep = workflowResult.steps.second;
-
-      if (firstStep.status === "failed") {
-        return ctx.emitFailure([{ category: "general", message: firstStep.error ?? "Project creation failed" }]);
-      }
-
-      // Project succeeded but issues failed — report partial success
-      const partialResult = {
-        project: firstStep.result,
+      return ctx.emitWorkflowFailure(workflowResult, {
+        project: workflowResult.completed.first ?? null,
         issues: null,
-        workflow: {
-          steps: workflowResult.steps,
-          partialSuccess: true,
-        },
-      };
-
-      if (options.jsonEnvelope) {
-        return ctx.emitFailure([{
-          category: "general",
-          message: secondStep.error ?? "Issue batch creation failed (project was created)",
-          details: partialResult,
-        }]);
-      } else {
-        process.stderr.write(`Error: ${secondStep.error ?? "Issue batch creation failed (project was created)"}\n`);
-      }
-      return ExitCode.GeneralError;
+      }, "Reuse project.id with `linearctl issue create --project <project.id> --team <team> --title <title>` for each missing issue; do not recreate the project. If the response was lost, check existing project issues before retrying.");
     }
 
     // Full success

@@ -88,6 +88,7 @@ export const OPTION_CATALOG: Record<string, OptionSpec> = {
   url: { type: "string" },
   output: { type: "string" },
   "expires-in": { type: "string" },
+  "transfer-timeout": { type: "string" },
   ids: { type: "string" },
   "oauth-client-id": { type: "string" },
   "callback-port": { type: "string" },

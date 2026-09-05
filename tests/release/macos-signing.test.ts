@@ -208,10 +208,11 @@ set -eu
 
 it("gates publication on clean macOS verification and preserves quarantine in the installer", () => {
   const workflow = readFileSync(join(root, ".github/workflows/release.yml"), "utf8");
-  expect(workflow).toContain("needs: [build, verify-macos]");
+  expect(workflow).toContain("needs: [resolve, validate, build, verify-macos]");
   expect(workflow.indexOf("bash scripts/sign-macos-release.sh")).toBeLessThan(workflow.indexOf("actions/upload-artifact"));
   const verification = workflow.split("  verify-macos:")[1]?.split("  release:")[0] ?? "";
-  expect(verification).toContain("needs: build");
+  expect(verification).toContain("needs: [resolve, build]");
+  expect(verification).toContain("ref: ${{ needs.resolve.outputs.commit }}");
   expect(verification).toContain("macos-15-intel");
   expect(verification).toContain("linearctl-darwin-x64");
   expect(verification).toContain("linearctl-darwin-arm64");
