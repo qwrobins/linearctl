@@ -52,7 +52,9 @@ Keep the `.p12`, passwords, and private key out of the repository and logs. Only
 the macOS signing step receives secrets. `scripts/sign-macos-release.sh` imports
 the certificate into a temporary password-protected keychain, restricts key access
 to codesign, and resolves the exact valid identity to its fingerprint. It does not
-change the default keychain or search list. An exit trap deletes the keychain and
+change the default keychain. It temporarily adds the signing keychain to the user
+search list so codesign can locate the private key (even with `--keychain`). An
+exit trap restores the original search list and deletes the keychain and
 temporary files on success, failure, and catchable signals; GitHub-hosted ephemeral
 runners also bound credential lifetime if the process is forcibly terminated.
 

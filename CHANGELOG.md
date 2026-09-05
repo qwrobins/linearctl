@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.12] - 2026-09-05
+
+### Fixed
+
+- Make the temporary macOS signing keychain discoverable to codesign's private-key lookup, restoring the original keychain search list on every exit path. The v0.8.11 release was blocked before publication by this lookup failure.
+
 ## [0.8.11] - 2026-09-05
 
 ### Changed
