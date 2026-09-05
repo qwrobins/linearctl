@@ -87,6 +87,30 @@ describe("injected CLI runtime", () => {
     expect(fetchImpl).toHaveBeenCalledOnce();
   });
 
+  it.each([
+    ["--max", "10", "team", "list", "--limit", "20"],
+    ["--limit", "10", "team", "list", "--max", "20"],
+    ["team", "list", "--max", "10", "--limit", "20"],
+    ["team", "list", "--limit", "10", "--max", "20"],
+    ["--max=10", "--limit=20", "team", "list"],
+    ["--limit=10", "--max=20", "team", "list"],
+    ["team", "list", "--max=10", "--limit=15", "--max=20"],
+  ])("uses the last pagination alias in %j", async (...args) => {
+    const fetchImpl = vi.fn<FetchLike>().mockImplementation(async (_url, init) => {
+      expect(JSON.parse(String(init?.body)).variables.first).toBe(20);
+      return response({ teams: { nodes: [team], pageInfo: { hasNextPage: false } } });
+    });
+    const result = await run([...args, "--json"], fetchImpl);
+    expect(result.code).toBe(ExitCode.Success);
+    expect(fetchImpl).toHaveBeenCalledOnce();
+  });
+
+  it("names the winning alias in pagination validation errors", async () => {
+    const result = await run(["--max", "10", "team", "list", "--limit=0", "--json-envelope"]);
+    expect(result.code).toBe(ExitCode.ValidationError);
+    expect(JSON.parse(result.stdout).errors[0].message).toBe("--limit must be a positive integer");
+  });
+
   it("routes retry and pagination warnings to supplied stderr without corrupting JSON", async () => {
     const fetchImpl = vi.fn<FetchLike>()
       .mockResolvedValueOnce(new Response("rate limited", { status: 429, headers: { "retry-after": "0" } }))

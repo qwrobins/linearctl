@@ -74,15 +74,24 @@ function parseCliOptionSet(
   argv: string[],
   options: Record<string, { type: "boolean"; short?: string; multiple?: true } | { type: "string"; short?: string; multiple?: true }>
 ): { values: Record<string, unknown>; positionals: string[] } {
-  const { values, positionals } = parseArgs({
+  const { values, positionals, tokens } = parseArgs({
     args: argv,
     options,
     allowPositionals: true,
-    strict: true
+    strict: true,
+    tokens: true
   });
 
+  // Normalize aliases before merging leading and command-position options.
+  // Tokens retain ordering even when both aliases occur in the same segment.
+  const bound = tokens.slice().reverse().find((token) => token.kind === "option" && (token.name === "max" || token.name === "limit"));
+  if (bound?.kind === "option") {
+    values.max = values[bound.name];
+    delete values.limit;
+  }
+
   return {
-    values: values as Record<string, unknown>,
+    values: { ...values, ...(bound?.kind === "option" ? { maxOptionName: bound.name } : {}) },
     positionals
   };
 }
@@ -209,7 +218,7 @@ function toParsedCliArguments(values: Record<string, unknown>, positionals: stri
   const jsonl = values.jsonl === true;
   const jsonEnvelope = values["json-envelope"] === true;
   const states = stringArrayValue(values.state);
-  const maxValue = typeof values.max === "string" ? values.max : typeof values.limit === "string" ? values.limit : undefined;
+  const maxValue = typeof values.max === "string" ? values.max : undefined;
 
   if (jsonl && jsonEnvelope) {
     throw new Error("--jsonl and --json-envelope are mutually exclusive");
@@ -297,7 +306,7 @@ function toParsedCliArguments(values: Record<string, unknown>, positionals: stri
     ...(typeof values["order-by"] === "string" ? { orderBy: values["order-by"] } : {}),
     ...(typeof values["order-dir"] === "string" ? { orderDir: values["order-dir"] } : {}),
     all: values.all === true,
-    ...(maxValue === undefined ? {} : { max: parsePositiveInt(maxValue, typeof values.max === "string" ? "max" : "limit") }),
+    ...(maxValue === undefined ? {} : { max: parsePositiveInt(maxValue, values.maxOptionName === "limit" ? "limit" : "max") }),
     ...(typeof values["page-size"] === "string" ? { pageSize: parsePositiveInt(values["page-size"], "page-size") } : {}),
     ...(typeof values.after === "string" ? { after: values.after } : {}),
     sync: values.sync === true,
