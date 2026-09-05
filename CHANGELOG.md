@@ -7,9 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.11] - 2026-09-05
+
+### Changed
+
+- Require Developer ID signing and Apple notarization for both macOS release binaries, with fresh native-runner verification before publication. First launch requires online ticket retrieval; standalone binaries cannot carry stapled tickets.
+- Share the pinned, verified build pipeline between CI and releases, and gate publication on validation of the exact tagged commit.
+
 ### Fixed
 
 - Preserve completed upload/project resources, structured errors, and meaningful exit codes when composite workflows fail; report skipped steps and provide recovery guidance in human and both JSON modes.
+- Verify staged Unix installer downloads before atomically replacing an existing installation, and preserve macOS quarantine instead of bypassing Gatekeeper.
+- Stream file transfers with cancellation and atomic downloads.
+- Preserve partial pagination results and resume context when transport requests fail.
+- Honor JSON envelopes in remaining top-level CLI error paths.
 
 ## [0.8.10] - 2026-09-02
 
