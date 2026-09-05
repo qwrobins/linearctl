@@ -57,3 +57,12 @@ jobs:
           VERSION: ${{ steps.version.outputs.current }}
         run: |
           gh workflow run release.yml --field "tag=v${VERSION}"
+
+      # Tags pushed with GITHUB_TOKEN do not recursively trigger other workflows.
+      - name: Trigger npm publish workflow
+        if: steps.version.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.current }}
+        run: |
+          gh workflow run publish-npm.yml --ref "v${VERSION}" --field "tag=v${VERSION}"

@@ -4,6 +4,12 @@ on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to publish (e.g. v0.8.13)"
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -18,7 +24,7 @@ jobs:
 
       - name: Validate package version
         env:
-          TAG_NAME: ${{ github.ref_name }}
+          TAG_NAME: ${{ inputs.tag || github.ref_name }}
         run: |
           package_version=$(node -p "JSON.parse(require('fs').readFileSync('package.json', 'utf8')).version")
           if [ "${TAG_NAME#v}" != "$package_version" ]; then

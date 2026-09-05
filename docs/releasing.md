@@ -80,10 +80,13 @@ secrets, the online-first-launch policy, and local signature repair.
 ## npm publication
 
 The Node.js distribution is published as `@qwrobinson/linearctl` by
-`.github/workflows/publish-npm.yml` whenever a matching `vX.Y.Z` tag is pushed.
+`.github/workflows/publish-npm.yml` for a matching `vX.Y.Z` release tag. The
+auto-tag workflow explicitly dispatches this workflow on the new tag because a
+tag pushed with `GITHUB_TOKEN` does not recursively trigger another workflow.
 The workflow builds the TypeScript distribution with the pinned Bun version, then
 publishes the compiled JavaScript and manifest assets through npm Trusted
-Publishing. It does not require an npm token secret.
+Publishing. It does not require an npm token secret. To retry a publication,
+dispatch `publish-npm.yml` with the existing tag as its `tag` input.
 
 Before the first release, publish the initial version once from a logged-in local
 environment so the npm package exists, then configure the package's Trusted
