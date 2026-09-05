@@ -99,6 +99,19 @@ jobs:
       - name: Build binary
         run: bun run build:binary --target=${{ matrix.target }} --outfile=dist/${{ matrix.binary }}
 
+      - name: Sign, notarize, and verify macOS binary
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          BINARY_NAME: ${{ matrix.binary }}
+          MACOS_CERTIFICATE_BASE64: ${{ secrets.MACOS_CERTIFICATE_BASE64 }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          MACOS_SIGN_IDENTITY: ${{ secrets.MACOS_SIGN_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: bash scripts/sign-macos-release.sh "./dist/$BINARY_NAME"
+
       - name: Smoke test binary
         run: bun run smoke:binary dist/${{ matrix.binary }}
 
@@ -137,8 +150,35 @@ jobs:
           path: dist/${{ matrix.artifact }}
           if-no-files-found: error
 
+  verify-macos:
+    # Fresh machines: no signing keychain or notarization cache from the build.
+    needs: [resolve, build]
+    strategy:
+      matrix:
+        include:
+          - os: macos-15-intel
+            artifact: linearctl-darwin-x64
+          - os: macos-latest
+            artifact: linearctl-darwin-arm64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.resolve.outputs.commit }}
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: dist
+
+      - name: Verify quarantined macOS release on a clean runner
+        shell: bash
+        env:
+          BINARY_NAME: ${{ matrix.artifact }}
+        run: bash scripts/verify-macos-release.sh "./dist/$BINARY_NAME"
+
   release:
-    needs: [resolve, validate, build]
+    needs: [resolve, validate, build, verify-macos]
     runs-on: ubuntu-latest
     permissions:
       contents: write

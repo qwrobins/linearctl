@@ -80,20 +80,9 @@ MOCK
 cat > "$TEST_ROOT/mock-bin/xattr" <<'MOCK'
 #!/bin/sh
 set -eu
-[ "$TEST_OS" = darwin ] || exit 96
-[ "$#" -eq 3 ] && [ "$1" = -d ] && [ "$2" = com.apple.quarantine ] || exit 97
-[ "$(dirname "$3")" = "$LINEAR_INSTALL_DIR" ] || exit 98
-[ "$3" != "$LINEAR_INSTALL_DIR/linearctl" ] || exit 99
-cmp -s "$3" "$TEST_ROOT/fixtures/replacement" || exit 100
-[ -x "$3" ] || exit 101
-if [ "$INSTALL_STATE" = upgrade ]; then
-  cmp -s "$LINEAR_INSTALL_DIR/linearctl" "$TEST_ROOT/fixtures/existing" || exit 102
-else
-  [ ! -e "$LINEAR_INSTALL_DIR/linearctl" ] || exit 103
-fi
-# Real xattr may fail when quarantine is absent; the installer must tolerate it.
-# Record successful assertions first so its best-effort call cannot hide errors.
-touch "$CASE_ROOT/quarantine-checked"
+# Signed releases must retain quarantine. Record even best-effort attempts so
+# an installer using `xattr ... || true` cannot hide a trust-policy regression.
+touch "$CASE_ROOT/quarantine-modified"
 exit 1
 MOCK
 chmod +x "$TEST_ROOT/mock-bin/"*
@@ -141,9 +130,7 @@ run_case() {
       077) expected_mode='-rwx------' ;;
     esac
     [ "$mode" = "$expected_mode" ] || fail "unexpected replacement permissions: $mode"
-    if [ "$TEST_OS" = darwin ]; then
-      [ -f "$CASE_ROOT/quarantine-checked" ] || fail 'quarantine removal did not operate on the prepared staging file'
-    fi
+    [ ! -f "$CASE_ROOT/quarantine-modified" ] || fail 'installer attempted to modify quarantine'
     [ "$("$LINEAR_INSTALL_DIR/linearctl")" = VERIFIED_REPLACEMENT ] || fail 'replacement cannot execute'
     grep -q 'Checksum verified' "$CASE_ROOT/output" || fail 'checksum was not verified'
   else

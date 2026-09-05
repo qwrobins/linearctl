@@ -80,11 +80,6 @@ main() {
   # umask (omitting "who" in symbolic chmod preserves masked permissions).
   chmod +rx "$STAGED_BINARY"
 
-  # Remove macOS quarantine attribute so Gatekeeper doesn't block unsigned binary
-  if [ "$os" = "darwin" ] && command -v xattr > /dev/null 2>&1; then
-    xattr -d com.apple.quarantine "$STAGED_BINARY" 2>/dev/null || true
-  fi
-
   mv -f "$STAGED_BINARY" "${INSTALL_DIR}/${BINARY_NAME}"
 
   echo "Installed ${BINARY_NAME} to ${INSTALL_DIR}/${BINARY_NAME}"

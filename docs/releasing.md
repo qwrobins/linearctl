@@ -71,7 +71,8 @@ is safe because release always runs its own blocking validation of the tag's SHA
 manual dispatch has no bypass. To retry, dispatch `release.yml` with the existing
 version tag; validation runs again before assets can be uploaded or overwritten.
 
-macOS signing/notarization is tracked separately in #177. Signing belongs after
-compilation and before final smoke tests/upload; checksums must cover the final
-signed assets. Keep the shared build entry point and validation dependencies when
-adding that step.
+macOS binaries are Developer ID signed and notarized after compilation and before
+final smoke tests/upload. Both architectures then pass quarantined execution and
+online notarization checks on fresh native runners before publication. Checksums
+cover the final signed assets. See [macOS signing](macos-signing.md) for required
+secrets, the online-first-launch policy, and local signature repair.
