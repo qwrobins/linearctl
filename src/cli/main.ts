@@ -8,13 +8,14 @@ import { curatedCommandMetadata, defaultLinearConfigPaths, ExitCode } from "../i
 import { maybeWarnForStaleSchema } from "../core/schema/freshness.js";
 import { failureEnvelope } from "../core/output/envelope.js";
 import type { FetchLike } from "../core/transport/graphql.js";
+import type { OutputStream } from "../core/runtime/options.js";
 import packageJson from "../../package.json" with { type: "json" };
 
-interface MainRuntime {
+export interface MainRuntime {
   env: NodeJS.ProcessEnv;
   stdin: NodeJS.ReadableStream;
-  stdout: NodeJS.WriteStream | Pick<NodeJS.WriteStream, "write">;
-  stderr: NodeJS.WriteStream | Pick<NodeJS.WriteStream, "write">;
+  stdout: OutputStream;
+  stderr: OutputStream;
   fetchImpl?: FetchLike;
   schemaFreshnessTimeoutMs?: number;
 }
@@ -388,8 +389,12 @@ export async function main(argv: string[], runtime: MainRuntime = defaultRuntime
     if (registration !== undefined) {
       try {
         const options = registration.buildOptions(args, runtime.env, runtime.stdin);
-        if (runtime.fetchImpl !== undefined && options !== null && typeof options === "object") {
-          (options as Record<string, unknown>).fetchImpl = runtime.fetchImpl;
+        if (options !== null && typeof options === "object") {
+          Object.assign(options, {
+            stdout: runtime.stdout,
+            stderr: runtime.stderr,
+            ...(runtime.fetchImpl === undefined ? {} : { fetchImpl: runtime.fetchImpl }),
+          });
         }
         const exitCode = await registration.handler(args.positionals.slice(1), options);
         if (!args.help && !args.dryRun) {
@@ -448,6 +453,7 @@ async function runSchemaFreshnessCheck(
         credentialsFile: args.credentialsFile,
         ...(args.apiUrl === undefined ? {} : { apiUrl: args.apiUrl }),
         env: runtime.env,
+        stderr: runtime.stderr,
         fetchImpl
       }),
       new Promise<void>((resolve) => {

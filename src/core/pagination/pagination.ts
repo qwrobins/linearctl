@@ -4,7 +4,9 @@ import type { FetchLike } from "../transport/graphql.js";
 import { GraphQLTransportError } from "../transport/graphql.js";
 import { executeGraphQLWithRetry, type RetryOptions } from "../transport/retry.js";
 
-export interface PaginationOptions {
+import { commandIO, type CommandIO } from "../runtime/options.js";
+
+export interface PaginationOptions extends CommandIO {
   all?: boolean | undefined;
   max?: number | undefined;
   pageSize?: number | undefined;
@@ -131,7 +133,7 @@ export async function paginateGraphQL<TNode>(
         const guidance = options.after === undefined
           ? "Use --all to fetch all results, or --max <n> for a specific limit."
           : "Use --max <n> for a specific limit.";
-        process.stderr.write(
+        commandIO(options).stderr.write(
           `Warning: results truncated at ${items.length} items. ${guidance}\n`
         );
       }
@@ -140,7 +142,7 @@ export async function paginateGraphQL<TNode>(
 
     if (limit !== undefined && items.length >= limit) {
       if (options.all === true && options.max === undefined && items.length >= SAFETY_CAP && !options.quiet) {
-        process.stderr.write(
+        commandIO(options).stderr.write(
           `Warning: --all fetched ${SAFETY_CAP} items (safety cap). Use --max to fetch more.\n`
         );
       }

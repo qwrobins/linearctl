@@ -1,28 +1,20 @@
+import { commandIO, type CommandOptions, type CommandIO } from "../core/runtime/options.js";
 import { emitValidationError } from "../core/output/validation-error.js";
 import type { PageInfo } from "../core/output/envelope.js";
 import { ExitCode } from "../core/errors/exit-codes.js";
-import type { FetchLike } from "../core/transport/graphql.js";
 import { paginateGraphQL, validatePaginationOptions } from "../core/pagination/pagination.js";
 import type { PaginationOptions } from "../core/pagination/pagination.js";
 import { emitDryRunResult } from "../core/output/dry-run.js";
 import { normalizeRetryOptions } from "../core/transport/retry.js";
-import { CommandContext } from "../core/runtime/command-context.js";
+import { createCommandContext } from "../core/runtime/command-context.js";
 
 const RELATION_TYPES = ["blocks", "duplicate", "related", "similar"] as const;
 
 export type IssueRelationType = (typeof RELATION_TYPES)[number];
 export type IssueRelationDirection = "outbound" | "inbound";
 
-export interface RelationCommandOptions {
-  json: boolean;
-  jsonEnvelope: boolean;
+export interface RelationCommandOptions extends CommandOptions {
   jsonl?: boolean;
-  profile?: string;
-  configFile: string;
-  credentialsFile: string;
-  apiUrl?: string;
-  env: Record<string, string | undefined>;
-  fetchImpl?: FetchLike;
   dryRun?: boolean;
   issue?: string;
   related?: string;
@@ -31,8 +23,6 @@ export interface RelationCommandOptions {
   max?: number;
   pageSize?: number;
   quiet?: boolean;
-  noRetry?: boolean;
-  maxRetries?: number;
 }
 
 interface RelationIssue {
@@ -133,27 +123,6 @@ mutation RelationDelete($id: String!) {
   }
 }`;
 
-function buildContext(options: RelationCommandOptions): CommandContext {
-  return new CommandContext({
-    json: options.json,
-    jsonEnvelope: options.jsonEnvelope,
-    ...(options.profile === undefined ? {} : { profile: options.profile }),
-    configFile: options.configFile,
-    credentialsFile: options.credentialsFile,
-    ...(options.apiUrl === undefined ? {} : { apiUrl: options.apiUrl }),
-    env: options.env,
-    ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl }),
-    ...(options.noRetry === true || options.maxRetries !== undefined
-      ? {
-          retry: {
-            ...(options.noRetry === true ? { noRetry: true } : {}),
-            ...(options.maxRetries === undefined ? {} : { maxRetries: options.maxRetries })
-          }
-        }
-      : {})
-  });
-}
-
 function relationTypeFromInput(value: string): IssueRelationType | undefined {
   const normalized = value.trim().toLowerCase().replaceAll("_", "-");
   if (normalized === "related-to" || normalized === "relatedto") {
@@ -162,15 +131,18 @@ function relationTypeFromInput(value: string): IssueRelationType | undefined {
   return RELATION_TYPES.find((type) => type === normalized);
 }
 
-function printHumanRelation(relation: NormalizedIssueRelation): void {
-  process.stdout.write(
+function printHumanRelation(relation: NormalizedIssueRelation, options: CommandIO): void {
+  const { stdout } = commandIO(options);
+  stdout.write(
     `${relation.type} [${relation.direction}]  ${relation.issue.identifier} -> ${relation.relatedIssue.identifier}\n`
   );
-  process.stdout.write(`  ID: ${relation.id}\n`);
+  stdout.write(`  ID: ${relation.id}\n`);
 }
 
 async function handleRelationList(issueInput: string, options: RelationCommandOptions): Promise<number> {
+  const { stderr, stdout } = commandIO(options);
   const paginationOptions: PaginationOptions = {
+    stderr: commandIO(options).stderr,
     ...(options.all === true ? { all: true } : {}),
     ...(options.max === undefined ? {} : { max: options.max }),
     ...(options.pageSize === undefined ? {} : { pageSize: options.pageSize }),
@@ -181,7 +153,7 @@ async function handleRelationList(issueInput: string, options: RelationCommandOp
     return emitValidationError(validationError, options);
   }
 
-  const ctx = buildContext(options);
+  const ctx = createCommandContext(options);
 
   try {
     const lookup = await ctx.graphql<{
@@ -260,25 +232,25 @@ async function handleRelationList(issueInput: string, options: RelationCommandOp
       const inboundNote = inboundSkipped && issue.inverseRelations.nodes.length > 0
         ? " Outbound relations exhausted the limit; inbound relations were not fetched."
         : "";
-      process.stderr.write(
+      stderr.write(
         `Warning: results truncated at ${relations.length} items.${inboundNote} Use --all to fetch all results, or --max <n> for a specific limit.\n`
       );
     }
 
     if (options.jsonl === true) {
       for (const relation of relations) {
-        process.stdout.write(`${JSON.stringify(relation)}\n`);
+        stdout.write(`${JSON.stringify(relation)}\n`);
       }
     } else if (options.jsonEnvelope) {
       return ctx.emitSuccess(relations, { hasNextPage });
     } else if (options.json) {
-      process.stdout.write(`${JSON.stringify(relations, null, 2)}\n`);
+      stdout.write(`${JSON.stringify(relations, null, 2)}\n`);
     } else {
       for (const relation of relations) {
-        printHumanRelation(relation);
+        printHumanRelation(relation, options);
       }
       if (relations.length === 0) {
-        process.stdout.write("No relations found.\n");
+        stdout.write("No relations found.\n");
       }
     }
 
@@ -289,6 +261,7 @@ async function handleRelationList(issueInput: string, options: RelationCommandOp
 }
 
 async function handleRelationCreate(options: RelationCommandOptions): Promise<number> {
+  const { stdout } = commandIO(options);
   if (options.issue === undefined || options.issue.trim() === "") {
     return emitValidationError("--issue is required for relation create.", options);
   }
@@ -306,7 +279,7 @@ async function handleRelationCreate(options: RelationCommandOptions): Promise<nu
     );
   }
 
-  const ctx = buildContext(options);
+  const ctx = createCommandContext(options);
 
   try {
     const lookup = await ctx.graphql<{
@@ -354,10 +327,10 @@ async function handleRelationCreate(options: RelationCommandOptions): Promise<nu
     if (options.jsonEnvelope) {
       return ctx.emitSuccess(relation);
     } else if (options.json) {
-      process.stdout.write(`${JSON.stringify(relation, null, 2)}\n`);
+      stdout.write(`${JSON.stringify(relation, null, 2)}\n`);
     } else {
-      process.stdout.write(`Created ${relation.type} relation ${relation.issue.identifier} -> ${relation.relatedIssue.identifier}\n`);
-      process.stdout.write(`  ID: ${relation.id}\n`);
+      stdout.write(`Created ${relation.type} relation ${relation.issue.identifier} -> ${relation.relatedIssue.identifier}\n`);
+      stdout.write(`  ID: ${relation.id}\n`);
     }
     return ExitCode.Success;
   } catch (error) {
@@ -366,11 +339,12 @@ async function handleRelationCreate(options: RelationCommandOptions): Promise<nu
 }
 
 async function handleRelationDelete(relationId: string, options: RelationCommandOptions): Promise<number> {
+  const { stdout } = commandIO(options);
   if (options.dryRun === true) {
     return emitDryRunResult("delete", "relation", { id: relationId }, options);
   }
 
-  const ctx = buildContext(options);
+  const ctx = createCommandContext(options);
   try {
     const response = await ctx.graphql<{
       issueRelationDelete: { success: boolean; entityId: string };
@@ -386,9 +360,9 @@ async function handleRelationDelete(relationId: string, options: RelationCommand
     if (options.jsonEnvelope) {
       return ctx.emitSuccess(result);
     } else if (options.json) {
-      process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+      stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     } else {
-      process.stdout.write(`Deleted relation ${result.id}\n`);
+      stdout.write(`Deleted relation ${result.id}\n`);
     }
     return ExitCode.Success;
   } catch (error) {

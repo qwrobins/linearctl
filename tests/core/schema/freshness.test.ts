@@ -6,6 +6,7 @@ import { writeCredentialsFile } from "../../../src/core/auth/credentials.js";
 import { writeLinearConfigFile } from "../../../src/core/config/config-file.js";
 import { maybeWarnForStaleSchema } from "../../../src/core/schema/freshness.js";
 import type { FetchLike } from "../../../src/core/transport/graphql.js";
+import { captureCommandOutput } from "../../helpers/output.js";
 
 const FRESHNESS_TEST_NOW = new Date("2099-01-01T00:00:00.000Z");
 
@@ -154,6 +155,22 @@ describe("maybeWarnForStaleSchema", () => {
     });
 
     expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it.each([false, true])("uses supplied stderr for advisory output (autoUpdate=%s)", async (autoUpdate) => {
+    const directory = await mkdtemp(join(tmpdir(), "linear-cli-freshness-"));
+    const paths = await writeProfileFiles(directory, autoUpdate);
+    const output = captureCommandOutput();
+    await maybeWarnForStaleSchema({
+      ...paths,
+      ...output.io,
+      commandName: "issue",
+      env: {},
+      fetchImpl: async () => driftedSchemaResponse(),
+      now: FRESHNESS_TEST_NOW
+    });
+    expect(output.stderr.join("")).toContain(autoUpdate ? "updated automatically" : "linearctl schema is");
+    expect(output.stdout).toEqual([]);
   });
 
   it("records failed freshness attempts so slow checks are throttled", async () => {

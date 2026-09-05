@@ -40,28 +40,13 @@ async function runMainWithThrowingFetch(args: string[]) {
   const fetchImpl = vi.fn(async () => {
     throw new Error("unexpected network call");
   }) as unknown as typeof fetch;
-  const stdoutSpy = vi.spyOn(process.stdout, "write").mockImplementation((chunk: string | Uint8Array) => {
-    stdout += String(chunk);
-    return true;
+  const code = await main(await hermeticArgs(args), {
+    env: {},
+    stdin: Readable.from([]),
+    stdout: { write: (chunk: string | Uint8Array) => { stdout += String(chunk); return true; } },
+    stderr: { write: (chunk: string | Uint8Array) => { stderr += String(chunk); return true; } },
+    fetchImpl
   });
-  const stderrSpy = vi.spyOn(process.stderr, "write").mockImplementation((chunk: string | Uint8Array) => {
-    stderr += String(chunk);
-    return true;
-  });
-
-  let code: number;
-  try {
-    code = await main(await hermeticArgs(args), {
-      env: {},
-      stdin: Readable.from([]),
-      stdout: { write: (chunk: string | Uint8Array) => { stdout += String(chunk); return true; } },
-      stderr: { write: (chunk: string | Uint8Array) => { stderr += String(chunk); return true; } },
-      fetchImpl
-    });
-  } finally {
-    stdoutSpy.mockRestore();
-    stderrSpy.mockRestore();
-  }
 
   return { code, stdout, stderr, fetchImpl };
 }

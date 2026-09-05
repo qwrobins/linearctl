@@ -2,7 +2,9 @@ import { failureEnvelope } from "./envelope.js";
 import type { CommandSourceLayer } from "./envelope.js";
 import { ExitCode } from "../errors/exit-codes.js";
 
-export interface ValidationErrorOptions {
+import { commandIO, type CommandIO } from "../runtime/options.js";
+
+export interface ValidationErrorOptions extends CommandIO {
   jsonEnvelope: boolean;
   sourceLayer?: CommandSourceLayer;
   profile?: string;
@@ -14,9 +16,9 @@ export function emitValidationError(message: string, options: ValidationErrorOpt
       [{ category: "validation", message }],
       { sourceLayer: options.sourceLayer ?? "curated", ...(options.profile === undefined ? {} : { profile: options.profile }) }
     );
-    process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
+    commandIO(options).stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
   } else {
-    process.stderr.write(`Error: ${message}\n`);
+    commandIO(options).stderr.write(`Error: ${message}\n`);
   }
   return ExitCode.ValidationError;
 }

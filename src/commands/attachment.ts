@@ -1,25 +1,18 @@
+import { commandIO, type CommandOptions, type CommandIO } from "../core/runtime/options.js";
 import { emitValidationError } from "../core/output/validation-error.js";
 import type { PageInfo } from "../core/output/envelope.js";
 import { ExitCode } from "../core/errors/exit-codes.js";
-import type { FetchLike, GraphQLErrorPayload } from "../core/transport/graphql.js";
+import type { GraphQLErrorPayload } from "../core/transport/graphql.js";
 import { paginateGraphQL, validatePaginationOptions } from "../core/pagination/pagination.js";
 import type { PaginationOptions } from "../core/pagination/pagination.js";
 import { streamPaginateGraphQL } from "../core/pagination/streaming.js";
 import { emitDryRunResult } from "../core/output/dry-run.js";
 import { normalizeRetryOptions } from "../core/transport/retry.js";
-import { CommandContext } from "../core/runtime/command-context.js";
+import { createCommandContext } from "../core/runtime/command-context.js";
 import { looksLikeId } from "../core/resolution/resolve.js";
 
-export interface AttachmentCommandOptions {
-  json: boolean;
-  jsonEnvelope: boolean;
+export interface AttachmentCommandOptions extends CommandOptions {
   jsonl?: boolean;
-  profile?: string;
-  configFile: string;
-  credentialsFile: string;
-  apiUrl?: string;
-  env: Record<string, string | undefined>;
-  fetchImpl?: FetchLike;
   dryRun?: boolean;
   issue?: string;
   url?: string;
@@ -29,9 +22,6 @@ export interface AttachmentCommandOptions {
   pageSize?: number;
   after?: string;
   quiet?: boolean;
-  // retry flags
-  noRetry?: boolean;
-  maxRetries?: number;
 }
 
 interface RawAttachment {
@@ -119,46 +109,27 @@ mutation AttachmentDelete($id: String!) {
   }
 }`;
 
-function printHumanAttachment(attachment: NormalizedAttachment): void {
-  process.stdout.write(`${attachment.title}\n`);
-  process.stdout.write(`  Issue:   ${attachment.issue.identifier}\n`);
+function printHumanAttachment(attachment: NormalizedAttachment, options: CommandIO): void {
+  const { stdout } = commandIO(options);
+  stdout.write(`${attachment.title}\n`);
+  stdout.write(`  Issue:   ${attachment.issue.identifier}\n`);
   if (attachment.subtitle !== null) {
-    process.stdout.write(`  Subtitle: ${attachment.subtitle}\n`);
+    stdout.write(`  Subtitle: ${attachment.subtitle}\n`);
   }
   if (attachment.creator !== null) {
-    process.stdout.write(`  Creator: ${attachment.creator.name}\n`);
+    stdout.write(`  Creator: ${attachment.creator.name}\n`);
   }
-  process.stdout.write(`  URL:     ${attachment.url}\n`);
-}
-
-/** Build a CommandContext from attachment handler options */
-function buildContext(options: AttachmentCommandOptions): CommandContext {
-  return new CommandContext({
-    json: options.json,
-    jsonEnvelope: options.jsonEnvelope,
-    ...(options.profile === undefined ? {} : { profile: options.profile }),
-    configFile: options.configFile,
-    credentialsFile: options.credentialsFile,
-    ...(options.apiUrl === undefined ? {} : { apiUrl: options.apiUrl }),
-    env: options.env,
-    ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl }),
-    ...(options.noRetry === true || options.maxRetries !== undefined
-      ? {
-          retry: {
-            ...(options.noRetry === true ? { noRetry: true } : {}),
-            ...(options.maxRetries !== undefined ? { maxRetries: options.maxRetries } : {}),
-          },
-        }
-      : {}),
-  });
+  stdout.write(`  URL:     ${attachment.url}\n`);
 }
 
 async function handleAttachmentList(options: AttachmentCommandOptions): Promise<number> {
+  const { stdout } = commandIO(options);
   if (options.issue === undefined) {
     return emitValidationError("--issue is required for attachment list.", options);
   }
 
   const paginationOptions: PaginationOptions = {
+    stderr: commandIO(options).stderr,
     ...(options.all === true ? { all: true } : {}),
     ...(options.max === undefined ? {} : { max: options.max }),
     ...(options.pageSize === undefined ? {} : { pageSize: options.pageSize }),
@@ -171,7 +142,7 @@ async function handleAttachmentList(options: AttachmentCommandOptions): Promise<
     return emitValidationError(validationError, options);
   }
 
-  const ctx = buildContext(options);
+  const ctx = createCommandContext(options);
 
   try {
     const profile = await ctx.resolveProfile();
@@ -204,7 +175,7 @@ async function handleAttachmentList(options: AttachmentCommandOptions): Promise<
         ...paginateInput,
         options: { ...paginationOptions, all: paginationOptions.all ?? true },
         onItem: (raw) => {
-          process.stdout.write(JSON.stringify(normalizeAttachment(raw)) + "\n");
+          stdout.write(JSON.stringify(normalizeAttachment(raw)) + "\n");
         }
       });
     } else {
@@ -218,13 +189,13 @@ async function handleAttachmentList(options: AttachmentCommandOptions): Promise<
       if (options.jsonEnvelope) {
         return ctx.emitSuccess(attachments, result.pageInfo);
       } else if (options.json) {
-        process.stdout.write(`${JSON.stringify(attachments, null, 2)}\n`);
+        stdout.write(`${JSON.stringify(attachments, null, 2)}\n`);
       } else {
         for (const attachment of attachments) {
-          printHumanAttachment(attachment);
+          printHumanAttachment(attachment, options);
         }
         if (attachments.length === 0) {
-          process.stdout.write("No attachments found.\n");
+          stdout.write("No attachments found.\n");
         }
       }
     }
@@ -236,6 +207,7 @@ async function handleAttachmentList(options: AttachmentCommandOptions): Promise<
 }
 
 async function handleAttachmentCreate(options: AttachmentCommandOptions): Promise<number> {
+  const { stdout } = commandIO(options);
   if (options.issue === undefined || options.issue.trim() === "") {
     return emitValidationError("--issue is required for attachment create.", options);
   }
@@ -263,7 +235,7 @@ async function handleAttachmentCreate(options: AttachmentCommandOptions): Promis
     return emitDryRunResult("create", "attachment", { issueId: options.issue, url: trimmedUrl, title: trimmedTitle }, options);
   }
 
-  const ctx = buildContext(options);
+  const ctx = createCommandContext(options);
 
   try {
     // attachmentCreate requires a UUID — resolve human-readable identifiers first.
@@ -303,10 +275,10 @@ async function handleAttachmentCreate(options: AttachmentCommandOptions): Promis
     if (options.jsonEnvelope) {
       return ctx.emitSuccess(attachment);
     } else if (options.json) {
-      process.stdout.write(`${JSON.stringify(attachment, null, 2)}\n`);
+      stdout.write(`${JSON.stringify(attachment, null, 2)}\n`);
     } else {
-      process.stdout.write(`Created attachment "${attachment.title}" on ${attachment.issue.identifier}\n`);
-      process.stdout.write(`  URL: ${attachment.url}\n`);
+      stdout.write(`Created attachment "${attachment.title}" on ${attachment.issue.identifier}\n`);
+      stdout.write(`  URL: ${attachment.url}\n`);
     }
 
     return ExitCode.Success;
@@ -316,11 +288,12 @@ async function handleAttachmentCreate(options: AttachmentCommandOptions): Promis
 }
 
 async function handleAttachmentDelete(attachmentId: string, options: AttachmentCommandOptions): Promise<number> {
+  const { stdout } = commandIO(options);
   if (options.dryRun === true) {
     return emitDryRunResult("delete", "attachment", { id: attachmentId }, options);
   }
 
-  const ctx = buildContext(options);
+  const ctx = createCommandContext(options);
 
   try {
     const response = await ctx.graphql<{
@@ -342,9 +315,9 @@ async function handleAttachmentDelete(attachmentId: string, options: AttachmentC
     if (options.jsonEnvelope) {
       return ctx.emitSuccess(result);
     } else if (options.json) {
-      process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+      stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     } else {
-      process.stdout.write(`Deleted attachment ${attachmentId}\n`);
+      stdout.write(`Deleted attachment ${attachmentId}\n`);
     }
 
     return ExitCode.Success;

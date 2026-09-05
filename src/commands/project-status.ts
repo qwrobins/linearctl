@@ -1,26 +1,18 @@
+import { commandIO, type CommandOptions, type CommandIO } from "../core/runtime/options.js";
 import { emitValidationError } from "../core/output/validation-error.js";
 import type { PageInfo } from "../core/output/envelope.js";
 import { ExitCode } from "../core/errors/exit-codes.js";
-import type { FetchLike } from "../core/transport/graphql.js";
 import { paginateGraphQL, validatePaginationOptions } from "../core/pagination/pagination.js";
 import type { PaginationOptions } from "../core/pagination/pagination.js";
 import { streamPaginateGraphQL } from "../core/pagination/streaming.js";
 import { emitDryRunResult } from "../core/output/dry-run.js";
 import { normalizeRetryOptions } from "../core/transport/retry.js";
-import { CommandContext } from "../core/runtime/command-context.js";
+import { createCommandContext } from "../core/runtime/command-context.js";
 
 const VALID_STATUS_TYPES = ["backlog", "planned", "started", "paused", "completed", "canceled"] as const;
 
-export interface ProjectStatusCommandOptions {
-  json: boolean;
-  jsonEnvelope: boolean;
+export interface ProjectStatusCommandOptions extends CommandOptions {
   jsonl?: boolean;
-  profile?: string;
-  configFile: string;
-  credentialsFile: string;
-  apiUrl?: string;
-  env: Record<string, string | undefined>;
-  fetchImpl?: FetchLike;
   dryRun?: boolean;
   // project-status create flags
   name?: string;
@@ -34,9 +26,6 @@ export interface ProjectStatusCommandOptions {
   pageSize?: number;
   after?: string;
   quiet?: boolean;
-  // retry flags
-  noRetry?: boolean;
-  maxRetries?: number;
 }
 
 interface RawProjectStatus {
@@ -117,40 +106,20 @@ export function normalizeProjectStatus(raw: RawProjectStatus): NormalizedProject
   };
 }
 
-function printHumanProjectStatus(status: NormalizedProjectStatus): void {
-  process.stdout.write(`${status.name}  ${status.type}  (${status.color})\n`);
+function printHumanProjectStatus(status: NormalizedProjectStatus, options: CommandIO): void {
+  const { stdout } = commandIO(options);
+  stdout.write(`${status.name}  ${status.type}  (${status.color})\n`);
   if (status.description !== null) {
-    process.stdout.write(`  Description: ${status.description}\n`);
+    stdout.write(`  Description: ${status.description}\n`);
   }
-}
-
-/** Build a CommandContext from project-status handler options */
-function buildContext(options: ProjectStatusCommandOptions): CommandContext {
-  return new CommandContext({
-    json: options.json,
-    jsonEnvelope: options.jsonEnvelope,
-    ...(options.profile === undefined ? {} : { profile: options.profile }),
-    configFile: options.configFile,
-    credentialsFile: options.credentialsFile,
-    ...(options.apiUrl === undefined ? {} : { apiUrl: options.apiUrl }),
-    env: options.env,
-    ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl }),
-    ...(options.noRetry === true || options.maxRetries !== undefined
-      ? {
-          retry: {
-            ...(options.noRetry === true ? { noRetry: true } : {}),
-            ...(options.maxRetries !== undefined ? { maxRetries: options.maxRetries } : {}),
-          },
-        }
-      : {}),
-  });
 }
 
 async function handleProjectStatusGet(
   identifier: string,
   options: ProjectStatusCommandOptions
 ): Promise<number> {
-  const ctx = buildContext(options);
+  const { stdout } = commandIO(options);
+  const ctx = createCommandContext(options);
 
   try {
     const response = await ctx.graphql<{ projectStatus: RawProjectStatus | null }>(
@@ -171,9 +140,9 @@ async function handleProjectStatusGet(
     if (options.jsonEnvelope) {
       return ctx.emitSuccess(status);
     } else if (options.json) {
-      process.stdout.write(`${JSON.stringify(status, null, 2)}\n`);
+      stdout.write(`${JSON.stringify(status, null, 2)}\n`);
     } else {
-      printHumanProjectStatus(status);
+      printHumanProjectStatus(status, options);
     }
 
     return ExitCode.Success;
@@ -183,7 +152,9 @@ async function handleProjectStatusGet(
 }
 
 async function handleProjectStatusList(options: ProjectStatusCommandOptions): Promise<number> {
+  const { stdout } = commandIO(options);
   const paginationOptions: PaginationOptions = {
+    stderr: commandIO(options).stderr,
     all: options.all,
     max: options.max,
     pageSize: options.pageSize,
@@ -196,7 +167,7 @@ async function handleProjectStatusList(options: ProjectStatusCommandOptions): Pr
     return emitValidationError(validationError, options);
   }
 
-  const ctx = buildContext(options);
+  const ctx = createCommandContext(options);
 
   try {
     const profile = await ctx.resolveProfile();
@@ -227,7 +198,7 @@ async function handleProjectStatusList(options: ProjectStatusCommandOptions): Pr
         ...commonPaginateInput,
         options: { ...paginationOptions, all: paginationOptions.all ?? true },
         onItem: (raw) => {
-          process.stdout.write(`${JSON.stringify(normalizeProjectStatus(raw))}\n`);
+          stdout.write(`${JSON.stringify(normalizeProjectStatus(raw))}\n`);
         }
       });
     } else {
@@ -241,11 +212,11 @@ async function handleProjectStatusList(options: ProjectStatusCommandOptions): Pr
       if (options.jsonEnvelope) {
         return ctx.emitSuccess(statuses, pageInfo);
       } else if (options.json) {
-        process.stdout.write(`${JSON.stringify(statuses, null, 2)}\n`);
+        stdout.write(`${JSON.stringify(statuses, null, 2)}\n`);
       } else {
         for (const status of statuses) {
-          printHumanProjectStatus(status);
-          process.stdout.write("\n");
+          printHumanProjectStatus(status, options);
+          stdout.write("\n");
         }
       }
     }
@@ -257,6 +228,7 @@ async function handleProjectStatusList(options: ProjectStatusCommandOptions): Pr
 }
 
 async function handleProjectStatusCreate(options: ProjectStatusCommandOptions): Promise<number> {
+  const { stdout } = commandIO(options);
   if (options.name === undefined) {
     return emitValidationError("--name is required for project-status create.", options);
   }
@@ -300,7 +272,7 @@ async function handleProjectStatusCreate(options: ProjectStatusCommandOptions): 
     return emitDryRunResult("create", "project-status", input, options);
   }
 
-  const ctx = buildContext(options);
+  const ctx = createCommandContext(options);
 
   try {
     const response = await ctx.graphql<{
@@ -323,9 +295,9 @@ async function handleProjectStatusCreate(options: ProjectStatusCommandOptions): 
     if (options.jsonEnvelope) {
       return ctx.emitSuccess(status);
     } else if (options.json) {
-      process.stdout.write(`${JSON.stringify(status, null, 2)}\n`);
+      stdout.write(`${JSON.stringify(status, null, 2)}\n`);
     } else {
-      process.stdout.write(`Created project status: ${status.name} (${status.type})\n`);
+      stdout.write(`Created project status: ${status.name} (${status.type})\n`);
     }
 
     return ExitCode.Success;
@@ -335,11 +307,12 @@ async function handleProjectStatusCreate(options: ProjectStatusCommandOptions): 
 }
 
 async function handleProjectStatusDelete(statusId: string, options: ProjectStatusCommandOptions): Promise<number> {
+  const { stdout } = commandIO(options);
   if (options.dryRun === true) {
     return emitDryRunResult("delete", "project-status", { id: statusId }, options);
   }
 
-  const ctx = buildContext(options);
+  const ctx = createCommandContext(options);
 
   try {
     const response = await ctx.graphql<{
@@ -362,9 +335,9 @@ async function handleProjectStatusDelete(statusId: string, options: ProjectStatu
     if (options.jsonEnvelope) {
       return ctx.emitSuccess(result);
     } else if (options.json) {
-      process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+      stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     } else {
-      process.stdout.write(`Archived project status ${statusId}\n`);
+      stdout.write(`Archived project status ${statusId}\n`);
     }
 
     return ExitCode.Success;
